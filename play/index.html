@@ -1,22 +1,149 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-us">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gamer Gunner">
+  <meta name="theme-color" content="#070a0d">
   <title>Play | Gamer Gunner</title>
-  <link rel="icon" type="image/png" href="../img/favicon.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../gg.css">
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    /* Gamer Gunner brand colors (sampled from the GG headset logo). */
+    :root { --bg: #070a0d; --panel: #0e1513; --edge: #1b2a23; --green: #0c7a24; --green-hi: #1fae45;
+      --cream: #f3e8d0; --red: #f0280f; --dim: #a3aca6; --display: "Russo One", "Arial Black", system-ui, sans-serif; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--cream); overflow: hidden;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none; overscroll-behavior: none; touch-action: none; }
+    #unity-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; background: var(--bg); outline: none; }
+
+    .overlay { position: fixed; inset: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 18px; padding: 24px 16px; box-sizing: border-box; text-align: center;
+      background: radial-gradient(ellipse 50% 40% at 50% 32%, rgba(31,174,69,.20), transparent 70%),
+                  radial-gradient(ellipse 30% 25% at 50% 40%, rgba(240,40,15,.10), transparent 70%), var(--bg); }
+    .overlay.hidden { display: none; }
+    .logo { width: min(240px, 48vw, 32vh); height: auto; filter: drop-shadow(0 0 20px rgba(240,40,15,.35)) drop-shadow(0 0 36px rgba(31,174,69,.25)); }
+    .loading .logo { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { transform: scale(1.04); filter: drop-shadow(0 0 28px rgba(240,40,15,.5)) drop-shadow(0 0 44px rgba(31,174,69,.35)); } }
+
+    .bar { width: min(420px, 82vw); height: 16px; padding: 3px; box-sizing: border-box;
+      border: 2px solid var(--red); border-radius: 10px; box-shadow: 0 0 16px rgba(240,40,15,.4); }
+    .fill { height: 100%; width: 0; border-radius: 5px; background: linear-gradient(90deg, var(--green), var(--green-hi)); transition: width .2s; }
+    .status { margin: 0; color: var(--dim); font-size: 15px; }
+    .tip { margin: 0; color: var(--dim); font-size: 13px; max-width: 420px; min-height: 2.6em; }
+    #error { color: #ff9a8a; max-width: 520px; font-size: 14px; }
+
+    .btn { font: 400 24px var(--display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+      color: var(--cream); background: linear-gradient(180deg, var(--green-hi), var(--green));
+      padding: 16px 46px; border-radius: 16px; border: 2.5px solid var(--red);
+      box-shadow: 0 0 0 4px rgba(240,40,15,.12), 0 0 28px rgba(240,40,15,.45), 0 0 50px rgba(31,174,69,.35); }
+    .btn:active { transform: scale(.97); }
+    .keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; max-width: 560px; width: 100%; text-align: left; font-size: 13px; }
+    .k { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 6px 10px; }
+    .k b { font-weight: 600; text-align: right; }
+    kbd { display: inline-block; min-width: 1.4em; padding: 1px 6px; margin-right: 2px; border: 1px solid #34483d; border-bottom-width: 3px;
+      border-radius: 6px; background: #0a110e; color: var(--cream); font: 700 12px ui-monospace, Menlo, monospace; text-align: center; }
+    .home { color: var(--dim); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--edge); }
+    @media (max-width: 520px) { .keys { grid-template-columns: 1fr; } }
+    @media (max-height: 560px) { .keys { display: none; } }
+  </style>
 </head>
 <body>
-  <main class="hero" style="min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center">
-    <div class="hero-glow" aria-hidden="true"></div>
-    <img class="hero-logo" src="../img/logo-stacked.png" alt="GG Gamer Gunner logo" width="606" height="640">
-    <h1>Almost ready</h1>
-    <p class="tagline">Gunner's world is being packed up for the web. Check back soon!</p>
-    <a class="btn-play" href="../">← Back</a>
-  </main>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+  <div id="loading" class="overlay loading">
+    <img class="logo" src="logo-stacked.png" alt="Gamer Gunner">
+    <div class="bar"><div class="fill" id="fill"></div></div>
+    <p class="status" id="status">Loading the world… 0%</p>
+    <p class="tip" id="tip"></p>
+    <p id="error"></p>
+  </div>
+
+  <div id="start" class="overlay hidden">
+    <img class="logo" src="logo-stacked.png" alt="Gamer Gunner">
+    <button id="play" class="btn" type="button">▶ Tap to play</button>
+    <div class="keys">
+      <div class="k"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><b>Move / drive</b></div>
+      <div class="k"><span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></span><b>Camera</b></div>
+      <div class="k"><span><kbd>Space</kbd> <kbd>Shift</kbd></span><b>Jump / sprint</b></div>
+      <div class="k"><span><kbd>E</kbd></span><b>Talk, doors, cars, mine</b></div>
+      <div class="k"><span><kbd>J</kbd> <kbd>K</kbd></span><b>Attack / block</b></div>
+      <div class="k"><span><kbd>F</kbd> <kbd>G</kbd> <kbd>O</kbd></span><b>Blaster, garage, craft</b></div>
+      <div class="k"><span><kbd>C</kbd></span><b>Change avatar</b></div>
+      <div class="k"><span><kbd>U</kbd></span><b>Play together (codes)</b></div>
+      <div class="k"><span><kbd>M</kbd> <kbd>P</kbd></span><b>Save + menu / back</b></div>
+    </div>
+    <a class="home" href="../">← Back to game.gamergunner.com</a>
+  </div>
+
+  <script>
+    // Play-together relay (Cloudflare Worker in /relay). Empty = the U menu says it isn't on yet.
+    window.GG_RELAY = "";
+    var canvas = document.querySelector("#unity-canvas");
+    var config = {
+      dataUrl: "Build/play.data.unityweb",
+      frameworkUrl: "Build/play.framework.js.unityweb",
+      codeUrl: "Build/play.wasm.unityweb",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "Gamer Gunner",
+      productName: "Gamer Gunner",
+      productVersion: "0.1",
+      // Keep the 3D view sharp but light enough for an iPad.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+    };
+
+    var tips = [
+      "Tip: Dragon Crystals are rare. Keep mining!",
+      "Tip: When the Sand Guardian raises its arms, back away!",
+      "Tip: Press G to open the garage and pick a ride.",
+      "Tip: Press M any time to save your game.",
+      "Tip: Arrow keys turn the camera.",
+      "Tip: Press C to change your look.",
+    ];
+    var tipIndex = Math.floor(Math.random() * tips.length);
+    function nextTip() { document.querySelector("#tip").textContent = tips[tipIndex++ % tips.length]; }
+    nextTip();
+    var tipTimer = setInterval(nextTip, 4000);
+
+    // Keys like Space and the arrows would otherwise scroll the page in Safari.
+    window.addEventListener("keydown", function (e) {
+      if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].indexOf(e.key) >= 0) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+
+    function focusGame() { canvas.focus(); window.focus(); }
+
+    var script = document.createElement("script");
+    script.src = "Build/play.loader.js";
+    script.onload = function () {
+      createUnityInstance(canvas, config, function (p) {
+        var pct = Math.round(p * 100);
+        document.querySelector("#fill").style.width = pct + "%";
+        document.querySelector("#status").textContent = "Loading the world… " + pct + "%";
+      }).then(function () {
+        clearInterval(tipTimer);
+        document.querySelector("#loading").classList.add("hidden");
+        document.querySelector("#start").classList.remove("hidden");
+      }).catch(function (msg) {
+        clearInterval(tipTimer);
+        document.querySelector("#status").textContent = "The game couldn't start. Try reloading the page.";
+        document.querySelector("#error").textContent = msg;
+      });
+    };
+    document.body.appendChild(script);
+
+    document.querySelector("#play").addEventListener("click", function () {
+      document.querySelector("#start").classList.add("hidden");
+      focusGame();
+    });
+    // Tapping the game always gives it the keyboard back (Safari can lose focus).
+    canvas.addEventListener("pointerdown", focusGame);
+  </script>
 </body>
 </html>
