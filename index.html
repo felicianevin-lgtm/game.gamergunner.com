@@ -1,5 +1,100 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gamer Gunner | Game</title><link rel="icon" href="icon.png">
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#05070a;color:#f4f7f5;font-family:system-ui,sans-serif;text-align:center}
-h1{color:#39ff14;font-size:clamp(28px,6vw,52px);margin:16px 0 6px;text-shadow:0 0 18px rgba(57,255,20,.45)}p{color:#9aa4a0}img{width:140px;border-radius:24px}</style></head>
-<body><main><img src="icon.png" alt="Gamer Gunner logo"><h1>Gamer Gunner's game</h1><p>Loading up soon. Check back shortly!</p></main></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gamer Gunner | The Game</title>
+  <meta name="description" content="Play Gamer Gunner's open-world game free in your browser. Story mode, cars, caves, boss fights. Works on computers and iPads with a keyboard.">
+  <meta name="theme-color" content="#070a0d">
+  <meta property="og:title" content="Gamer Gunner | The Game">
+  <meta property="og:description" content="Play Gamer Gunner's open-world game free in your browser.">
+  <meta property="og:image" content="https://game.gamergunner.com/img/share.jpg">
+  <meta property="og:url" content="https://game.gamergunner.com/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="gg.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Gamer Gunner home"><img src="img/logo-wide-sm.png" alt="Gamer Gunner" width="180" height="96"></a>
+    <nav>
+      <a href="#features">Game</a>
+      <a href="#controls">Controls</a>
+      <a href="#parents">Parents</a>
+      <a class="nav-shop" href="https://gamergunner.com" target="_blank" rel="noopener">Shop</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <img class="hero-logo" src="img/logo-stacked.png" alt="GG Gamer Gunner logo" width="606" height="640">
+      <h1>The Game</h1>
+      <p class="tagline">A giant open world built by Gamer Gunner. Explore the town, drive cars, dig through caves, and take on the Story.</p>
+      <a class="btn-play" href="play/">▶ Play now</a>
+      <p class="fine">Free. Plays in your browser on a computer or an iPad with a keyboard.</p>
+    </section>
+
+    <section id="features" class="section">
+      <h2><span>What's in the game</span></h2>
+      <div class="cards">
+        <article class="card"><div class="card-icon">📖</div><h3>Story mode</h3><p>Wake up in a strange town, help the stranger, earn your sword, and find out where your crew went.</p></article>
+        <article class="card"><div class="card-icon">🏜️</div><h3>Boss fights</h3><p>Cross the desert to the old temple and face the Sand Guardian. Watch for the slam!</p></article>
+        <article class="card"><div class="card-icon">🚗</div><h3>Cars + garage</h3><p>Jump in, drive the open world, and pick your ride in the garage.</p></article>
+        <article class="card"><div class="card-icon">⛏️</div><h3>Caves + mining</h3><p>Three cave networks full of Stone, Water and rare Dragon Crystals. Craft armor from what you dig up.</p></article>
+        <article class="card"><div class="card-icon">🌎</div><h3>Sandbox mode</h3><p>No missions, no rules. Free-roam the whole world and save as many games as you want.</p></article>
+        <article class="card"><div class="card-icon">🧍</div><h3>Your avatar</h3><p>Pick your skin, shirt, pants, hair and hat. Your look saves automatically.</p></article>
+      </div>
+    </section>
+
+    <section id="controls" class="section">
+      <h2><span>Controls</span></h2>
+      <p class="section-sub">Keyboard only works great, so it plays on an iPad with a keyboard case too. On a computer you can also use the mouse.</p>
+      <div class="keys">
+        <div class="key-row"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><b>Move / drive</b></div>
+        <div class="key-row"><span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></span><b>Turn the camera (or drag a finger)</b></div>
+        <div class="key-row"><span><kbd>Space</kbd></span><b>Jump / brake</b></div>
+        <div class="key-row"><span><kbd>Shift</kbd></span><b>Sprint</b></div>
+        <div class="key-row"><span><kbd>E</kbd></span><b>Talk, open doors, enter cars, mine</b></div>
+        <div class="key-row"><span><kbd>J</kbd> <kbd>K</kbd></span><b>Attack / block (or click / tap)</b></div>
+        <div class="key-row"><span><kbd>F</kbd></span><b>Equip blaster</b></div>
+        <div class="key-row"><span><kbd>G</kbd></span><b>Garage</b></div>
+        <div class="key-row"><span><kbd>C</kbd></span><b>Change your avatar</b></div>
+        <div class="key-row"><span><kbd>O</kbd></span><b>Craft armor</b></div>
+        <div class="key-row"><span><kbd>Enter</kbd></span><b>Next line of story</b></div>
+        <div class="key-row"><span><kbd>M</kbd></span><b>Save + back to menu</b></div>
+      </div>
+    </section>
+
+    <section id="parents" class="section parents">
+      <h2><span>For parents</span></h2>
+      <ul class="checks">
+        <li><b>No chat and no other players.</b> It's a single-player game.</li>
+        <li><b>No ads, no purchases, no sign-up.</b> Just press play.</li>
+        <li><b>Saves stay on your device.</b> Progress is stored in this browser only; nothing is sent anywhere.</li>
+        <li><b>Kid-friendly action.</b> Blocky bad guys crumble into dust. No blood.</li>
+      </ul>
+      <p class="section-sub">Tip for iPad: open the game in Safari, tap <b>Share → Add to Home Screen</b>, and it opens full-screen like an app.</p>
+    </section>
+
+    <section class="cta">
+      <img src="img/logo-wide.png" alt="" width="900" height="481" loading="lazy">
+      <a class="btn-play" href="play/">▶ Play now</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="socials">
+      <a href="https://www.youtube.com/@GamerGunner" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://www.instagram.com/gamer.gunner/" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://gamergunner.com" target="_blank" rel="noopener">Merch shop</a>
+    </div>
+    <p>© <span id="yr">2026</span> Gamer Gunner. Made with Unity.</p>
+  </footer>
+  <script>document.getElementById("yr").textContent = new Date().getFullYear();</script>
+</body>
+</html>
