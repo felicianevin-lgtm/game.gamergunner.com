@@ -195,9 +195,9 @@
     window.GG_RELAY = "wss://gamergunner-relay.gamergunner-relay.workers.dev";
     var canvas = document.querySelector("#unity-canvas");
     var config = {
-      dataUrl: "Build/398a0649957333a39122040a55b92cf0.data.unityweb",
-      frameworkUrl: "Build/e56c5b027d68ce5dc843942797088938.js.unityweb",
-      codeUrl: "Build/070744b512f3918c788a9f7b10b10cdd.wasm.unityweb",
+      dataUrl: "Build/2462f89bdb27a4b2ffa07df1afaa84ff.data.unityweb",
+      frameworkUrl: "Build/b66a2c2b4d6d816418c12804d493b385.js.unityweb",
+      codeUrl: "Build/7789ca7e857bd7e667e742f1882430e5.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -406,6 +406,13 @@
       // While a box is open, typing stays in the box: the game never sees those keys.
       [box, list].forEach(function (el) {
         ["keydown", "keyup", "keypress"].forEach(function (t) { el.addEventListener(t, function (e) { e.stopPropagation(); }); });
+      });
+      // The game listens for keys on the whole page and blocks normal typing. This runs before the game's own
+      // listener (it's added first), so while you type in a box the game never sees those keys at all.
+      ["keydown", "keyup", "keypress"].forEach(function (t) {
+        window.addEventListener(t, function (e) {
+          if (e.target && (box.contains(e.target) || list.contains(e.target))) e.stopImmediatePropagation();
+        }, true);
       });
       function show(el, on) {
         el.classList.toggle("hidden", !on);
