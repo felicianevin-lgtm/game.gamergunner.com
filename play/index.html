@@ -88,16 +88,19 @@
     window.GG_RELAY = "wss://gamergunner-relay.gamergunner-relay.workers.dev";
     var canvas = document.querySelector("#unity-canvas");
     var config = {
-      dataUrl: "Build/6a36491d0f00eb2b9a11a2b91426aa23.data.unityweb",
-      frameworkUrl: "Build/96e6f9e3ce749d28549d1b77eb1883ae.js.unityweb",
-      codeUrl: "Build/a976a99d5a83e001a12ab7221fa78325.wasm.unityweb",
+      dataUrl: "Build/b6b2465d905ecd8f7fc66a9b0df63c53.data.unityweb",
+      frameworkUrl: "Build/2abe4a04241f1e6929490f863d010330.js.unityweb",
+      codeUrl: "Build/da2fbccb27b4b1a3751c345a4bb319f1.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
       productVersion: "0.1",
-      // Keep the 3D view sharp but light enough for an iPad.
-      // iPads (touch screens) render at 1.5x for smooth play; computers up to 2x.
-      devicePixelRatio: Math.min(window.devicePixelRatio || 1, navigator.maxTouchPoints > 1 ? 1.5 : 2),
+      // iPads (touch screens) render at 1x: the in-game menus are sized in screen pixels, so anything higher
+      // shrinks every menu and label (1.5x made them two-thirds size), and 1x is also much lighter for the iPad's
+      // graphics chip. Computers render up to 2x.
+      // (?gg_dpr=1.5 forces a ratio, for testing on this computer only.)
+      devicePixelRatio: (location.hostname === "localhost" && /[?&]gg_dpr=([\d.]+)/.test(location.search))
+        ? parseFloat(RegExp.$1) : navigator.maxTouchPoints > 1 ? 1 : Math.min(window.devicePixelRatio || 1, 2),
     };
 
     var tips = [
