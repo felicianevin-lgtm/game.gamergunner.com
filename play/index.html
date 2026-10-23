@@ -52,6 +52,41 @@
     .home { color: var(--dim); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--edge); }
     @media (max-width: 520px) { .keys { grid-template-columns: 1fr; } }
     @media (max-height: 560px) { .keys { display: none; } }
+
+    /* ---------- on-screen touch controls (phones / tablets without a keyboard) ---------- */
+    .touch-help { display: none; max-width: 520px; color: var(--dim); font-size: 14px; line-height: 1.5; margin: 0; }
+    body.touch .touch-help { display: block; }
+    body.touch .keys { display: none; }
+    #tc { position: fixed; inset: 0; pointer-events: none; z-index: 5; font-family: var(--display); }
+    #tc.hidden { display: none; }
+    #tc .on { pointer-events: auto; }
+    .pad { position: absolute; color: var(--cream); background: rgba(7,10,13,.42); border: 2px solid rgba(243,232,208,.35);
+      display: flex; align-items: center; justify-content: center; text-align: center; touch-action: none;
+      -webkit-tap-highlight-color: transparent; letter-spacing: .04em; }
+    .pad.down, .pad.lit { background: rgba(31,174,69,.65); border-color: var(--cream); }
+    #stick { left: calc(22px + env(safe-area-inset-left)); bottom: calc(20px + env(safe-area-inset-bottom));
+      width: 132px; height: 132px; border-radius: 50%; }
+    #knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+      background: rgba(243,232,208,.55); border: 2px solid var(--cream); pointer-events: none; }
+    .act { border-radius: 50%; font-size: 13px; }
+    #b-jump  { right: calc(24px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom)); width: 78px; height: 78px; font-size: 15px; }
+    #b-shoot { right: calc(112px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom)); width: 64px; height: 64px; border-color: rgba(240,40,15,.8); }
+    #b-use   { right: calc(36px + env(safe-area-inset-right)); bottom: calc(116px + env(safe-area-inset-bottom)); width: 64px; height: 64px; }
+    #b-run   { right: calc(118px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); width: 52px; height: 52px; font-size: 11px; }
+    #b-gun   { right: calc(184px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); width: 50px; height: 50px; font-size: 11px; }
+    #b-block { right: calc(178px + env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); width: 46px; height: 46px; font-size: 10px; }
+    #menu-row { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+      display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 64vw; }
+    #menu-row .pad { position: static; border-radius: 10px; padding: 7px 10px; font-size: 12px; min-width: 34px; }
+    #menu-row .more { display: none; }
+    #menu-row.open .more { display: flex; }
+    #tc-show { position: fixed; left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
+      z-index: 5; border-radius: 12px; padding: 8px 12px; font: 13px var(--display); display: none; }
+    #tc-show.on { display: flex; }
+    #turn-hint { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 6; display: none;
+      background: rgba(7,10,13,.88); border: 2px solid var(--green-hi); border-radius: 14px; padding: 14px 18px;
+      font: 16px var(--display); color: var(--cream); text-align: center; max-width: 80vw; }
+    body.touch.portrait.playing #turn-hint { display: block; }
   </style>
 </head>
 <body>
@@ -80,17 +115,46 @@
       <div class="k"><span><kbd>Tab</kbd></span><b>Free the mouse / back to camera</b></div>
       <div class="k"><span><kbd>M</kbd> <kbd>P</kbd></span><b>Save + menu / back</b></div>
     </div>
+    <p class="touch-help">On-screen controls: <b>left stick</b> moves (and drives), <b>drag anywhere</b> to look around,
+      buttons on the right jump, shoot and use. <b>☰</b> at the top has avatar, cars, friends, save and more.
+      Best played sideways.</p>
     <a class="home" href="../">← Back to game.gamergunner.com</a>
   </div>
+
+  <!-- On-screen touch controls. Each one presses the same key a keyboard would. -->
+  <div id="tc" class="hidden">
+    <div id="stick" class="pad on"><div id="knob"></div></div>
+    <div id="b-jump"  class="pad act on" data-key="Space">JUMP</div>
+    <div id="b-shoot" class="pad act on" data-key="J">SHOOT</div>
+    <div id="b-use"   class="pad act on" data-key="E">USE<br>E</div>
+    <div id="b-run"   class="pad act on" data-toggle="Shift">RUN</div>
+    <div id="b-gun"   class="pad act on" data-key="F" data-tap>GUN</div>
+    <div id="b-block" class="pad act on" data-key="K">BLOCK</div>
+    <div id="menu-row">
+      <div id="b-menu" class="pad on">☰</div>
+      <div class="pad on" data-key="P" data-tap>BACK</div>
+      <div class="pad on more" data-key="C" data-tap>LOOK</div>
+      <div class="pad on more" data-key="V" data-tap>GEAR</div>
+      <div class="pad on more" data-key="G" data-tap>CARS</div>
+      <div class="pad on more" data-key="U" data-tap>FRIENDS</div>
+      <div class="pad on more" data-key="O" data-tap>CRAFT</div>
+      <div class="pad on more" data-key="M" data-tap>SAVE</div>
+      <div class="pad on more" id="b-type">⌨ TYPE</div>
+      <div class="pad on more" data-key="Backquote" data-tap>DEV</div>
+      <div class="pad on more" id="b-hide">HIDE ✕</div>
+    </div>
+  </div>
+  <div id="tc-show" class="pad">🎮 Touch controls</div>
+  <div id="turn-hint">Turn your phone sideways<br>for the best view ↻</div>
 
   <script>
     // Play-together relay (Cloudflare Worker in /relay). Empty = the U menu says it isn't on yet.
     window.GG_RELAY = "wss://gamergunner-relay.gamergunner-relay.workers.dev";
     var canvas = document.querySelector("#unity-canvas");
     var config = {
-      dataUrl: "Build/b6b2465d905ecd8f7fc66a9b0df63c53.data.unityweb",
-      frameworkUrl: "Build/2abe4a04241f1e6929490f863d010330.js.unityweb",
-      codeUrl: "Build/da2fbccb27b4b1a3751c345a4bb319f1.wasm.unityweb",
+      dataUrl: "Build/94edb4a92d4dacf7839318cd0efb67ea.data.unityweb",
+      frameworkUrl: "Build/c5b84d714615441d1a799bdd0093214f.js.unityweb",
+      codeUrl: "Build/1b032c979ccc53eec3fd9dd6172ec318.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -131,7 +195,9 @@
         var pct = Math.round(p * 100);
         document.querySelector("#fill").style.width = pct + "%";
         document.querySelector("#status").textContent = "Loading the world… " + pct + "%";
-      }).then(function () {
+      }).then(function (instance) {
+        unityInstance = instance;
+        tellGameTouch();
         clearInterval(tipTimer);
         document.querySelector("#loading").classList.add("hidden");
         document.querySelector("#start").classList.remove("hidden");
@@ -157,10 +223,137 @@
 
     document.querySelector("#play").addEventListener("click", function () {
       document.querySelector("#start").classList.add("hidden");
+      document.body.classList.add("playing");
+      if (isTouch) showTouch(true);
       focusGame();
     });
     // Tapping the game always gives it the keyboard back (Safari can lose focus).
     canvas.addEventListener("pointerdown", focusGame);
+
+    // ---------- on-screen touch controls ----------
+    // They work by pressing the same keys a keyboard would, so every game feature works on a phone.
+    // They show on touch screens (or with ?touch on this computer for testing) and hide themselves
+    // as soon as a real keyboard is used (e.g. an iPad with a keyboard); the 🎮 button brings them back.
+    var unityInstance = null;
+    var isTouch = (navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches) ||
+      (location.hostname === "localhost" && /[?&]touch\b/.test(location.search));
+    if (isTouch) document.body.classList.add("touch");
+    var tc = document.querySelector("#tc"), tcShow = document.querySelector("#tc-show");
+    var KEYS = {
+      W: ["w", "KeyW", 87], A: ["a", "KeyA", 65], S: ["s", "KeyS", 83], D: ["d", "KeyD", 68],
+      Space: [" ", "Space", 32], Shift: ["Shift", "ShiftLeft", 16], J: ["j", "KeyJ", 74], K: ["k", "KeyK", 75],
+      E: ["e", "KeyE", 69], F: ["f", "KeyF", 70], P: ["p", "KeyP", 80], C: ["c", "KeyC", 67], V: ["v", "KeyV", 86],
+      G: ["g", "KeyG", 71], U: ["u", "KeyU", 85], O: ["o", "KeyO", 79], M: ["m", "KeyM", 77],
+      Backquote: ["`", "Backquote", 192], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8],
+    };
+    var held = {};
+    function sendKey(type, k, extra) {
+      var o = { key: k[0], code: k[1], keyCode: k[2], which: k[2], bubbles: true };
+      for (var x in extra || {}) o[x] = extra[x];
+      window.dispatchEvent(new KeyboardEvent(type, o));
+    }
+    function press(name) { if (held[name]) return; held[name] = true; sendKey("keydown", KEYS[name]); }
+    function release(name) { if (!held[name]) return; held[name] = false; sendKey("keyup", KEYS[name]); }
+    function tap(name) { press(name); setTimeout(function () { release(name); }, 90); }
+    function releaseAll() { for (var n in held) if (held[n] && n !== "Shift") release(n); }
+
+    function tellGameTouch() {
+      var on = !tc.classList.contains("hidden");
+      if (unityInstance) { try { unityInstance.SendMessage("GGTouch", "SetOn", on ? "1" : "0"); } catch (e) {} }
+    }
+    function showTouch(on) {
+      tc.classList.toggle("hidden", !on);
+      tcShow.classList.toggle("on", !on && isTouch);
+      if (!on) { releaseAll(); release("Shift"); document.querySelector("#b-run").classList.remove("lit"); }
+      tellGameTouch();
+    }
+    tcShow.addEventListener("click", function () { showTouch(true); });
+    document.querySelector("#b-hide").addEventListener("click", function () { showTouch(false); });
+    var menuRow = document.querySelector("#menu-row");
+    document.querySelector("#b-menu").addEventListener("click", function () { menuRow.classList.toggle("open"); });
+    // Picking something folds the row back up so it doesn't cover the menu that just opened.
+    Array.prototype.forEach.call(document.querySelectorAll("#menu-row .more"), function (el) {
+      el.addEventListener("click", function () { menuRow.classList.remove("open"); });
+    });
+    // A real keyboard key (not one of ours) means a keyboard is attached: get the buttons out of the way.
+    window.addEventListener("keydown", function (e) {
+      if (e.isTrusted && !tc.classList.contains("hidden") && e.key.length === 1) showTouch(false);
+    });
+
+    // Hold buttons (jump, shoot, use, block) press while touched; tap buttons send a quick press; RUN toggles Shift.
+    Array.prototype.forEach.call(document.querySelectorAll("#tc [data-key], #tc [data-toggle]"), function (el) {
+      el.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        if (el.dataset.toggle) {
+          var on = !el.classList.contains("lit");
+          el.classList.toggle("lit", on);
+          if (on) press(el.dataset.toggle); else release(el.dataset.toggle);
+        } else if (el.hasAttribute("data-tap")) {
+          el.classList.add("down"); tap(el.dataset.key);
+          setTimeout(function () { el.classList.remove("down"); }, 150);
+        } else {
+          el.classList.add("down"); press(el.dataset.key);
+          try { el.setPointerCapture(e.pointerId); } catch (x) {}
+        }
+      });
+      if (el.dataset.key && !el.hasAttribute("data-tap")) {
+        var up = function () { el.classList.remove("down"); release(el.dataset.key); };
+        el.addEventListener("pointerup", up);
+        el.addEventListener("pointercancel", up);
+      }
+    });
+
+    // Joystick: holds W/A/S/D depending on which way the knob is pushed (diagonals hold two).
+    var stick = document.querySelector("#stick"), knob = document.querySelector("#knob"), stickId = null;
+    function moveStick(e) {
+      var r = stick.getBoundingClientRect(), max = r.width / 2;
+      var dx = e.clientX - (r.left + max), dy = e.clientY - (r.top + max);
+      var len = Math.sqrt(dx * dx + dy * dy);
+      if (len > max) { dx *= max / len; dy *= max / len; }
+      knob.style.transform = "translate(" + dx + "px," + dy + "px)";
+      var t = max * 0.35;
+      if (dy < -t) press("W"); else release("W");
+      if (dy > t) press("S"); else release("S");
+      if (dx < -t) press("A"); else release("A");
+      if (dx > t) press("D"); else release("D");
+    }
+    function endStick() {
+      stickId = null; knob.style.transform = "";
+      ["W", "A", "S", "D"].forEach(release);
+    }
+    stick.addEventListener("pointerdown", function (e) {
+      e.preventDefault(); stickId = e.pointerId;
+      try { stick.setPointerCapture(e.pointerId); } catch (x) {}
+      moveStick(e);
+    });
+    stick.addEventListener("pointermove", function (e) { if (e.pointerId === stickId) moveStick(e); });
+    stick.addEventListener("pointerup", endStick);
+    stick.addEventListener("pointercancel", endStick);
+
+    // ⌨ TYPE: phones can't open a keyboard for the game's text boxes (play-together codes, the dev
+    // password), so ask with the browser's own box and type the answer in, then press Enter.
+    document.querySelector("#b-type").addEventListener("click", function () {
+      var text = window.prompt("Type it here (a friend's 6-digit code, a password...):", "");
+      if (!text) return;
+      var i = 0;
+      (function next() {
+        if (i >= text.length) { setTimeout(function () { tap("Enter"); }, 60); return; }
+        var ch = text[i++], code = ch.charCodeAt(0), up = ch.toUpperCase();
+        var k = /[0-9]/.test(ch) ? [ch, "Digit" + ch, code] : /[a-z]/i.test(ch) ? [ch, "Key" + up, up.charCodeAt(0)] : [ch, "", code];
+        sendKey("keydown", k);
+        sendKey("keypress", k, { charCode: code, keyCode: code, which: code });
+        sendKey("keyup", k);
+        setTimeout(next, 40);
+      })();
+    });
+
+    // Sideways is much better on a phone; say so while it's held upright.
+    function checkOrientation() { document.body.classList.toggle("portrait", innerHeight > innerWidth && innerWidth < 700); }
+    window.addEventListener("resize", checkOrientation);
+    checkOrientation();
+    document.querySelector("#turn-hint").addEventListener("click", function () { this.style.display = "none"; });
+    // If the page is hidden mid-press (switching apps), let go of everything so the player doesn't keep running.
+    document.addEventListener("visibilitychange", function () { if (document.hidden) releaseAll(); });
   </script>
 </body>
 </html>
