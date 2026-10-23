@@ -88,15 +88,16 @@
     window.GG_RELAY = "wss://gamergunner-relay.gamergunner-relay.workers.dev";
     var canvas = document.querySelector("#unity-canvas");
     var config = {
-      dataUrl: "Build/play.data.unityweb",
-      frameworkUrl: "Build/play.framework.js.unityweb",
-      codeUrl: "Build/play.wasm.unityweb",
+      dataUrl: "Build/061c22b11b9f68dcadf5f1241c2a3758.data.unityweb",
+      frameworkUrl: "Build/d5ab111d6ebb59e0796c9a94f78a7171.js.unityweb",
+      codeUrl: "Build/f13470d1b06ed5930d3627bc5a59c44c.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
       productVersion: "0.1",
       // Keep the 3D view sharp but light enough for an iPad.
-      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      // iPads (touch screens) render at 1.5x for smooth play; computers up to 2x.
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, navigator.maxTouchPoints > 1 ? 1.5 : 2),
     };
 
     var tips = [
@@ -121,7 +122,7 @@
     function focusGame() { canvas.focus(); window.focus(); }
 
     var script = document.createElement("script");
-    script.src = "Build/play.loader.js";
+    script.src = "Build/1de4e3bedae2380dcefcac20dc0bad02.js";
     script.onload = function () {
       createUnityInstance(canvas, config, function (p) {
         var pct = Math.round(p * 100);
@@ -131,13 +132,25 @@
         clearInterval(tipTimer);
         document.querySelector("#loading").classList.add("hidden");
         document.querySelector("#start").classList.remove("hidden");
-      }).catch(function (msg) {
-        clearInterval(tipTimer);
-        document.querySelector("#status").textContent = "The game couldn't start. Try reloading the page.";
-        document.querySelector("#error").textContent = msg;
-      });
+      }).catch(function (msg) { cantStart(msg); });
     };
+    script.onerror = function () { cantStart("The game files didn't download. Check the internet and reload."); };
     document.body.appendChild(script);
+
+    // Most "won't start in Chrome" cases are 3D graphics switched off in the browser, so say how to fix it.
+    function hasWebGL() {
+      try { var c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); }
+      catch (e) { return false; }
+    }
+    function cantStart(msg) {
+      clearInterval(tipTimer);
+      var chrome = /Chrome\//.test(navigator.userAgent) && !/Edg\//.test(navigator.userAgent);
+      document.querySelector("#status").textContent = !hasWebGL()
+        ? (chrome ? "3D graphics are off in Chrome. Go to Settings > System, turn on \"Use graphics acceleration when available\", relaunch Chrome, then reload this page."
+                  : "This browser has 3D graphics turned off. Turn on hardware/graphics acceleration in its settings, then reload.")
+        : "The game couldn't start. Try reloading the page.";
+      document.querySelector("#error").textContent = msg;
+    }
 
     document.querySelector("#play").addEventListener("click", function () {
       document.querySelector("#start").classList.add("hidden");

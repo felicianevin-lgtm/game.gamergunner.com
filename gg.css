@@ -147,3 +147,6 @@ kbd {
   .key-row b { text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) { .hero-logo { animation: none; } html { scroll-behavior: auto; } }
+
+/* Visible keyboard focus */
+a:focus-visible, button:focus-visible { outline: 3px solid var(--green-hi); outline-offset: 3px; border-radius: 10px; }
