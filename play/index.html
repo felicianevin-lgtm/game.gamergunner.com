@@ -87,6 +87,25 @@
       background: rgba(7,10,13,.88); border: 2px solid var(--green-hi); border-radius: 14px; padding: 14px 18px;
       font: 16px var(--display); color: var(--cream); text-align: center; max-width: 80vw; }
     body.touch.portrait.playing #turn-hint { display: block; }
+
+    /* ---------- glitch report boxes ---------- */
+    .gg-modal { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.6); padding: 12px; box-sizing: border-box; }
+    .gg-modal.hidden { display: none; }
+    .gg-box { width: min(520px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box; background: var(--panel);
+      border: 2px solid var(--green-hi); border-radius: 14px; padding: 16px; color: var(--cream); }
+    .gg-wide { width: min(760px, 100%); }
+    .gg-box h2 { margin: 0 0 6px; font: 400 20px var(--display); color: var(--green-hi); }
+    .gg-dim { color: var(--dim); font-size: 13px; margin: 6px 0; }
+    .gg-box textarea, .gg-box input { width: 100%; box-sizing: border-box; background: #0a110e; color: var(--cream);
+      border: 1px solid var(--edge); border-radius: 8px; padding: 8px; font: 15px "Inter", system-ui, sans-serif; }
+    .gg-box input { width: auto; flex: 1; min-width: 120px; }
+    .gg-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .gg-btn { font: 400 15px var(--display); color: var(--cream); background: var(--green); border: 1px solid var(--green-hi);
+      border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+    .gg-ghost { background: transparent; }
+    .gg-report { border-top: 1px solid var(--edge); padding: 8px 0; font-size: 14px; }
+    .gg-report small { color: var(--dim); display: block; margin-bottom: 3px; }
   </style>
 </head>
 <body>
@@ -133,6 +152,7 @@
     <div id="menu-row">
       <div id="b-menu" class="pad on">☰</div>
       <div class="pad on" data-key="P" data-tap>BACK</div>
+      <div class="pad on" data-key="Enter" data-tap>OK ↵</div>
       <div class="pad on more" data-key="C" data-tap>LOOK</div>
       <div class="pad on more" data-key="V" data-tap>GEAR</div>
       <div class="pad on more" data-key="G" data-tap>CARS</div>
@@ -140,22 +160,44 @@
       <div class="pad on more" data-key="O" data-tap>CRAFT</div>
       <div class="pad on more" data-key="M" data-tap>SAVE</div>
       <div class="pad on more" data-key="R" data-tap>DROP</div>
+      <div class="pad on more" data-key="X" data-tap>EXIT X</div>
+      <div class="pad on more" data-key="N" data-tap>REPORT</div>
       <div class="pad on more" id="b-type">⌨ TYPE</div>
-      <div class="pad on more" data-key="Backquote" data-tap>DEV</div>
+      <div class="pad on more" data-key="H" data-tap>DEV</div>
       <div class="pad on more" id="b-hide">HIDE ✕</div>
     </div>
   </div>
   <div id="tc-show" class="pad">🎮 Touch controls</div>
   <div id="turn-hint">Turn your phone sideways<br>for the best view ↻</div>
 
+  <!-- Glitch reports: players press N (or ☰ > REPORT); the developer menu opens the list. -->
+  <div id="report" class="gg-modal hidden">
+    <div class="gg-box">
+      <h2>Report a glitch</h2>
+      <p class="gg-dim">What went wrong? Where were you and what were you doing? (Please don't type your name or anything private.)</p>
+      <textarea id="report-text" maxlength="500" rows="5" placeholder="Example: I fell through the floor in the pirate house upstairs"></textarea>
+      <p class="gg-dim" id="report-status"></p>
+      <div class="gg-row"><button id="report-send" class="gg-btn">Send</button><button id="report-cancel" class="gg-btn gg-ghost">Cancel</button></div>
+    </div>
+  </div>
+  <div id="reports" class="gg-modal hidden">
+    <div class="gg-box gg-wide">
+      <h2>Glitch reports</h2>
+      <div class="gg-row"><input id="reports-key" type="password" placeholder="Report key" autocomplete="off"><button id="reports-load" class="gg-btn">Load</button>
+        <button id="reports-clear" class="gg-btn gg-ghost">Delete all</button><button id="reports-close" class="gg-btn gg-ghost">Close</button></div>
+      <p class="gg-dim" id="reports-status"></p>
+      <div id="reports-list"></div>
+    </div>
+  </div>
+
   <script>
     // Play-together relay (Cloudflare Worker in /relay). Empty = the U menu says it isn't on yet.
     window.GG_RELAY = "wss://gamergunner-relay.gamergunner-relay.workers.dev";
     var canvas = document.querySelector("#unity-canvas");
     var config = {
-      dataUrl: "Build/f83cb35d8924cf228b9998efff7c169f.data.unityweb",
-      frameworkUrl: "Build/98b8b8172802f6c02cd71d5d716368ef.js.unityweb",
-      codeUrl: "Build/83135b1d30d39af4f72bdcae9889441f.wasm.unityweb",
+      dataUrl: "Build/398a0649957333a39122040a55b92cf0.data.unityweb",
+      frameworkUrl: "Build/e56c5b027d68ce5dc843942797088938.js.unityweb",
+      codeUrl: "Build/070744b512f3918c788a9f7b10b10cdd.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -245,7 +287,7 @@
       Space: [" ", "Space", 32], Shift: ["Shift", "ShiftLeft", 16], J: ["j", "KeyJ", 74], K: ["k", "KeyK", 75],
       E: ["e", "KeyE", 69], F: ["f", "KeyF", 70], P: ["p", "KeyP", 80], C: ["c", "KeyC", 67], V: ["v", "KeyV", 86],
       G: ["g", "KeyG", 71], R: ["r", "KeyR", 82], U: ["u", "KeyU", 85], O: ["o", "KeyO", 79], M: ["m", "KeyM", 77],
-      Backquote: ["`", "Backquote", 192], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8],
+      Backquote: ["`", "Backquote", 192], H: ["h", "KeyH", 72], N: ["n", "KeyN", 78], X: ["x", "KeyX", 88], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8],
     };
     var held = {};
     function sendKey(type, k, extra) {
@@ -353,6 +395,75 @@
     window.addEventListener("resize", checkOrientation);
     checkOrientation();
     document.querySelector("#turn-hint").addEventListener("click", function () { this.style.display = "none"; });
+    // ---------- glitch reports ----------
+    window.ggReport = (function () {
+      var local = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+      var m = local ? /[?&]relay=([^&]+)/.exec(location.search) : null;
+      var relayHttp = (m ? decodeURIComponent(m[1]) : (window.GG_RELAY || "")).replace(/^ws/, "http").replace(/\/$/, "");
+      var box = document.querySelector("#report"), list = document.querySelector("#reports");
+      var text = document.querySelector("#report-text"), status = document.querySelector("#report-status");
+      var where = "";
+      // While a box is open, typing stays in the box: the game never sees those keys.
+      [box, list].forEach(function (el) {
+        ["keydown", "keyup", "keypress"].forEach(function (t) { el.addEventListener(t, function (e) { e.stopPropagation(); }); });
+      });
+      function show(el, on) {
+        el.classList.toggle("hidden", !on);
+        if (on && document.exitPointerLock) document.exitPointerLock();
+        if (!on) focusGame();
+      }
+      document.querySelector("#report-cancel").onclick = function () { show(box, false); };
+      document.querySelector("#report-send").onclick = function () {
+        var t = text.value.trim();
+        if (t.length < 3) { status.textContent = "Tell us a little more first."; return; }
+        status.textContent = "Sending…";
+        fetch(relayHttp + "/report", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: t, where: where, ver: document.title }) })
+          .then(function (r) {
+            if (r.status === 429) { status.textContent = "That's a lot of reports! Try again in a few minutes."; return; }
+            if (!r.ok) throw new Error();
+            status.textContent = "Thanks! Your report was sent.";
+            text.value = "";
+            setTimeout(function () { show(box, false); }, 1200);
+          })
+          .catch(function () { status.textContent = "Couldn't send. Check the internet and try again."; });
+      };
+      // Developer list (opened from the dev menu). The key is remembered on this device only.
+      var keyBox = document.querySelector("#reports-key"), lstatus = document.querySelector("#reports-status");
+      var rows = document.querySelector("#reports-list");
+      try { keyBox.value = localStorage.getItem("gg_report_key") || ""; } catch (e) {}
+      function call(method, q) {
+        return fetch(relayHttp + "/reports" + (q || ""), { method: method, headers: { "X-Report-Key": keyBox.value } })
+          .then(function (r) { if (r.status === 401) throw new Error("key"); return r.json(); });
+      }
+      function load() {
+        try { localStorage.setItem("gg_report_key", keyBox.value); } catch (e) {}
+        lstatus.textContent = "Loading…";
+        call("GET").then(function (data) {
+          rows.innerHTML = "";
+          lstatus.textContent = data.reports.length ? data.reports.length + " report(s), newest first." : "No reports yet. 🎉";
+          data.reports.forEach(function (r) {
+            var div = document.createElement("div"); div.className = "gg-report";
+            var small = document.createElement("small");
+            small.textContent = new Date(r.at).toLocaleString() + (r.where ? "  ·  " + r.where : "");
+            var body = document.createElement("div"); body.textContent = r.text;
+            var del = document.createElement("button"); del.className = "gg-btn gg-ghost"; del.textContent = "Delete";
+            del.onclick = function () { call("DELETE", "?id=" + encodeURIComponent(r.id)).then(load); };
+            div.appendChild(small); div.appendChild(body); div.appendChild(del); rows.appendChild(div);
+          });
+        }).catch(function (e) { lstatus.textContent = e.message === "key" ? "That report key isn't right." : "Couldn't load reports."; });
+      }
+      document.querySelector("#reports-load").onclick = load;
+      document.querySelector("#reports-clear").onclick = function () {
+        if (confirm("Delete ALL glitch reports?")) call("DELETE", "?id=all").then(load);
+      };
+      document.querySelector("#reports-close").onclick = function () { show(list, false); };
+      return {
+        open: function (w) { where = w || ""; status.textContent = ""; show(box, true); setTimeout(function () { text.focus(); }, 50); },
+        viewer: function () { show(list, true); if (keyBox.value) load(); },
+      };
+    })();
+
     // If the page is hidden mid-press (switching apps), let go of everything so the player doesn't keep running.
     document.addEventListener("visibilitychange", function () { if (document.hidden) releaseAll(); });
   </script>
