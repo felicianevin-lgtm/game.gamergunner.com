@@ -183,7 +183,7 @@
   <div id="reports" class="gg-modal hidden">
     <div class="gg-box gg-wide">
       <h2>Glitch reports</h2>
-      <div class="gg-row"><input id="reports-key" type="password" placeholder="Report key" autocomplete="off"><button id="reports-load" class="gg-btn">Load</button>
+      <div class="gg-row"><button id="reports-load" class="gg-btn">Refresh</button>
         <button id="reports-clear" class="gg-btn gg-ghost">Delete all</button><button id="reports-close" class="gg-btn gg-ghost">Close</button></div>
       <p class="gg-dim" id="reports-status"></p>
       <div id="reports-list"></div>
@@ -428,16 +428,12 @@
           })
           .catch(function () { status.textContent = "Couldn't send. Check the internet and try again."; });
       };
-      // Developer list (opened from the dev menu). The key is remembered on this device only.
-      var keyBox = document.querySelector("#reports-key"), lstatus = document.querySelector("#reports-status");
-      var rows = document.querySelector("#reports-list");
-      try { keyBox.value = localStorage.getItem("gg_report_key") || ""; } catch (e) {}
+      // Developer list (opened from the dev menu).
+      var lstatus = document.querySelector("#reports-status"), rows = document.querySelector("#reports-list");
       function call(method, q) {
-        return fetch(relayHttp + "/reports" + (q || ""), { method: method, headers: { "X-Report-Key": keyBox.value } })
-          .then(function (r) { if (r.status === 401) throw new Error("key"); return r.json(); });
+        return fetch(relayHttp + "/reports" + (q || ""), { method: method }).then(function (r) { return r.json(); });
       }
       function load() {
-        try { localStorage.setItem("gg_report_key", keyBox.value); } catch (e) {}
         lstatus.textContent = "Loading…";
         call("GET").then(function (data) {
           rows.innerHTML = "";
@@ -451,7 +447,7 @@
             del.onclick = function () { call("DELETE", "?id=" + encodeURIComponent(r.id)).then(load); };
             div.appendChild(small); div.appendChild(body); div.appendChild(del); rows.appendChild(div);
           });
-        }).catch(function (e) { lstatus.textContent = e.message === "key" ? "That report key isn't right." : "Couldn't load reports."; });
+        }).catch(function () { lstatus.textContent = "Couldn't load reports. Check the internet and try again."; });
       }
       document.querySelector("#reports-load").onclick = load;
       document.querySelector("#reports-clear").onclick = function () {
@@ -460,7 +456,7 @@
       document.querySelector("#reports-close").onclick = function () { show(list, false); };
       return {
         open: function (w) { where = w || ""; status.textContent = ""; show(box, true); setTimeout(function () { text.focus(); }, 50); },
-        viewer: function () { show(list, true); if (keyBox.value) load(); },
+        viewer: function () { show(list, true); load(); },
       };
     })();
 
