@@ -160,6 +160,7 @@
       <div class="pad on more" data-key="O" data-tap>CRAFT</div>
       <div class="pad on more" data-key="I" data-tap>ITEMS</div>
       <div class="pad on more" data-key="T" data-tap>CHAT</div>
+      <div class="pad on more" data-key="B" data-tap>EMOTE</div>
       <div class="pad on more" data-key="M" data-tap>SAVE</div>
       <div class="pad on more" data-key="R" data-tap>DROP</div>
       <div class="pad on more" data-key="X" data-tap>EXIT X</div>
@@ -197,9 +198,9 @@
     window.GG_RELAY = "wss://gamergunner-relay.gamergunner-relay.workers.dev";
     var canvas = document.querySelector("#unity-canvas");
     var config = {
-      dataUrl: "Build/15a51603e733293cd494863a35e7c7ed.data.unityweb",
-      frameworkUrl: "Build/083623a05a8950cc984f15476d5e761a.js.unityweb",
-      codeUrl: "Build/ab597304bc3152f94f7668bd9e362c34.wasm.unityweb",
+      dataUrl: "Build/873910e6c91065757ff27a1e245a327c.data.unityweb",
+      frameworkUrl: "Build/185342506d1d5050b181a8c9e9ecaef7.js.unityweb",
+      codeUrl: "Build/42d5555a3b65e61cb9449d57d9cd7996.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -289,7 +290,7 @@
       Space: [" ", "Space", 32], Shift: ["Shift", "ShiftLeft", 16], J: ["j", "KeyJ", 74], K: ["k", "KeyK", 75],
       E: ["e", "KeyE", 69], F: ["f", "KeyF", 70], P: ["p", "KeyP", 80], C: ["c", "KeyC", 67], V: ["v", "KeyV", 86],
       G: ["g", "KeyG", 71], R: ["r", "KeyR", 82], U: ["u", "KeyU", 85], O: ["o", "KeyO", 79], M: ["m", "KeyM", 77],
-      Backquote: ["`", "Backquote", 192], H: ["h", "KeyH", 72], I: ["i", "KeyI", 73], T: ["t", "KeyT", 84], N: ["n", "KeyN", 78], X: ["x", "KeyX", 88], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8],
+      Backquote: ["`", "Backquote", 192], H: ["h", "KeyH", 72], I: ["i", "KeyI", 73], T: ["t", "KeyT", 84], B: ["b", "KeyB", 66], N: ["n", "KeyN", 78], X: ["x", "KeyX", 88], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8],
     };
     var held = {};
     function sendKey(type, k, extra) {
