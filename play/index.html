@@ -89,6 +89,12 @@
     #perf-btn:hover { opacity: 1; }
     body.playing #perf-btn { display: flex; }
     body.playing.fps #perf-btn { right: calc(118px + env(safe-area-inset-right)); }
+    /* ⛶ full screen, left of the gear (Mac session). Safari needs the webkit call; iPhones have no full-screen API, so it hides there. */
+    #fs-btn { position: fixed; right: calc(58px + env(safe-area-inset-right)); top: calc(8px + env(safe-area-inset-top)); z-index: 5;
+      display: none; border-radius: 12px; padding: 7px 11px; font: 13px var(--display); cursor: pointer; opacity: .75; }
+    #fs-btn:hover { opacity: 1; }
+    body.playing.canfs #fs-btn { display: flex; }
+    body.playing.fps #fs-btn { right: calc(166px + env(safe-area-inset-right)); }
     #turn-hint { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 6; display: none;
       background: rgba(7,10,13,.88); border: 2px solid var(--green-hi); border-radius: 14px; padding: 14px 18px;
       font: 16px var(--display); color: var(--cream); text-align: center; max-width: 80vw; }
@@ -179,6 +185,7 @@
   </div>
   <div id="tc-show" class="pad">🎮 Touch controls</div>
   <div id="perf-btn" class="pad" title="Performance / lag control (Y)">⚙</div>
+  <div id="fs-btn" class="pad" title="Full screen (Esc leaves)">⛶</div>
   <div id="turn-hint">Turn your phone sideways<br>for the best view ↻</div>
 
   <!-- Glitch reports: players press N (or ☰ > REPORT); the developer menu opens the list. -->
@@ -212,9 +219,9 @@
       } catch (e) { return 0; }
     }
     var config = {
-      dataUrl: "Build/6d4612c85de12c7e448b538b0e852844.data.unityweb",
-      frameworkUrl: "Build/f6d7749710ef52c69052f1bd084f189a.js.unityweb",
-      codeUrl: "Build/f69c65a9a37c9b67535be95e0fea038d.wasm.unityweb",
+      dataUrl: "Build/d4565a45fb82848158fce78656638450.data.unityweb",
+      frameworkUrl: "Build/7588f705c8d36ecdc480b82faec62329.js.unityweb",
+      codeUrl: "Build/41d54adf1c527065d5cb9e49ab1d3389.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -279,6 +286,8 @@
       var chrome = /Chrome\//.test(navigator.userAgent) && !/Edg\//.test(navigator.userAgent);
       document.querySelector("#status").textContent = !hasWebGL()
         ? (chrome ? "3D graphics are off in Chrome. Go to Settings > System, turn on \"Use graphics acceleration when available\", relaunch Chrome, then reload this page."
+                  : /Safari\//.test(navigator.userAgent) && !/Chrome\//.test(navigator.userAgent)
+                  ? "3D graphics are off in Safari. In Safari's settings (Advanced, or Develop > Experimental Features) make sure WebGL is on, then reload. Updating macOS also helps."
                   : "This browser has 3D graphics turned off. Turn on hardware/graphics acceleration in its settings, then reload.")
         : "The game couldn't start. Try reloading the page.";
       document.querySelector("#error").textContent = msg;
@@ -289,7 +298,26 @@
       document.body.classList.add("playing");
       if (isTouch) showTouch(true);
       focusGame();
+      showBuilding();
     });
+    // The town (25 houses, then the other areas) is built by the game itself in the first ~30 s after this click
+    // (the game's clock only runs once the page has focus). Until the houses exist the game's own menu would look
+    // frozen, so the loading bar comes back and counts the houses (PerfStats.cs posts window.GGBuild).
+    function showBuilding() {
+      if (window.GGBuild && window.GGBuild.built) return;
+      var overlay = document.querySelector("#loading"), fill = document.querySelector("#fill"), status = document.querySelector("#status");
+      var tipEl = document.querySelector("#tip"); if (tipEl) tipEl.textContent = "Almost there: the houses are being built. Press M in the game any time to save.";
+      overlay.classList.remove("hidden");
+      var t0 = Date.now();
+      function update(b) {
+        var n = b && b.houses ? b.houses : 0, total = 25;
+        fill.style.width = Math.min(100, Math.round(100 * n / total)) + "%";
+        status.textContent = "Building the town… " + Math.min(n, total) + " / " + total;
+        if ((b && b.built) || Date.now() - t0 > 90000) { overlay.classList.add("hidden"); window.GGBuildHook = null; focusGame(); }
+      }
+      update(window.GGBuild);
+      window.GGBuildHook = update;
+    }
     // Tapping the game always gives it the keyboard back (Safari can lose focus).
     canvas.addEventListener("pointerdown", focusGame);
 
@@ -499,6 +527,44 @@
       if (unityInstance) { try { unityInstance.SendMessage("GGPerf", "TogglePerf", ""); } catch (e) {} }
       focusGame();
     });
+
+    // ---------- Mac / Safari (perf session) ----------
+    // Full screen: Safari before 16.4 only has the webkit-prefixed call, and iPhone Safari has none at all.
+    (function () {
+      var root = document.documentElement, fsBtn = document.querySelector("#fs-btn");
+      var req = root.requestFullscreen || root.webkitRequestFullscreen;
+      var exit = document.exitFullscreen || document.webkitExitFullscreen;
+      function inFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+      if (req) document.body.classList.add("canfs");
+      fsBtn.addEventListener("click", function () {
+        try { if (inFs()) exit.call(document); else req.call(root); } catch (e) { console.log("fullscreen: " + e); }
+        focusGame();
+      });
+      ["fullscreenchange", "webkitfullscreenchange"].forEach(function (t) {
+        document.addEventListener(t, function () { fsBtn.textContent = inFs() ? "⤢" : "⛶"; focusGame(); });
+      });
+    })();
+    // Audio: Safari keeps the sound engine muted until the page has had a click or key. Unity retries every 0.4 s on
+    // its own; kicking it here on the first real gesture after "Tap to play" makes the first sound land at once.
+    (function () {
+      function kick() {
+        try {
+          var ctx = unityInstance && unityInstance.Module && unityInstance.Module.WEBAudio && unityInstance.Module.WEBAudio.audioContext;
+          if (ctx && ctx.state === "suspended") ctx.resume();
+        } catch (e) {}
+      }
+      ["pointerdown", "keydown", "touchend"].forEach(function (t) { window.addEventListener(t, kick, { passive: true }); });
+    })();
+    // Older Safari / Macs without WebGL 2: the game still runs on WebGL 1, just slower, so say so once while loading.
+    (function () {
+      try {
+        var c = document.createElement("canvas");
+        if (!c.getContext("webgl2") && c.getContext("webgl")) {
+          clearInterval(tipTimer);
+          document.querySelector("#tip").textContent = "This browser only has WebGL 1 (older Safari / macOS). The game will run, but updating Safari or macOS makes it much smoother.";
+        }
+      } catch (e) {}
+    })();
 
     // If the page is hidden mid-press (switching apps), let go of everything so the player doesn't keep running.
     document.addEventListener("visibilitychange", function () { if (document.hidden) releaseAll(); });
