@@ -83,6 +83,12 @@
     #tc-show { position: fixed; left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
       z-index: 5; border-radius: 12px; padding: 8px 12px; font: 13px var(--display); display: none; }
     #tc-show.on { display: flex; }
+    /* ⚙ PERFORMANCE (lag control) button: opens the game's Y menu. Shows while playing. */
+    #perf-btn { position: fixed; right: calc(10px + env(safe-area-inset-right)); top: calc(8px + env(safe-area-inset-top)); z-index: 5;
+      display: none; border-radius: 12px; padding: 7px 11px; font: 13px var(--display); cursor: pointer; opacity: .75; }
+    #perf-btn:hover { opacity: 1; }
+    body.playing #perf-btn { display: flex; }
+    body.playing.fps #perf-btn { right: calc(118px + env(safe-area-inset-right)); }
     #turn-hint { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 6; display: none;
       background: rgba(7,10,13,.88); border: 2px solid var(--green-hi); border-radius: 14px; padding: 14px 18px;
       font: 16px var(--display); color: var(--cream); text-align: center; max-width: 80vw; }
@@ -165,12 +171,14 @@
       <div class="pad on more" data-key="R" data-tap>DROP</div>
       <div class="pad on more" data-key="X" data-tap>EXIT X</div>
       <div class="pad on more" data-key="N" data-tap>REPORT</div>
+      <div class="pad on more" data-key="Y" data-tap>⚙ LAG</div>
       <div class="pad on more" id="b-type">⌨ TYPE</div>
       <div class="pad on more" data-key="H" data-tap>DEV</div>
       <div class="pad on more" id="b-hide">HIDE ✕</div>
     </div>
   </div>
   <div id="tc-show" class="pad">🎮 Touch controls</div>
+  <div id="perf-btn" class="pad" title="Performance / lag control (Y)">⚙</div>
   <div id="turn-hint">Turn your phone sideways<br>for the best view ↻</div>
 
   <!-- Glitch reports: players press N (or ☰ > REPORT); the developer menu opens the list. -->
@@ -197,10 +205,16 @@
     // Play-together relay (Cloudflare Worker in /relay). Empty = the U menu says it isn't on yet.
     window.GG_RELAY = "wss://gamergunner-relay.gamergunner-relay.workers.dev";
     var canvas = document.querySelector("#unity-canvas");
+    function savedPixelRatioCap() {
+      try {
+        if (location.hostname === "localhost" && /[?&]gg_perf_reset/.test(location.search)) { localStorage.removeItem("gg_perf"); localStorage.removeItem("gg_perf_dpr"); return 0; }
+        var v = parseFloat(localStorage.getItem("gg_perf_dpr")); return isFinite(v) && v > 0 ? v : 0;
+      } catch (e) { return 0; }
+    }
     var config = {
-      dataUrl: "Build/619928cf1a8c1b1c2fd86b573414a72b.data.unityweb",
-      frameworkUrl: "Build/dc3b14a44d03bffaafc035bf076ac52a.js.unityweb",
-      codeUrl: "Build/eee9f9e7ed2b5e66b3f391915f6d98a4.wasm.unityweb",
+      dataUrl: "Build/86bff21f951adbac1a159a5ad25b1f20.data.unityweb",
+      frameworkUrl: "Build/b14eb9deac656fac725dae3bc2fc97ae.js.unityweb",
+      codeUrl: "Build/bd644cc0e314d051995f08acdb6ed63c.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -208,9 +222,12 @@
       // iPads (touch screens) render at 1x: the in-game menus are sized in screen pixels, so anything higher
       // shrinks every menu and label (1.5x made them two-thirds size), and 1x is also much lighter for the iPad's
       // graphics chip. Computers render up to 2x.
+      // The PERFORMANCE menu (Y / ⚙) saves its render-scale cap in localStorage ("gg_perf_dpr") and the game
+      // changes it live; this just starts the canvas at the saved size.
       // (?gg_dpr=1.5 forces a ratio, for testing on this computer only.)
       devicePixelRatio: (location.hostname === "localhost" && /[?&]gg_dpr=([\d.]+)/.test(location.search))
-        ? parseFloat(RegExp.$1) : navigator.maxTouchPoints > 1 ? 1 : Math.min(window.devicePixelRatio || 1, 2),
+        ? parseFloat(RegExp.$1) : savedPixelRatioCap() ? Math.min(window.devicePixelRatio || 1, savedPixelRatioCap())
+        : navigator.maxTouchPoints > 1 ? 1 : Math.min(window.devicePixelRatio || 1, 2),
     };
 
     var tips = [
@@ -290,7 +307,7 @@
       Space: [" ", "Space", 32], Shift: ["Shift", "ShiftLeft", 16], J: ["j", "KeyJ", 74], K: ["k", "KeyK", 75],
       E: ["e", "KeyE", 69], F: ["f", "KeyF", 70], P: ["p", "KeyP", 80], C: ["c", "KeyC", 67], V: ["v", "KeyV", 86],
       G: ["g", "KeyG", 71], R: ["r", "KeyR", 82], U: ["u", "KeyU", 85], O: ["o", "KeyO", 79], M: ["m", "KeyM", 77],
-      Backquote: ["`", "Backquote", 192], H: ["h", "KeyH", 72], I: ["i", "KeyI", 73], T: ["t", "KeyT", 84], B: ["b", "KeyB", 66], N: ["n", "KeyN", 78], X: ["x", "KeyX", 88], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8],
+      Backquote: ["`", "Backquote", 192], H: ["h", "KeyH", 72], I: ["i", "KeyI", 73], T: ["t", "KeyT", 84], B: ["b", "KeyB", 66], N: ["n", "KeyN", 78], X: ["x", "KeyX", 88], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8], Y: ["y", "KeyY", 89],
     };
     var held = {};
     function sendKey(type, k, extra) {
@@ -469,6 +486,19 @@
         viewer: function () { show(list, true); load(); },
       };
     })();
+
+    // ---------- PERFORMANCE (lag control) ----------
+    // The gear button opens the game's menu (same as pressing Y); the game tells the page its preset and the
+    // live pixel ratio (GGPerf.jslib) so the button can show it.
+    var perfBtn = document.querySelector("#perf-btn");
+    window.GGPerf = {
+      onPreset: function (p) { perfBtn.textContent = "⚙ " + p; },
+      onRatio: function (r) { perfBtn.title = "Performance / lag control (Y) - render scale " + (Math.round(r * 100) / 100) + "x"; },
+    };
+    perfBtn.addEventListener("click", function () {
+      if (unityInstance) { try { unityInstance.SendMessage("GGPerf", "TogglePerf", ""); } catch (e) {} }
+      focusGame();
+    });
 
     // If the page is hidden mid-press (switching apps), let go of everything so the player doesn't keep running.
     document.addEventListener("visibilitychange", function () { if (document.hidden) releaseAll(); });
