@@ -68,6 +68,12 @@
       width: 132px; height: 132px; border-radius: 50%; }
     #knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
       background: rgba(243,232,208,.55); border: 2px solid var(--cream); pointer-events: none; }
+    #look { right: calc(30px + env(safe-area-inset-right)); bottom: calc(200px + env(safe-area-inset-bottom));
+      width: 112px; height: 112px; border-radius: 50%; border-color: rgba(120,200,255,.6); }
+    #look-knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%;
+      background: rgba(150,210,255,.55); border: 2px solid var(--cream); pointer-events: none; }
+    #look span { position: absolute; bottom: -18px; left: 0; right: 0; font-size: 11px; opacity: .8; pointer-events: none; }
+    @media (max-height: 360px) { #look { bottom: calc(150px + env(safe-area-inset-bottom)); width: 92px; height: 92px; } }
     .act { border-radius: 50%; font-size: 13px; }
     #b-jump  { right: calc(24px + env(safe-area-inset-right)); bottom: calc(26px + env(safe-area-inset-bottom)); width: 78px; height: 78px; font-size: 15px; }
     #b-shoot { right: calc(112px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom)); width: 64px; height: 64px; border-color: rgba(240,40,15,.8); }
@@ -146,7 +152,7 @@
       <div class="k"><span><kbd>Tab</kbd></span><b>Free the mouse / back to camera</b></div>
       <div class="k"><span><kbd>M</kbd> <kbd>P</kbd></span><b>Save + menu / back</b></div>
     </div>
-    <p class="touch-help">On-screen controls: <b>left stick</b> moves (and drives), <b>drag anywhere</b> to look around,
+    <p class="touch-help">On-screen controls: <b>left stick</b> moves (and drives), <b>right TURN stick</b> (or drag anywhere) turns the camera,
       buttons on the right jump, shoot and use. <b>☰</b> at the top has avatar, cars, friends, save and more.
       Best played sideways.</p>
     <a class="home" href="../">← Back to game.gamergunner.com</a>
@@ -155,6 +161,7 @@
   <!-- On-screen touch controls. Each one presses the same key a keyboard would. -->
   <div id="tc" class="hidden">
     <div id="stick" class="pad on"><div id="knob"></div></div>
+    <div id="look" class="pad on"><div id="look-knob"></div><span>TURN</span></div>
     <div id="b-jump"  class="pad act on" data-key="Space">JUMP</div>
     <div id="b-shoot" class="pad act on" data-key="J">SHOOT</div>
     <div id="b-use"   class="pad act on" data-key="E">USE<br>E</div>
@@ -219,9 +226,9 @@
       } catch (e) { return 0; }
     }
     var config = {
-      dataUrl: "Build/41287f1401f52974f704d39615b0b89a.data.unityweb",
+      dataUrl: "Build/3d85a2d5725e1e3268e11fd3b1e7f78f.data.unityweb",
       frameworkUrl: "Build/3d18c08502704a646d92adfa1678378d.js.unityweb",
-      codeUrl: "Build/704a4226a0d50e9da924a29eec34aa34.wasm.unityweb",
+      codeUrl: "Build/ce9f911000c3182704e4dca6b69b0bf8.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -417,9 +424,40 @@
       try { stick.setPointerCapture(e.pointerId); } catch (x) {}
       moveStick(e);
     });
-    stick.addEventListener("pointermove", function (e) { if (e.pointerId === stickId) moveStick(e); });
-    stick.addEventListener("pointerup", endStick);
+    // (Phones can drop the finger's capture: keep following it on the page, and let go when it's lost,
+    // so a direction never gets stuck held.)
+    document.addEventListener("pointermove", function (e) { if (e.pointerId === stickId) moveStick(e); });
+    document.addEventListener("pointerup", function (e) { if (e.pointerId === stickId) endStick(); });
     stick.addEventListener("pointercancel", endStick);
+    stick.addEventListener("lostpointercapture", function (e) { if (e.pointerId === stickId) endStick(); });
+
+    // TURN stick (right side): turns the camera like the arrow keys, harder the further you push.
+    var look = document.querySelector("#look"), lookKnob = document.querySelector("#look-knob"), lookId = null, lookSent = "";
+    function sendLook(x, y) {
+      var v = x.toFixed(2) + "," + y.toFixed(2);
+      if (v === lookSent || !unityInstance) return;
+      lookSent = v;
+      try { unityInstance.SendMessage("GGTouch", "SetLook", v); } catch (x2) {}
+    }
+    function moveLook(e) {
+      var r = look.getBoundingClientRect(), max = r.width / 2;
+      var dx = e.clientX - (r.left + max), dy = e.clientY - (r.top + max);
+      var len = Math.sqrt(dx * dx + dy * dy);
+      if (len > max) { dx *= max / len; dy *= max / len; }
+      lookKnob.style.transform = "translate(" + dx + "px," + dy + "px)";
+      var dead = 0.12, nx = dx / max, ny = dy / max;
+      sendLook(Math.abs(nx) < dead ? 0 : nx, Math.abs(ny) < dead ? 0 : ny);
+    }
+    function endLook() { lookId = null; lookKnob.style.transform = ""; sendLook(0, 0); }
+    look.addEventListener("pointerdown", function (e) {
+      e.preventDefault(); lookId = e.pointerId;
+      try { look.setPointerCapture(e.pointerId); } catch (x) {}
+      moveLook(e);
+    });
+    document.addEventListener("pointermove", function (e) { if (e.pointerId === lookId) moveLook(e); });
+    document.addEventListener("pointerup", function (e) { if (e.pointerId === lookId) endLook(); });
+    look.addEventListener("pointercancel", endLook);
+    look.addEventListener("lostpointercapture", function (e) { if (e.pointerId === lookId) endLook(); });
 
     // ⌨ TYPE: phones can't open a keyboard for the game's text boxes (play-together codes, the dev
     // password), so ask with the browser's own box and type the answer in, then press Enter.
