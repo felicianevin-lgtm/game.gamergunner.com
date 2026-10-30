@@ -81,6 +81,13 @@
     #b-run   { right: calc(118px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); width: 52px; height: 52px; font-size: 11px; }
     #b-gun   { right: calc(184px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); width: 50px; height: 50px; font-size: 11px; }
     #b-block { right: calc(178px + env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); width: 46px; height: 46px; font-size: 10px; }
+    /* Hero class buttons (Sandbox): abilities 2-5, sword 6, HERO menu (Z). The game turns them on (body.heroes). */
+    #hero-row { position: absolute; left: calc(22px + env(safe-area-inset-left)); bottom: calc(166px + env(safe-area-inset-bottom));
+      display: none; gap: 5px; }
+    body.heroes #hero-row { display: flex; }
+    #hero-row .pad { position: static; width: 42px; height: 42px; border-radius: 10px; font-size: 15px; border-color: rgba(255,200,90,.6); }
+    #hero-row .pad:first-child { width: 52px; font-size: 11px; }
+    @media (max-height: 360px) { #hero-row { bottom: calc(158px + env(safe-area-inset-bottom)); } #hero-row .pad { width: 36px; height: 36px; } }
     #menu-row { position: absolute; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
       display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 64vw; }
     #menu-row .pad { position: static; border-radius: 10px; padding: 7px 10px; font-size: 12px; min-width: 34px; }
@@ -168,6 +175,14 @@
     <div id="b-run"   class="pad act on" data-toggle="Shift">RUN</div>
     <div id="b-gun"   class="pad act on" data-key="F" data-tap>GUN</div>
     <div id="b-block" class="pad act on" data-key="K">BLOCK</div>
+    <div id="hero-row">
+      <div class="pad on" data-key="Z" data-tap>HERO</div>
+      <div class="pad on" data-key="D2" data-tap>2</div>
+      <div class="pad on" data-key="D3" data-tap>3</div>
+      <div class="pad on" data-key="D4" data-tap>4</div>
+      <div class="pad on" data-key="D5" data-tap>5</div>
+      <div class="pad on" data-key="D6" data-tap>⚔</div>
+    </div>
     <div id="menu-row">
       <div id="b-menu" class="pad on">☰</div>
       <div class="pad on" data-key="P" data-tap>BACK</div>
@@ -226,9 +241,9 @@
       } catch (e) { return 0; }
     }
     var config = {
-      dataUrl: "Build/3d85a2d5725e1e3268e11fd3b1e7f78f.data.unityweb",
-      frameworkUrl: "Build/3d18c08502704a646d92adfa1678378d.js.unityweb",
-      codeUrl: "Build/ce9f911000c3182704e4dca6b69b0bf8.wasm.unityweb",
+      dataUrl: "Build/d3ee58960d8dd15c4087a3fd110fb9cb.data.unityweb",
+      frameworkUrl: "Build/231c9cf3ae0905c65164bf98b3cc3c26.js.unityweb",
+      codeUrl: "Build/83fad7bdbb07efd25a293c9a6b1268c5.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
@@ -342,7 +357,7 @@
       Space: [" ", "Space", 32], Shift: ["Shift", "ShiftLeft", 16], J: ["j", "KeyJ", 74], K: ["k", "KeyK", 75],
       E: ["e", "KeyE", 69], F: ["f", "KeyF", 70], P: ["p", "KeyP", 80], C: ["c", "KeyC", 67], V: ["v", "KeyV", 86],
       G: ["g", "KeyG", 71], R: ["r", "KeyR", 82], U: ["u", "KeyU", 85], O: ["o", "KeyO", 79], M: ["m", "KeyM", 77],
-      Backquote: ["`", "Backquote", 192], H: ["h", "KeyH", 72], I: ["i", "KeyI", 73], T: ["t", "KeyT", 84], B: ["b", "KeyB", 66], N: ["n", "KeyN", 78], X: ["x", "KeyX", 88], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8], Y: ["y", "KeyY", 89],
+      Backquote: ["`", "Backquote", 192], H: ["h", "KeyH", 72], I: ["i", "KeyI", 73], T: ["t", "KeyT", 84], B: ["b", "KeyB", 66], N: ["n", "KeyN", 78], X: ["x", "KeyX", 88], Z: ["z", "KeyZ", 90], D2: ["2", "Digit2", 50], D3: ["3", "Digit3", 51], D4: ["4", "Digit4", 52], D5: ["5", "Digit5", 53], D6: ["6", "Digit6", 54], Enter: ["Enter", "Enter", 13], Backspace: ["Backspace", "Backspace", 8], Y: ["y", "KeyY", 89],
     };
     var held = {};
     function sendKey(type, k, extra) {
