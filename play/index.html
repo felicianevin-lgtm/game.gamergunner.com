@@ -6,9 +6,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Gamer Gunner">
+  <meta name="apple-mobile-web-app-title" content="GunnerVerse">
   <meta name="theme-color" content="#070a0d">
-  <title>Play | Gamer Gunner</title>
+  <title>Play | GunnerVerse</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,6 +28,8 @@
       background: radial-gradient(ellipse 50% 40% at 50% 32%, rgba(31,174,69,.20), transparent 70%),
                   radial-gradient(ellipse 30% 25% at 50% 40%, rgba(240,40,15,.10), transparent 70%), var(--bg); }
     .overlay.hidden { display: none; }
+    .gv { margin: -6px 0 0; font: 400 clamp(30px, 8vw, 52px)/1 var(--display); letter-spacing: .05em; text-transform: uppercase;
+      color: var(--cream); text-shadow: 0 0 2px var(--red), 0 0 16px rgba(240,40,15,.55), 0 0 30px rgba(31,174,69,.3); }
     .logo { width: min(240px, 48vw, 32vh); height: auto; filter: drop-shadow(0 0 20px rgba(240,40,15,.35)) drop-shadow(0 0 36px rgba(31,174,69,.25)); }
     .loading .logo { animation: pulse 1.6s ease-in-out infinite; }
     @keyframes pulse { 50% { transform: scale(1.04); filter: drop-shadow(0 0 28px rgba(240,40,15,.5)) drop-shadow(0 0 44px rgba(31,174,69,.35)); } }
@@ -137,7 +139,8 @@
   <canvas id="unity-canvas" tabindex="-1"></canvas>
 
   <div id="loading" class="overlay loading">
-    <img class="logo" src="logo-stacked.png" alt="Gamer Gunner">
+    <img class="logo" src="logo-stacked.png" alt="Gamer Gunner logo">
+    <h1 class="gv">GunnerVerse</h1>
     <div class="bar"><div class="fill" id="fill"></div></div>
     <p class="status" id="status">Loading the world… 0%</p>
     <p class="tip" id="tip"></p>
@@ -145,7 +148,8 @@
   </div>
 
   <div id="start" class="overlay hidden">
-    <img class="logo" src="logo-stacked.png" alt="Gamer Gunner">
+    <img class="logo" src="logo-stacked.png" alt="Gamer Gunner logo">
+    <h1 class="gv">GunnerVerse</h1>
     <button id="play" class="btn" type="button">▶ Tap to play</button>
     <div class="keys">
       <div class="k"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><b>Move / drive</b></div>
@@ -242,9 +246,9 @@
       } catch (e) { return 0; }
     }
     var config = {
-      dataUrl: "Build/cfc9add0e5a89c03eb122977e6bce288.data.unityweb",
+      dataUrl: "Build/1bb026f1913e1ca1d054358df2071f9d.data.unityweb",
       frameworkUrl: "Build/1d14ba5a177b51a25e424934961450a4.js.unityweb",
-      codeUrl: "Build/14e290a215c966a6f5be3c11f2f076a6.wasm.unityweb",
+      codeUrl: "Build/d651105a08d77b2e3d25bbe583ed10d0.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "Gamer Gunner",
       productName: "Gamer Gunner",
