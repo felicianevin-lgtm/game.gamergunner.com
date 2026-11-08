@@ -39,7 +39,7 @@ let dirty = false, saveTimer = 0, playing = null;
 let category = "All";
 let myFiles = [];              // imported files in this browser (files.js listFiles)
 let selScript = null;          // the script open in the script editor
-const lastErr = new Map();     // script name -> the line its last error was on
+const lastErr = new Map();     // script id -> the line its error was on in the last Play
 
 const world = createWorld($("canvas"));
 const { scene, camera, renderer } = world;
@@ -295,7 +295,7 @@ function editScript(id) {
   openScript(sc, {
     where: t ? "inside " + t.name + " (me = " + t.name + ")" : "for the whole game",
     kind: !t ? "game" : guiItem(sc.on) ? "gui" : "part",
-    errLine: lastErr.get(sc.name) || 0,
+    errLine: lastErr.get(sc.id) || 0,
     meName: t ? t.name : "",
     things: () => game.objects.map((o) => ({ name: o.name, kind: "part", type: o.type })).concat((game.gui || []).map((g) => ({ name: g.name, kind: "gui", type: g.kind }))),
     onChange() { changed(); },
@@ -858,16 +858,16 @@ function play() {
 
 // ---------------------------------------------------------------- the Output box (script errors and print())
 function clearOutput() { $("outList").innerHTML = ""; $("output").classList.add("hidden"); lastErr.clear(); }
-function output(kind, text) {
+function output(kind, text, where) {
   const list = $("outList");
   if (list.childElementCount > 200) list.firstChild.remove();
-  const m = /^📜 (.+?)(?: \(line (\d+)\))?: /.exec(text);
-  if (m && kind === "err" && m[2]) lastErr.set(m[1], +m[2]);
+  const sid = where && where.id && game.scripts.some((x) => x.id === where.id) ? where.id : "";
+  if (sid && where.line && !lastErr.has(sid)) lastErr.set(sid, where.line);
   list.insertAdjacentHTML("beforeend", '<div class="out-' + kind + '">' + esc(text) + "</div>");
   list.scrollTop = list.scrollHeight;
   $("output").classList.remove("hidden");
   const div = list.lastChild;
-  if (m) { div.title = "Click to open this script"; div.onclick = () => { const sc = game.scripts.find((x) => x.name === m[1]); if (sc) { if (playing) playing.stop(); editScript(sc.id); } }; }
+  if (sid) { div.title = "Click to open this script"; div.onclick = () => { if (playing) playing.stop(); editScript(sid); }; }
 }
 $("outClose").onclick = () => $("output").classList.add("hidden");
 $("outClear").onclick = () => { $("outList").innerHTML = ""; };

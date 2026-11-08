@@ -538,7 +538,7 @@ export function startPlay(world, game, opts) {
       fatal(text) { out("err", text); showMsg(text, 4); },
     });
   }
-  function out(kind, text) { if (opts.output) opts.output(kind, text); }
+  function out(kind, text, where) { if (opts.output) opts.output(kind, text, where); } // (where = {id, line}: which script)
   // Moving things the scripts should know about (their positions change without the scripts doing it).
   const _eu = new THREE.Euler();
   function movedList() {
@@ -592,7 +592,7 @@ export function startPlay(world, game, opts) {
       }
       else if (k === "msg") showMsg(filterText(a, 200), NUM(b, 0.5, 30) || 2.2);
       else if (k === "print") out("print", String(a).slice(0, 500));
-      else if (k === "err") out("err", "📜 " + String(a).slice(0, 40) + (b ? " (line " + b + ")" : "") + ": " + String(cc).slice(0, 300));
+      else if (k === "err") out("err", "📜 " + String(a).slice(0, 40) + (b ? " (line " + b + ")" : "") + ": " + String(cc).slice(0, 300), { id: String(d || ""), line: +b || 0 });
       else if (k === "ptp") { const x = NUM(a, -5000, 5000), y = NUM(b, -5000, 5000), z = NUM(cc, -5000, 5000); if (x == null || y == null || z == null) continue; if (driving) leaveCar(); pos.set(x, y, z); vel.set(0, 0, 0); }
       else if (k === "prespawn") respawn("Back to the checkpoint!");
       else if (k === "pspeed") sc.speed = NUM(a, 0, 10) ?? 1;

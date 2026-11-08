@@ -78,7 +78,7 @@ function RUNTIME(send) {
     const m = st.match(/<anonymous>:(\d+):\d+/) || st.match(/Function:(\d+):\d+/);
     let msg = String((e && e.message) || e).slice(0, 300);
     if (/Cannot read propert(y|ies) of (null|undefined)/.test(msg)) msg += ". (Something you used isn't there: check the names you typed.)";
-    cmd("err", s.name, m ? Math.max(1, +m[1] - 2) : 0, n === 6 ? msg + " (stopped showing this error)" : msg);
+    cmd("err", s.name, m ? Math.max(1, +m[1] - 2) : 0, n === 6 ? msg + " (stopped showing this error)" : msg, s.id || "");
   }
   function run(fn, sc, ...args) {
     if (!sc || (errs.get(sc) || 0) > 6) return;
@@ -202,7 +202,7 @@ function RUNTIME(send) {
     for (const sc of d.scripts) {
       let fn;
       try { fn = new AsyncFunction("me", sc.code); }
-      catch (e) { cmd("err", sc.name, 0, "Typo: " + e.message); continue; }
+      catch (e) { cmd("err", sc.name, 0, "Typo: " + e.message, sc.id); continue; }
       run(fn, sc, sc.on ? get(sc.on) : null);
     }
   }
