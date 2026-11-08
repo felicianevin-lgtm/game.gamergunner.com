@@ -1,7 +1,10 @@
 // GunnerVerse home page: the games list, search, the player's account (top right) and the game pages.
 // Talks to the relay's /hub/* routes (relay/src/index.js). The account is shared with the game through
 // localStorage "gg_account" = {u, t, d} (see unity/Assets/Plugins/WebGL/GGAccount.jslib): sign up here or in the game.
-// Pages (in the address after #): #/  #/game/<id>  #/search/<words>  #/friends  #/u/<username>  #/create  #/me
+// Pages (in the address after #): #/  #/game/<id>  #/search/<words>  #/friends  #/u/<username>  #/create  #/me  #/admin
+// Player-made games come from GunnerVerse Studio (create/) through the relay's publish.js: they play at
+// create/play.html?g=<id>, their pictures live on the relay ("@/hub/thumb/..."), anyone signed in can Report one, and
+// #/admin (dev password, not linked anywhere) lists reports and removes games / bans makers.
 // Friends (relay social.js): requests by @username, who's online / playing, Join a friend's Sandbox room, Block.
 // There are NO private messages on purpose (Felicia, 2026-11-08).
 // Testing on this computer: add ?relay=http://localhost:8788 to use the local relay (it's kept while you click around).
@@ -99,7 +102,7 @@
   function openSignup(why) {
     openModal(
       '<h2 id="modalTitle">Join GunnerVerse</h2>' +
-      "<p>" + esc(why || "Pick a username to like games and add friends. Soon you'll make your own games too.") + "</p>" +
+      "<p>" + esc(why || "Pick a username to like games, add friends and publish your own games.") + "</p>" +
       '<form id="signupForm">' +
       '<label class="field"><span>Username</span><input id="suUser" maxlength="16" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="like GG_Fan_22">' +
       "<small>3 to 16 letters, numbers or _. You can't change it later. Don't use your real name.</small></label>" +
@@ -316,8 +319,9 @@
     });
   }
   function find(id) { for (var i = 0; i < games.length; i++) if (games[i].id === id) return games[i]; return null; }
+  function thumbSrc(t) { return t && t.charAt(0) === "@" ? RELAY + t.slice(1) : t || "img/share.jpg"; }
   function thumb(g, cls) {
-    return '<img class="' + (cls || "thumb") + '" src="' + esc(g.thumb || "img/share.jpg") + '" alt="" loading="lazy" onerror="this.onerror=null;this.src=\'img/share.jpg\'">';
+    return '<img class="' + (cls || "thumb") + '" src="' + esc(thumbSrc(g.thumb)) + '" alt="" loading="lazy" onerror="this.onerror=null;this.src=\'img/share.jpg\'">';
   }
   function statsLine(g) {
     var p = playing[g.id] || 0;
@@ -327,6 +331,36 @@
   function card(g) {
     return '<a class="card" href="#/game/' + esc(g.id) + '">' + thumb(g) + '<div class="card-body"><div class="card-title">' + esc(g.title) + "</div>" +
       '<div class="card-by">by @' + esc(g.by) + (g.official ? '<span class="badge">✔ Official</span>' : "") + "</div>" + statsLine(g) + "</div></a>";
+  }
+  function isMine(g) { return me && !g.official && g.byLow === me.u.toLowerCase(); }
+  function reportGame(g) {
+    if (!me) { openSignup("Make a username so you can report games."); return; }
+    var whys = ["Bad words", "Scary, mean or gross", "Bad picture", "Copied from someone else", "It's broken", "Something else"];
+    openModal('<h2 id="modalTitle">Report "' + esc(g.title) + '"</h2><p>Tell us what\'s wrong. Gamer Gunner\'s team will look at it and can take the game down.</p>' +
+      '<form id="repForm"><div class="why-list">' + whys.map(function (w, i) { return '<label><input type="radio" name="why" value="' + esc(w) + '"' + (i ? "" : " checked") + "> " + esc(w) + "</label>"; }).join("") + "</div>" +
+      '<label class="field"><span>More details (optional)</span><input id="repMore" maxlength="150"></label><p class="err" id="repErr"></p>' +
+      '<div class="modal-actions"><button type="button" class="btn ghost" id="repNo">Cancel</button><button class="btn danger">Report</button></div></form>');
+    document.getElementById("repNo").onclick = closeModal;
+    document.getElementById("repForm").onsubmit = function (e) {
+      e.preventDefault();
+      var why = (document.querySelector('input[name="why"]:checked') || {}).value || "", more = document.getElementById("repMore").value.trim();
+      api("/hub/report", { t: me.t, g: g.id, why: why + (more ? ": " + more : "") }).then(function (r) {
+        if (r.ok) openModal('<h2 id="modalTitle">Thanks for telling us!</h2><p>We\'ll take a look at "' + esc(g.title) + '".</p><div class="modal-actions"><button class="btn" id="repOk">OK</button></div>'), document.getElementById("repOk").onclick = closeModal;
+        else document.getElementById("repErr").textContent = r.e === "slowdown" ? "That's a lot of reports. Try again later." : "Couldn't send the report. Try again.";
+      }).catch(function () { document.getElementById("repErr").textContent = "Couldn't reach GunnerVerse. Check your internet."; });
+    };
+  }
+  function unpublishGame(g) {
+    openModal('<h2 id="modalTitle">Delete "' + esc(g.title) + '"?</h2><p>It comes off GunnerVerse and its likes and plays are gone. The game stays saved in your Studio on the computer you made it on, so you can publish it again.</p>' +
+      '<div class="modal-actions"><button type="button" class="btn ghost" id="unNo">Cancel</button><button type="button" class="btn danger" id="unYes">Delete</button></div>');
+    document.getElementById("unNo").onclick = closeModal;
+    document.getElementById("unYes").onclick = function () {
+      this.disabled = true;
+      api("/hub/unpublish", { t: me.t, g: g.id }).then(function (r) {
+        closeModal();
+        if (r.ok || r.e === "nogame") { games = games.filter(function (x) { return x.id !== g.id; }); location.hash = "#/me"; }
+      }).catch(closeModal);
+    };
   }
   var createCard = '<a class="card soon make" href="create/"><div class="big-icon">✚</div><b>Make your own game</b><span>Build it in GunnerVerse Studio with free cars, houses, coins, lava and more.</span></a>';
 
@@ -390,16 +424,20 @@
     if (!g) { main.innerHTML = '<a class="back" href="#/">← All games</a><p class="empty">We couldn\'t find that game. It might have been removed.</p>'; return; }
     var on = !!liked[g.id];
     main.innerHTML = '<a class="back" href="#/">← All games</a><div class="game-page"><div>' + thumb(g) + "</div><div>" +
-      "<h1>" + esc(g.title) + '</h1><p class="by">by @' + esc(g.by) + (g.official ? '<span class="badge">✔ Official</span>' : "") + "</p>" +
+      "<h1>" + esc(g.title) + '</h1><p class="by">by ' + (g.official ? "@" + esc(g.by) + '<span class="badge">✔ Official</span>' : '<a href="#/u/' + esc(g.by) + '">@' + esc(g.by) + "</a>") + "</p>" +
       '<div class="actions"><button class="btn big" id="gPlay" type="button">▶ Play</button>' +
       '<button class="btn big ghost like' + (on ? " on" : "") + '" id="gLike" type="button" aria-pressed="' + on + '">👍 ' + (on ? "Liked" : "Like") + "</button></div>" +
       '<div class="stat-boxes"><div class="stat-box"><b>' + short(playing[g.id] || 0) + '</b><span>playing now</span></div>' +
       '<div class="stat-box"><b>' + short(g.likes) + '</b><span>likes</span></div><div class="stat-box"><b>' + short(g.plays) + "</b><span>plays</span></div></div>" +
       '<p class="desc">' + esc(g.desc) + "</p>" +
-      (g.id === "gunnerverse" ? '<p class="desc"><a href="about.html">Controls, everything in the game, and info for parents →</a></p>' : "") +
+      (g.id === "gunnerverse" ? '<p class="desc"><a href="about.html">Controls, everything in the game, and info for parents →</a></p>' :
+        '<p class="desc small">Made in GunnerVerse Studio · ' + (g.n || 0) + " things · updated " + new Date(g.updated || g.created).toLocaleDateString() + "</p>" +
+        '<div class="actions">' + (isMine(g) ? '<button class="btn ghost small" id="gDel" type="button">🗑 Delete from GunnerVerse</button>' : '<button class="btn ghost small" id="gRep" type="button">⚑ Report</button>') + "</div>") +
       "</div></div>";
     document.getElementById("gPlay").onclick = function () { play(g); };
     document.getElementById("gLike").onclick = function () { like(g, this); };
+    var rb = document.getElementById("gRep"); if (rb) rb.onclick = function () { reportGame(g); };
+    var db = document.getElementById("gDel"); if (db) db.onclick = function () { unpublishGame(g); };
   }
 
   function pageSearch(q) {
@@ -419,14 +457,14 @@
     setNav("create");
     main.innerHTML = '<div class="soon-page"><div class="big-icon">✚</div><h1>GunnerVerse Studio</h1>' +
       "<p>Build your own 3D game right here: drag in free cars, trees, houses, coins, lava, jump pads and more, give things behaviors, and press Play to try it. " +
-      "Start from a Baseplate, an Obby or a Racing game. Your games save in this browser. Publishing them for everyone is coming soon!</p>" +
+      "Start from a Baseplate, an Obby or a Racing game. When it's ready, press <b>⬆ Publish</b> to put it on GunnerVerse for everyone, with your own picture.</p>" +
       '<a class="btn big" href="create/">✚ Open the Studio</a><p class="tip" style="margin-top:14px">Works best on a computer with a mouse and keyboard.</p></div>';
   }
 
   function pageMe() {
     setNav("me");
     if (!me) {
-      main.innerHTML = '<div class="soon-page"><div class="big-icon">◉</div><h1>Your profile</h1><p>Make a username to get a profile, like games, add friends, and soon publish your own games.</p><button class="btn" id="meSignup" type="button">Sign up</button></div>';
+      main.innerHTML = '<div class="soon-page"><div class="big-icon">◉</div><h1>Your profile</h1><p>Make a username to get a profile, like games, add friends and publish your own games.</p><button class="btn" id="meSignup" type="button">Sign up</button></div>';
       document.getElementById("meSignup").onclick = function () { openSignup(); };
       return;
     }
@@ -437,9 +475,47 @@
       '<div class="actions"><button class="btn ghost" id="meEdit" type="button">Edit profile</button></div>' +
       (banned ? '<p class="err">This account is banned.</p>' : "") +
       '<h2 class="row-title">Games you liked</h2>' + (mine.length ? '<div class="grid">' + mine.map(card).join("") + "</div>" : '<p class="empty">Tap 👍 on a game to save it here.</p>') +
-      '<h2 class="row-title">Your games</h2><div class="grid">' + createCard + "</div>" +
+      '<h2 class="row-title">Your games</h2><div class="grid" id="myGames">' + games.filter(isMine).map(card).join("") + createCard + "</div>" +
       '<p class="hello-sub" style="margin-top:26px">Your account is saved in this browser. Using another device? Pick a different username there for now.</p>';
     document.getElementById("meEdit").onclick = openEditProfile;
+  }
+
+  // ---------------------------------------------------------------- admin (#/admin, dev password)
+  function pageAdmin() {
+    setNav("");
+    var pw = ""; try { pw = sessionStorage.getItem("gg_admin") || ""; } catch (e) {}
+    if (!pw) {
+      main.innerHTML = '<h1 class="page-title">Admin</h1><form class="add-friend" id="adForm"><label for="adPw">Dev password</label><div class="add-row"><input id="adPw" type="password" autocomplete="off">' +
+        '<button class="btn">Open</button></div><p class="add-msg err" id="adErr"></p></form>';
+      document.getElementById("adForm").onsubmit = function (e) { e.preventDefault(); try { sessionStorage.setItem("gg_admin", document.getElementById("adPw").value); } catch (x) {} pageAdmin(); };
+      return;
+    }
+    var hdr = { "X-GG-Dev": pw, "Content-Type": "application/json" };
+    var call = function (path, body) { return fetch(RELAY + path, body ? { method: "POST", headers: hdr, body: JSON.stringify(body) } : { headers: hdr }).then(function (r) { return r.json(); }); };
+    main.innerHTML = '<h1 class="page-title">Admin</h1><p class="empty">Loading reports…</p>';
+    call("/hub/admin/reports").then(function (r) {
+      if (!r.ok) { try { sessionStorage.removeItem("gg_admin"); } catch (x) {} main.innerHTML = '<h1 class="page-title">Admin</h1><p class="err">Wrong password.</p><a class="btn" href="#/admin" onclick="location.reload()">Try again</a>'; return; }
+      var rows = (r.reports || []).map(function (x) {
+        return '<div class="person"><span class="person-main"><span><b>' + esc(x.title) + "</b><small>by @" + esc(x.maker) + " · reported by @" + esc(x.by) + " · " + new Date(x.at).toLocaleString() + "</small>" +
+          '<span class="st">' + esc(x.why || "(no reason)") + "</span></span></span>" +
+          '<div class="person-btns"><a class="btn small ghost" href="#/game/' + esc(x.g) + '">View</a><button class="btn small danger" data-rm="' + esc(x.g) + '">Remove game</button>' +
+          '<button class="btn small danger" data-ban="' + esc(x.maker) + '">Ban @' + esc(x.maker) + '</button><button class="btn small ghost" data-done="' + esc(x.id) + '">Dismiss</button></div></div>';
+      }).join("");
+      main.innerHTML = '<h1 class="page-title">Admin</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +
+        (rows ? '<div class="people">' + rows + "</div>" : '<p class="empty">No reports. 🎉</p>') +
+        '<h2 class="row-title">Remove any game</h2><form class="add-friend" id="rmForm"><label for="rmId">Game id (the letters after #/game/ in its address)</label><div class="add-row"><input id="rmId" maxlength="16">' +
+        '<button class="btn danger">Remove</button></div><p class="add-msg" id="rmMsg"></p></form>' +
+        '<p class="tip" style="margin-top:20px">Bans block the account from GunnerVerse and the game (same as the dev menu ban). Unban from the game\'s dev menu.</p>';
+      var act = function (fn) { return function () { var b = this; if (!confirm(b.textContent + "?")) return; b.disabled = true; fn(b).then(function () { loadGames().then(pageAdmin); }); }; };
+      Array.prototype.forEach.call(main.querySelectorAll("[data-rm]"), function (b) { b.onclick = act(function (b) { return call("/hub/admin/remove", { g: b.getAttribute("data-rm") }).then(function () { return call("/hub/admin/done", { id: b.getAttribute("data-rm") }); }); }); });
+      Array.prototype.forEach.call(main.querySelectorAll("[data-done]"), function (b) { b.onclick = act(function (b) { return call("/hub/admin/done", { id: b.getAttribute("data-done") }); }); });
+      Array.prototype.forEach.call(main.querySelectorAll("[data-ban]"), function (b) { b.onclick = act(function (b) { return fetch(RELAY + "/ban", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: pw, u: b.getAttribute("data-ban") }) }).then(function (r) { return r.json(); }); }); });
+      document.getElementById("rmForm").onsubmit = function (e) {
+        e.preventDefault();
+        var id = document.getElementById("rmId").value.trim().replace(/^.*#\/game\//, "");
+        call("/hub/admin/remove", { g: id }).then(function (r) { document.getElementById("rmMsg").textContent = r.ok ? "Removed." : "No player game with that id."; if (r.ok) loadGames(); });
+      };
+    }).catch(function () { main.innerHTML = '<p class="err">Couldn\'t reach GunnerVerse.</p>'; });
   }
 
   function route() {
@@ -452,6 +528,7 @@
     else if (parts[0] === "u" && parts[1]) pageUser(parts[1]);
     else if (parts[0] === "create") pageCreate();
     else if (parts[0] === "me") pageMe();
+    else if (parts[0] === "admin") pageAdmin();
     else pageHome();
   }
 

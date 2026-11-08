@@ -56,13 +56,13 @@ export function startPlay(world, game, opts) {
   };
   let drag = null;
   const canvas = world.renderer.domElement;
-  const onDown = (e) => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId); };
+  const onDown = (e) => { drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId); };
   const onMove = (e) => {
-    if (!drag) return;
+    if (!drag || e.pointerId !== drag.id) return; // (a finger on the joystick doesn't turn the camera)
     camYaw -= (e.clientX - drag.x) * 0.006; camPitch = Math.max(-0.2, Math.min(1.3, camPitch + (e.clientY - drag.y) * 0.005));
-    drag = { x: e.clientX, y: e.clientY };
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
   };
-  const onUp = () => { drag = null; };
+  const onUp = (e) => { if (drag && e.pointerId === drag.id) drag = null; };
   const onWheel = (e) => { camDist = Math.max(5, Math.min(40, camDist + e.deltaY * 0.02)); e.preventDefault(); };
   window.addEventListener("keydown", onKey); window.addEventListener("keyup", onKey);
   canvas.addEventListener("pointerdown", onDown); window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);
@@ -71,6 +71,8 @@ export function startPlay(world, game, opts) {
   window.addEventListener("blur", blur);
   $("btnStop").onclick = stop;
   $("hud").classList.remove("hidden");
+  const touchUI = (navigator.maxTouchPoints > 0 || "ontouchstart" in window) ? addTouchControls(keys, toggleCar) : null;
+  if (touchUI) $("hudHelp").textContent = "Left stick: move · Jump · drag the screen to look";
   canvas.focus();
   showMsg(game.name, 2);
 
@@ -171,7 +173,8 @@ export function startPlay(world, game, opts) {
   }
 
   // ---------------------------------------------------------------- the loop
-  const camTarget = new THREE.Vector3(), q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0);
+  const camTarget = new THREE.Vector3(), camDir = new THREE.Vector3(), camRay = new THREE.Raycaster(), q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0);
+  const entById = new Map(ents.map((e) => [e.o.id, e]));
   function update(dt) {
     if (!running) return;
     if (!won) time += dt;
@@ -234,7 +237,18 @@ export function startPlay(world, game, opts) {
     const follow = driving ? driving.g.position : pos;
     camTarget.copy(follow); camTarget.y += driving ? 2 : 2.4;
     if (driving) camYaw += angleDiff(camYaw, driving.yaw) * Math.min(1, dt * 2);
-    camera.position.set(camTarget.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist, camTarget.y + Math.sin(camPitch) * camDist, camTarget.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist);
+    // camera behind the player, pulled in front of any wall in between
+    camDir.set(Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), Math.cos(camYaw) * Math.cos(camPitch));
+    let dist = camDist;
+    camRay.set(camTarget, camDir); camRay.far = camDist;
+    for (const h of camRay.intersectObjects(world.root.children, true)) {
+      if (!h.object.visible || (h.object.material && h.object.material.transparent)) continue;
+      let p = h.object; while (p && !p.userData.id) p = p.parent;
+      const e = p && entById.get(p.userData.id);
+      if (!e || !e.o.solid || !e.o.visible || e === driving) continue;
+      dist = Math.max(1.5, h.distance - 0.4); break;
+    }
+    camera.position.copy(camTarget).addScaledVector(camDir, dist);
     camera.lookAt(camTarget);
     world.follow(follow);
 
@@ -326,6 +340,7 @@ export function startPlay(world, game, opts) {
     canvas.removeEventListener("pointerdown", onDown); window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp);
     canvas.removeEventListener("wheel", onWheel);
     scene.remove(player);
+    if (touchUI) touchUI.remove();
     while (world.root.children.length) world.root.remove(world.root.children[0]);
     $("hud").classList.add("hidden"); $("hudMsg").classList.remove("show"); $("bubbles").innerHTML = "";
     $("hudHelp").textContent = "W A S D move · Space jump · drag or arrows to look · E: car · Esc: stop";
@@ -333,6 +348,40 @@ export function startPlay(world, game, opts) {
     opts.onStop();
   }
   return { update, stop, pos, vel, get coins() { return coins; }, get won() { return won; }, get driving() { return driving ? driving.o.name : ""; }, get checkpoint() { return checkpoint; } }; // (pos / vel etc. for testing)
+}
+
+// Touch screens: a joystick (left) that presses W A S D for you, and JUMP / CAR buttons (right).
+// Dragging anywhere else on the screen still turns the camera (the canvas pointer handlers above).
+function addTouchControls(keys, toggleCar) {
+  const box = document.createElement("div");
+  box.className = "touch";
+  box.innerHTML = '<div class="stick" id="tStick"><div class="knob" id="tKnob"></div></div>' +
+    '<button class="tbtn jump" id="tJump" type="button">JUMP</button><button class="tbtn car" id="tCar" type="button">CAR</button>';
+  document.getElementById("hud").appendChild(box);
+  const stick = box.querySelector("#tStick"), knob = box.querySelector("#tKnob");
+  let sid = null;
+  const setDir = (dx, dy) => {
+    const set = (k, on) => (on ? keys.add(k) : keys.delete(k));
+    set("w", dy < -0.35); set("s", dy > 0.35); set("a", dx < -0.35); set("d", dx > 0.35);
+    knob.style.transform = "translate(" + dx * 34 + "px," + dy * 34 + "px)";
+  };
+  const move = (e) => {
+    const r = stick.getBoundingClientRect();
+    let dx = (e.clientX - r.left - r.width / 2) / (r.width / 2), dy = (e.clientY - r.top - r.height / 2) / (r.height / 2);
+    const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
+    setDir(dx, dy);
+  };
+  stick.addEventListener("pointerdown", (e) => { sid = e.pointerId; stick.setPointerCapture(sid); move(e); e.preventDefault(); });
+  stick.addEventListener("pointermove", (e) => { if (e.pointerId === sid) move(e); });
+  const end = (e) => { if (e.pointerId === sid) { sid = null; setDir(0, 0); } };
+  stick.addEventListener("pointerup", end); stick.addEventListener("pointercancel", end);
+  const hold = (el, k) => {
+    el.addEventListener("pointerdown", (e) => { keys.add(k); e.preventDefault(); });
+    for (const t of ["pointerup", "pointercancel", "pointerleave"]) el.addEventListener(t, () => keys.delete(k));
+  };
+  hold(box.querySelector("#tJump"), " ");
+  box.querySelector("#tCar").addEventListener("pointerdown", (e) => { e.preventDefault(); toggleCar(); });
+  return box;
 }
 
 function fmt(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ":" + String(s).padStart(2, "0"); }

@@ -9,6 +9,7 @@ import { ASSETS, BY_TYPE, BEHAVIORS, CATEGORIES, MATERIALS } from "./assets.js";
 import { createWorld, buildObject, placeObject, boundsBox } from "./world.js";
 import { SKIES, TEMPLATES, newObj, fillBehavior, sanitize, listGames, loadGame, saveGame, deleteGame, makeGame, r2 } from "./game.js";
 import { startPlay } from "./play.js";
+import { openPublish } from "./publish.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -82,8 +83,9 @@ function changed(skipTree) {
   saveTimer = setTimeout(saveNow, 1200);
   if (!skipTree) drawTree();
 }
-function saveNow() {
+function saveNow(force) {
   clearTimeout(saveTimer);
+  if (force === true) dirty = true;
   if (!game || !dirty) return;
   const ok = saveGame(game);
   dirty = !ok;
@@ -414,6 +416,18 @@ document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => setTool(b.d
 $("btnSnap").onclick = () => { snapIndex = (snapIndex + 1) % SNAPS.length; applySnap(); };
 $("btnUndo").onclick = undo; $("btnRedo").onclick = redo; $("btnDup").onclick = duplicate; $("btnDel").onclick = remove;
 $("btnPlay").onclick = play; $("btnGames").onclick = () => openGames(false);
+$("btnPublish").onclick = () => {
+  if (!game) return;
+  saveNow();
+  openPublish({ game, $, saveNow, openModal, closeModal,
+    snapshot() { // the current view without the gizmo and the blue box
+      const vis = [selBox.visible, transform.getHelper().visible];
+      selBox.visible = false; transform.getHelper().visible = false;
+      world.resize(); renderer.render(scene, camera);
+      selBox.visible = vis[0]; transform.getHelper().visible = vis[1];
+      return canvas;
+    } });
+};
 
 const keys = new Set();
 const typing = () => { const a = document.activeElement; return a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT"); };

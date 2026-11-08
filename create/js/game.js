@@ -1,5 +1,6 @@
-// A GunnerVerse Studio GAME is plain JSON, saved in this browser (localStorage) until Phase 4 publishes it:
-//   {v: 1, id, name, created, updated, settings: {sky, gravity, walk, jump}, objects: [obj, ...]}
+// A GunnerVerse Studio GAME is plain JSON, saved in this browser (localStorage). Publish (editor.js) sends a copy to the
+// relay (publish.js) and remembers the published id in `pub`:
+//   {v: 1, id, name, created, updated, pub?, settings: {sky, gravity, walk, jump}, objects: [obj, ...]}
 //   obj = {id, type (assets.js), name, pos: [x, y, z] (bottom center), rot: [x, y, z] degrees, size: [x, y, z],
 //          color, mat, solid, visible, b: {k: behavior, ...settings}, text}
 // Storage: "gv_studio_list" = [{id, name, updated}] newest first, "gv_studio_game_<id>" = the game.
@@ -34,6 +35,8 @@ export function sanitize(g) {
   const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
   const out = { v: 1, id: String(g.id || uid()).slice(0, 20), name: String(g.name || "My Game").slice(0, 40), created: g.created || Date.now(), updated: g.updated || Date.now(),
     settings: { ...DEFAULT_SETTINGS }, objects: [] };
+  if (/^[a-z0-9]{8,16}$/.test(g.pub || "")) out.pub = g.pub; // (published: the game's id on the GunnerVerse home page)
+  if (g.desc) out.desc = String(g.desc).slice(0, 300);
   const s = g.settings || {};
   out.settings.sky = SKIES[s.sky] ? s.sky : "day";
   out.settings.gravity = num(s.gravity, 10, 200, 70); out.settings.walk = num(s.walk, 4, 60, 14); out.settings.jump = num(s.jump, 5, 80, 26);

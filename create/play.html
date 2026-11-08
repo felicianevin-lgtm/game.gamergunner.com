@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Play | GunnerVerse</title>
+  <meta name="theme-color" content="#070a0d">
+  <link rel="icon" type="image/png" href="../img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="studio.css?v=2">
+</head>
+<body class="playing player-page">
+  <main class="view" id="view"><canvas id="canvas" tabindex="0"></canvas></main>
+
+  <div class="hud hidden" id="hud">
+    <div class="hud-top">
+      <span class="hud-chip" id="hudCoins">🪙 0</span>
+      <span class="hud-chip" id="hudTime">⏱ 0:00</span>
+      <button class="hud-stop" id="btnStop" type="button">✕ Exit</button>
+    </div>
+    <div class="hud-msg" id="hudMsg"></div>
+    <div class="hud-help" id="hudHelp">W A S D move · Space jump · drag or arrows to look · E: car · Esc: exit</div>
+    <div class="bubbles" id="bubbles"></div>
+  </div>
+
+  <div class="loading" id="loading">
+    <img src="../img/favicon.png" alt="" width="72" height="72">
+    <h1 id="loadTitle">Loading game…</h1>
+    <p id="loadBy"></p>
+    <p class="err" id="loadErr"></p>
+    <button class="play hidden" id="btnStart" type="button">▶ Play</button>
+    <a class="back-link" id="backLink" href="../#/">← All games</a>
+  </div>
+
+  <script type="module" src="js/player.js?v=1"></script>
+</body>
+</html>
