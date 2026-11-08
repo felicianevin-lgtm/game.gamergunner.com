@@ -3,8 +3,19 @@ import * as THREE from "../vendor/three.module.js";
 import { BY_TYPE, gridMaterialFor, material } from "./assets.js";
 import { loadModel, modelCopy, pictureTexture, fileType } from "./files.js";
 
+// See-through parts (transp = 0..100 %): their own copies of the materials, faded.
+function seeThrough(root, transp) {
+  const k = 1 - Math.min(100, transp) / 100;
+  root.traverse((m) => {
+    if (!m.isMesh || !m.material || m.userData.faded) return;
+    m.userData.faded = true;
+    m.material = (Array.isArray(m.material) ? m.material : [m.material]).map((x) => { const c = x.clone(); c.transparent = true; c.opacity = (x.opacity ?? 1) * k; c.depthWrite = k > 0.6; return c; });
+    if (m.material.length === 1) m.material = m.material[0];
+    m.castShadow = k > 0.5;
+  });
+}
 // Imported models load in the background: a see-through box stands in until the model is ready (red if it's missing).
-function addModel(inner, o) {
+function addModel(inner, o, fade) {
   const ph = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x2f7df6, wireframe: true }));
   ph.position.y = 0.5;
   inner.add(ph);
@@ -12,6 +23,7 @@ function addModel(inner, o) {
   loadModel(o.file, fileType(o.file)).then((info) => {
     inner.remove(ph);
     const m = modelCopy(info, o.anim);
+    if (o.transp > 0) fade(m, o.transp);
     inner.add(m);
     inner.userData.copy = m;
   }).catch(() => ph.material.color.set(0xff3030));
@@ -114,8 +126,9 @@ export function buildObject(o) {
   inner.scale.set(o.size[0] / a.base[0], o.size[1] / a.base[1], o.size[2] / a.base[2]);
   const g = new THREE.Group();
   g.add(inner);
-  if (inner.userData.model) addModel(inner, o);
+  if (inner.userData.model) addModel(inner, o, seeThrough);
   if (inner.userData.picture) addPicture(inner, o);
+  if (o.transp > 0) seeThrough(inner, o.transp);
   if (o.b && o.b.k === "light") { // (a glowing part lights up what's around it)
     const l = new THREE.PointLight(o.color, Math.max(0, Number(o.b.power) || 0) * 6, Math.max(1, Number(o.b.range) || 30), 1);
     l.position.set(0, o.size[1] / 2, 0);

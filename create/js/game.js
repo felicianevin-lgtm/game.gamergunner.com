@@ -2,7 +2,7 @@
 // relay (publish.js) and remembers the published id in `pub`:
 //   {v: 1, id, name, created, updated, pub?, settings: {sky, gravity, walk, jump}, objects: [obj, ...]}
 //   obj = {id, type (assets.js), name, pos: [x, y, z] (bottom center), rot: [x, y, z] degrees, size: [x, y, z],
-//          color, mat, solid, visible, b: {k: behavior, ...settings}, text, file + anim (imported models / pictures)}
+//          color, mat, solid, visible, transp (see-through %), b: {k: behavior, ...settings}, text, file + anim (imported models / pictures)}
 //   gui = [item] (gui.js), files = {id: {name, type, sid?}} (imported files, files.js),
 //   scripts = [{id, name, on: the object or GUI id it's inside ("" = the whole game), code: JavaScript}] (scripts.js)
 // Storage: "gv_studio_list" = [{id, name, updated}] newest first, "gv_studio_game_<id>" = the game.
@@ -75,6 +75,7 @@ export function sanitize(g) {
         c.b[key] = kind === "number" ? num(v, -1000, 1000, dflt) : kind === "check" ? !!v : kind === "axis" ? (["x", "y", "z"].includes(v) ? v : dflt) : String(v == null ? dflt : v).slice(0, 80);
       }
     } else c.b = { k: "none" };
+    if (Number(o.transp) > 0) c.transp = Math.min(100, Math.round(Number(o.transp))); // (see-through %, 100 = invisible)
     if (/^[a-z0-9]{6,40}$/i.test(o.file || "")) c.file = o.file;
     if (typeof o.anim === "string" && o.anim) c.anim = o.anim.slice(0, 60);
     if (typeof o.text === "string" || BY_TYPE[o.type].text) c.text = String(o.text == null ? BY_TYPE[o.type].text || "" : o.text).slice(0, 120);

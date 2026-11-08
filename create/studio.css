@@ -321,3 +321,19 @@ body.playing .output { position: fixed; z-index: 30; max-width: 560px; height: 1
 .end-box { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); z-index: 7; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 14px;
   padding: 22px 28px; border-radius: 16px; background: rgba(7, 10, 13, .88); border: 2px solid #e8261c; text-align: center; }
 .end-box b { font: 400 clamp(24px, 4vw, 40px) var(--display); color: #ff8a7a; }
+
+/* ---------- see-through slider, published tag, ✨ Make a script ---------- */
+.see-row { display: flex; align-items: center; gap: 8px; }
+.see-row input { flex: 1; min-width: 0; accent-color: var(--sel); }
+.see-row span { width: 38px; text-align: right; color: var(--dim); font-size: 12px; }
+.pub-tag { color: var(--green-hi); font-weight: 700; }
+.se-bar .tb.se-make { border-color: #a64bf4; background: rgba(166, 75, 244, .22); }
+.se-maker { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(4, 6, 14, .7); }
+.se-mk-box { width: min(440px, 92%); max-height: 92%; overflow-y: auto; padding: 18px; border-radius: 14px; background: #0e1530; border: 1px solid #a64bf4; box-shadow: 0 20px 50px rgba(0, 0, 0, .6); }
+.se-mk-box h3 { margin: 0 0 4px; font: 400 20px var(--display); }
+.se-mk-box p { margin: 0 0 12px; color: var(--dim); font-size: 13px; }
+.se-mk-box label { display: block; margin-bottom: 10px; font-weight: 700; font-size: 13px; }
+.se-mk-box label > span { display: block; }
+.se-mk-box select, .se-mk-box input { display: block; width: 100%; height: 36px; margin-top: 4px; border-radius: 8px; border: 1px solid #1d2a4a; background: #0b1020; padding: 0 10px; font-weight: 400; }
+.se-mk-code { margin: 6px 0 12px; padding: 10px 12px; border-radius: 8px; background: #0a0e1c; color: #6fc3ff; font: 13px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+.se-mk-btns { display: flex; justify-content: flex-end; gap: 8px; }

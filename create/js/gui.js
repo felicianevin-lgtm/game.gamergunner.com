@@ -1,7 +1,7 @@
 // SCREEN GUI for GunnerVerse Studio games: things drawn on the screen (not in the 3D world), shown in the editor (drag
 // them anywhere) and live in Play. Stored in game.gui = [item]:
 //   {id, kind (GUI_KINDS), name, text, x, y (the item's middle, in % of the screen), w, h (% of the screen: panels and
-//    pictures), color, size: s / m / l (buttons + labels), visible (shown when the game starts), parent (a panel's id:
+//    pictures), color, size: s / m / l (buttons + labels), transp (see-through %), visible (shown when the game starts), parent (a panel's id:
 //    it moves, shows and hides with that panel), close (panels: a ✕ button), file (pictures: files.js id),
 //    action (buttons: BUTTON_ACTIONS), message, target (the GUI or part the action uses), code (devmenu)}
 // Older games used `pos` (one of 9 spots): sanitizeGui turns that into x / y.
@@ -62,6 +62,7 @@ export function sanitizeGui(list) {
       c.target = /^[a-z0-9]{1,20}$/i.test(g.target || "") ? g.target : "";
     }
     if (g.kind === "devmenu") c.code = String(g.code || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12) || "1234";
+    if (Number(g.transp) > 0) c.transp = Math.min(100, Math.round(Number(g.transp)));
     if (g.kind === "frame" || g.kind === "image") { c.w = num(g.w, 3, 100, 30); c.h = num(g.h, 3, 100, 30); }
     if (g.kind === "frame") c.close = g.close !== false;
     if (g.kind === "image") c.file = /^[a-z0-9]{6,40}$/i.test(g.file || "") ? g.file : "";
@@ -108,6 +109,7 @@ export function renderGui(layer, list, opts) {
       el.innerHTML = g.kind === "frame" ? (g.text ? '<div class="gui-title">' + esc(g.text) + "</div>" : "") + (g.close ? '<span class="gui-x" data-close="1">✕</span>' : "") : esc(g.text);
     }
     el.dataset.id = g.id;
+    if (g.transp > 0) el.style.opacity = String(Math.max(0, 1 - g.transp / 100) * (shown ? 1 : 0.4));
     if (opts.selected === g.id && opts.edit && (g.kind === "frame" || g.kind === "image")) el.insertAdjacentHTML("beforeend", '<span class="gui-handle" data-handle="1" title="Drag to resize"></span>');
     if (opts.onClick) el.addEventListener("click", (e) => { e.stopPropagation(); opts.onClick(g, el, e); });
     layer.appendChild(el);

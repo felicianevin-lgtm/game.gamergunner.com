@@ -531,8 +531,8 @@ export function startPlay(world, game, opts) {
   const scripts = (game.scripts || []).filter((x) => !x.on || known.has(x.on)); // (scripts inside deleted things don't run)
   if (scripts.length) {
     const things = ents.map((e) => ({ id: e.o.id, kind: "part", type: e.o.type, name: e.o.name, x: e.o.pos[0], y: e.o.pos[1], z: e.o.pos[2], ry: e.o.rot[1],
-      sx: e.o.size[0], sy: e.o.size[1], sz: e.o.size[2], color: e.o.color, visible: true, solid: e.o.solid, text: e.o.text || "" }))
-      .concat(gui.map((g) => ({ id: g.id, kind: "gui", type: g.kind, name: g.name, x: g.x, y: g.y, z: 0, ry: 0, sx: g.w || 0, sy: g.h || 0, sz: 0, color: g.color, visible: g.visible, solid: false, text: g.text })));
+      sx: e.o.size[0], sy: e.o.size[1], sz: e.o.size[2], color: e.o.color, visible: true, solid: e.o.solid, text: e.o.text || "", transp: e.o.transp || 0 }))
+      .concat(gui.map((g) => ({ id: g.id, kind: "gui", type: g.kind, name: g.name, x: g.x, y: g.y, z: 0, ry: 0, sx: g.w || 0, sy: g.h || 0, sz: 0, color: g.color, visible: g.visible, solid: false, text: g.text, transp: g.transp || 0 })));
     host = startScripts(scripts, things, { x: pos.x, y: pos.y, z: pos.z, coins, health: 100 }, {
       apply(c) { pending.push(...c.slice(0, 4000)); if (pending.length > 8000) pending = pending.slice(-8000); },
       fatal(text) { out("err", text); showMsg(text, 4); },
@@ -575,6 +575,7 @@ export function startPlay(world, game, opts) {
       }
       else if (k === "size" && e) { const s = [b, cc, d].map((v) => NUM(v, 0.1, 1024)); if (s.includes(null)) continue; e.o.size = s; rebuildEnt(e); }
       else if (k === "vis") { if (g || e) setOn(a, !!b); }
+      else if (k === "transp") { const v = NUM(b, 0, 100); if (v == null) continue; if (g) { g.transp = v; guiDirty = true; } else if (e) { e.o.transp = v; rebuildEnt(e); } }
       else if (k === "solid" && e) { e.o.solid = !!b; e.boxes = e.o.solid ? worldBoxes(e.o, e.g.position, e.g.quaternion) : []; }
       else if (k === "color" && /^#[0-9a-f]{6}$/i.test(b)) { if (g) { g.color = b; guiDirty = true; } else if (e) { e.o.color = b; rebuildEnt(e); } }
       else if (k === "text") { const t = filterText(b, g ? 60 : 120); if (g) { g.text = t; guiDirty = true; } else if (e) { e.o.text = t; if (e.k !== "npc") rebuildEnt(e); } }

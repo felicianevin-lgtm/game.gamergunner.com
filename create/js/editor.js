@@ -20,6 +20,7 @@ import { openPublish } from "./publish.js";
 import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI, newGui, renderGui } from "./gui.js";
 import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
+import { api, account } from "./net.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -295,6 +296,8 @@ function editScript(id) {
     where: t ? "inside " + t.name + " (me = " + t.name + ")" : "for the whole game",
     kind: !t ? "game" : guiItem(sc.on) ? "gui" : "part",
     errLine: lastErr.get(sc.name) || 0,
+    meName: t ? t.name : "",
+    things: () => game.objects.map((o) => ({ name: o.name, kind: "part", type: o.type })).concat((game.gui || []).map((g) => ({ name: g.name, kind: "gui", type: g.kind }))),
     onChange() { changed(); },
     onClose() { selScript = null; drawTree(); canvas.focus(); },
   });
@@ -513,6 +516,7 @@ function drawProps(numbersOnly) {
     '<div class="row"><span></span><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div></div>" +
     row("Material", '<select id="pMat">' + MATERIALS.map(([k, v]) => '<option value="' + k + '"' + (k === o.mat ? " selected" : "") + ">" + v + "</option>").join("") + "</select>") +
     row("Solid", '<input type="checkbox" id="pSolid"' + (o.solid ? " checked" : "") + ' title="Players bump into it">') +
+    row("See-through", seeRow("pTransp", o.transp)) +
     row("Visible", '<input type="checkbox" id="pVisible"' + (o.visible ? " checked" : "") + ' title="Shown in Play (invisible walls are handy!)">');
   if (a.text || o.b.k === "npc") html += row("Text", '<textarea id="pText" maxlength="120">' + esc(o.text || "") + "</textarea>");
   html += '<div class="group-title">Behavior</div>' +
@@ -560,6 +564,7 @@ function drawProps(numbersOnly) {
   $("pMat").onchange = (e) => edit(() => { o.mat = e.target.value; }, true);
   $("pSolid").onchange = (e) => { pushUndo(); o.solid = e.target.checked; changed(); };
   $("pVisible").onchange = (e) => { pushUndo(); o.visible = e.target.checked; changed(); };
+  wireSee("pTransp", (v) => edit(() => { if (v > 0) o.transp = v; else delete o.transp; }, true));
   if ($("pText")) $("pText").onchange = (e) => edit(() => { o.text = e.target.value.slice(0, 120); }, true);
   $("pBeh").onchange = (e) => { pushUndo(); o.b = { k: e.target.value }; fillBehavior(o); if (o.b.k === "npc" && o.text == null) o.text = "Hi!"; rebuild(o); changed(); drawProps(); };
   box.querySelectorAll("[data-b]").forEach((inp) => {
@@ -571,6 +576,13 @@ function drawProps(numbersOnly) {
       if (o.b.k === "light") rebuild(o);
     };
   });
+}
+// The See-through slider (0 = solid color, 100 = invisible).
+function seeRow(id, v) { return '<div class="see-row"><input type="range" id="' + id + '" min="0" max="100" step="5" value="' + (v || 0) + '"><span id="' + id + 'N">' + (v || 0) + "%</span></div>"; }
+function wireSee(id, set) {
+  const r = $(id);
+  r.oninput = () => { $(id + "N").textContent = r.value + "%"; };
+  r.onchange = () => set(+r.value);
 }
 // A <select> of things to point at (Switch targets, button targets). what: any / gui / part / camera
 function targetSelect(attr, v, self, what) {
@@ -627,6 +639,7 @@ function drawGuiProps(box, g) {
   else html += row("Color", '<input type="color" id="gColor" value="' + g.color + '">') +
     '<div class="row"><span></span><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div></div>";
   if (!sized) html += row("Size", sel("gSize", GUI_SIZES, g.size));
+  html += row("See-through", seeRow("gTransp", g.transp));
   if (g.kind === "frame") html += row("✕ close button", '<input type="checkbox" id="gClose"' + (g.close ? " checked" : "") + ">");
   if (g.kind === "button") {
     html += '<div class="group-title">When clicked</div>' + row("Does", sel("gAction", BUTTON_ACTIONS, g.action));
@@ -656,6 +669,7 @@ function drawGuiProps(box, g) {
   }
   if ($("gFile")) wirePicture($("gFile"), g.file, (id) => set(() => { g.file = id; }));
   if ($("gSize")) $("gSize").onchange = (e) => set(() => { g.size = e.target.value; });
+  wireSee("gTransp", (v) => set(() => { if (v > 0) g.transp = v; else delete g.transp; }));
   if ($("gClose")) $("gClose").onchange = (e) => set(() => { g.close = e.target.checked; });
   if ($("gAction")) $("gAction").onchange = (e) => set(() => { g.action = e.target.value; }, true);
   if ($("gTarget")) $("gTarget").onchange = (e) => set(() => { g.target = e.target.value; });
@@ -770,14 +784,28 @@ function openGames(first) {
   openModal('<h2>' + (first ? "Welcome to GunnerVerse Studio!" : "My games") + "</h2>" +
     "<p>" + (first ? "Pick a starter to build your first game. You can change everything." : "Your games are saved in this browser.") + "</p>" +
     '<div class="templates">' + Object.entries(TEMPLATES).map(([k, t]) => '<div class="template" data-t="' + k + '" role="button" tabindex="0"><span class="ico">' + t.icon + "</span><b>New " + esc(t.label) + "</b><small>" + esc(t.desc) + "</small></div>").join("") + "</div>" +
-    (list.length ? '<div class="game-list">' + list.map((g) => '<div class="game-item' + (game && g.id === game.id ? " on" : "") + '"><b>' + esc(g.name) + "</b><small>" + new Date(g.updated).toLocaleDateString() + "</small>" +
+    (list.length ? '<div class="game-list">' + list.map((g) => '<div class="game-item' + (game && g.id === game.id ? " on" : "") + '"><b>' + esc(g.name) + "</b><small>" + new Date(g.updated).toLocaleDateString() +
+      ((loadGame(g.id) || {}).pub ? ' · <span class="pub-tag">🌐 On GunnerVerse</span>' : "") + "</small>" +
       '<button class="btn go" data-open="' + g.id + '">Open</button><button class="btn danger" data-del="' + g.id + '">Delete</button></div>').join("") + "</div>" : "") +
     (game ? '<div class="modal-actions"><button class="btn" id="mClose">Close</button></div>' : ""));
   $("modalBox").querySelectorAll(".template").forEach((t) => (t.onclick = t.onkeydown = (e) => { if (e.type === "keydown" && e.key !== "Enter") return; openGame(makeGame(t.dataset.t)); dirty = true; saveNow(); closeModal(); }));
   $("modalBox").querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { const g = loadGame(b.dataset.open); if (g) { openGame(g); closeModal(); } }));
-  $("modalBox").querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => {
+  // Delete = gone for good: from this computer AND off GunnerVerse if it was published.
+  $("modalBox").querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
     const item = listGames().find((x) => x.id === b.dataset.del);
-    if (!item || !confirm('Delete "' + item.name + '"? This can\'t be undone.')) return;
+    if (!item) return;
+    const pub = (loadGame(item.id) || {}).pub;
+    if (!confirm('Delete "' + item.name + '" for good?' + (pub ? " It also comes off GunnerVerse, and its likes and plays are gone." : "") + " This can't be undone.")) return;
+    if (pub) {
+      const me = account();
+      b.disabled = true; b.textContent = "Deleting…";
+      const r = me ? await api("/hub/unpublish", { t: me.t, g: pub }).catch(() => null) : null;
+      if (!r || (!r.ok && r.e !== "nogame")) {
+        b.disabled = false; b.textContent = "Delete";
+        if (!confirm(me ? (r && r.e === "notyours" ? "This game was published from a different account, so it can't come off GunnerVerse from here." : "Couldn't reach GunnerVerse to take it down.") + " Delete it from this computer anyway? (It would stay online.)"
+          : "You're not signed in, so it can't come off GunnerVerse. Delete it from this computer anyway? (It would stay online.)")) return;
+      }
+    }
     deleteGame(item.id);
     if (game && game.id === item.id) game = null;
     openGames(!game);
