@@ -10,6 +10,7 @@ import * as THREE from "../vendor/three.module.js";
 export const MON_KEYS = { // recipe: key -> [kind, ...]  (game.js + the relay keep only these)
   body: ["pick", "round", "tall", "long", "box", "blob", "spider", "ghost"], color: ["color"], color2: ["color"], eyeColor: ["color"],
   pattern: ["pick", "none", "spots", "stripes", "scales", "patches"],
+  hat: ["pick", "none", "tophat", "crown", "cap", "party", "wizard", "witch", "cowboy", "helmet", "bow", "halo", "chef", "headphones"],
   eyes: ["num", 0, 9], legs: ["num", 0, 8], arms: ["num", 0, 6], heads: ["num", 1, 3], horns: ["num", 0, 6], tentacles: ["num", 0, 8],
   wings: ["bool"], tail: ["bool"], spikes: ["bool"], teeth: ["bool"], fangs: ["bool"], claws: ["bool"], antennae: ["bool"], ears: ["bool"], longEars: ["bool"],
   fins: ["bool"], snout: ["bool"], stinger: ["bool"], pincers: ["bool"], bigEye: ["bool"], fur: ["bool"], cute: ["bool"], angry: ["bool"],
@@ -161,6 +162,9 @@ export function describe(text, reroll) {
   has(/\b(float|floating|flying|flies|hover|hovering|levitating)\b/, () => { m.float = true; }, "floating");
   has(/\b(scary|creepy|evil|angry|mean|terrifying|horror|spooky|nightmare|haunted|deadly|killer|fierce|savage|vicious)\b/, () => { m.teeth = true; m.angry = true; m.glow = true; if (m.eyeColor === "#111111") m.eyeColor = "#ff2020"; }, "scary");
   has(/\b(cute|friendly|happy|baby|adorable|sweet|kawaii|nice|silly|goofy)\b/, () => { m.teeth = false; m.fangs = false; m.angry = false; m.spikes = false; m.cute = true; m.height = Math.min(m.height, 3); }, "cute");
+  const HATS = { "top hat": "tophat", tophat: "tophat", crown: "crown", tiara: "crown", cap: "cap", "baseball cap": "cap", "party hat": "party", wizard: "wizard", witch: "witch",
+    "witch hat": "witch", cowboy: "cowboy", helmet: "helmet", bow: "bow", halo: "halo", chef: "chef", headphones: "headphones" };
+  for (const [w, h] of Object.entries(HATS)) if (new RegExp("\\b" + w + "\\b").test(raw)) { m.hat = h; got.push(w); w.split(" ").forEach((x) => used.add(x)); used.add("hat"); }
   has(/\bno legs\b/, () => { m.legs = 0; }, "no legs"); has(/\bno eyes\b/, () => { m.eyes = 0; }, "no eyes"); has(/\bno arms\b/, () => { m.arms = 0; }, "no arms");
   if (m.glow && m.eyeColor === "#111111") m.eyeColor = "#ff2020";
   if (!m.legs && !m.tentacles && !["blob", "long", "ghost"].includes(m.body)) m.float = true;
@@ -354,6 +358,7 @@ export function buildMonster(mon) {
       const x = m.horns === 1 ? 0 : (i / (m.horns - 1) - 0.5) * face * 1.3, out = Math.sign(x), b0 = [x, topY - face * 0.12, hz];
       chain(h, [b0, [x + out * face * 0.35, b0[1] + face * 0.45, hz + face * 0.1], [x + out * face * 0.5, b0[1] + face * 0.75, hz + face * 0.35]], face * 0.16, face * 0.04, horn, 12, horn);
     }
+    if (m.hat !== "none" && h === heads[0].h) addHat(h, m.hat, face, topY, hz);
     if (m.antennae) for (const s of [-1, 1]) { const tip = chain(h, [[s * face * 0.25, topY - 0.05, hz], [s * face * 0.5, topY + 0.5, hz - 0.15], [s * face * 0.85, topY + 0.75, hz - 0.35]], 0.035, 0.03, dark, 14).getPoint(1); ball(h, 0.1, eyeM, ...tip.toArray()); }
     if (m.ears || m.longEars) for (const s of [-1, 1]) {
       const ey = topY - face * 0.15, len = m.longEars ? face * 1.4 : face * 0.55;
@@ -361,6 +366,24 @@ export function buildMonster(mon) {
       else if (m.longEars) { const e = add(h, new THREE.CapsuleGeometry(face * 0.17, len, 6, 14), skin, s * face * 0.32, ey + len * 0.55, hz); e.rotation.z = -s * 0.18; e.scale.z = 0.45; ball(h, face * 0.1, accent, s * face * 0.33, ey + len * 0.55, hz - face * 0.07, 1, len / (face * 0.25), 0.3).rotation.z = -s * 0.18; }
       else { const e = add(h, new THREE.ConeGeometry(face * 0.24, len, 12), skin, s * face * 0.6, ey + len * 0.4, hz); e.rotation.z = -s * 0.35; e.scale.z = 0.45; }
     }
+  }
+  // ---- hats (on the first head)
+  function addHat(h, hat, f, y, z) {
+    const hm = (c, k) => new THREE.MeshStandardMaterial({ color: c, roughness: k == null ? 0.6 : k, metalness: c === "#d4af37" ? 0.7 : 0 });
+    const black = hm("#1a1a1f"), band = hm(m.color2);
+    const grp = new THREE.Group(); grp.position.set(0, y - f * 0.08, z * 0.5); h.add(grp);
+    const cyl = (rt, rb, ht, mat, yy) => add(grp, new THREE.CylinderGeometry(rt * f, rb * f, ht * f, 28), mat, 0, yy * f, 0);
+    if (hat === "tophat") { cyl(1.0, 1.0, 0.06, black, 0.03); cyl(0.62, 0.62, 1.1, black, 0.6); cyl(0.63, 0.63, 0.16, band, 0.15); }
+    else if (hat === "crown") { const gold = hm("#d4af37", 0.3); cyl(0.6, 0.6, 0.35, gold, 0.17); for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; add(grp, new THREE.ConeGeometry(0.1 * f, 0.35 * f, 6), gold, Math.cos(a) * 0.55 * f, 0.5 * f, Math.sin(a) * 0.55 * f); } ball(grp, 0.08 * f, hm("#e8261c", 0.2), 0, 0.18 * f, -0.6 * f); }
+    else if (hat === "cap") { const c = hm(m.color2); ball(grp, 0.62 * f, c, 0, 0.05 * f, 0, 1, 0.55, 1); add(grp, new THREE.CylinderGeometry(0.42 * f, 0.42 * f, 0.04 * f, 24, 1, false, Math.PI * 0.5, Math.PI), c, 0, 0.05 * f, -0.45 * f).scale.z = 1.4; }
+    else if (hat === "party") { add(grp, new THREE.ConeGeometry(0.4 * f, 1.0 * f, 24), hm(m.color2), 0, 0.5 * f, 0); ball(grp, 0.1 * f, hm("#ffffff"), 0, 1.02 * f, 0); }
+    else if (hat === "wizard" || hat === "witch") { const c = hm(hat === "witch" ? "#1a1a1f" : "#2f4fd0"); cyl(1.0, 1.0, 0.05, c, 0.02); const cone = add(grp, new THREE.ConeGeometry(0.55 * f, 1.5 * f, 24), c, 0, 0.75 * f, 0.1 * f); cone.rotation.x = 0.25; if (hat === "wizard") ball(grp, 0.08 * f, hm("#ffc531", 0.2), 0.2 * f, 0.6 * f, -0.4 * f); else cyl(0.56, 0.56, 0.12, hm("#a64bf4"), 0.12); }
+    else if (hat === "cowboy") { const c = hm("#8b5a2b"); const brim = cyl(1.25, 1.25, 0.05, c, 0.03); brim.scale.z = 0.8; cyl(0.55, 0.62, 0.65, c, 0.36); cyl(0.63, 0.63, 0.1, black, 0.1); }
+    else if (hat === "helmet") ball(grp, 0.78 * f, hm(m.metal ? "#c9ced6" : m.color2, 0.3), 0, -0.05 * f, 0, 1, 0.75, 1);
+    else if (hat === "bow") { const c = hm("#ff4fa3"); ball(grp, 0.12 * f, c, 0.3 * f, 0.08 * f, 0); for (const sx of [-1, 1]) ball(grp, 0.22 * f, c, 0.3 * f + sx * 0.25 * f, 0.08 * f, 0, 1.2, 0.8, 0.4); }
+    else if (hat === "halo") { const t = add(grp, new THREE.TorusGeometry(0.5 * f, 0.07 * f, 10, 32), new THREE.MeshStandardMaterial({ color: "#ffe680", emissive: new THREE.Color("#ffd040"), emissiveIntensity: 1 }), 0, 0.45 * f, 0); t.rotation.x = Math.PI / 2; }
+    else if (hat === "chef") { const w2 = hm("#ffffff"); cyl(0.5, 0.5, 0.45, w2, 0.22); ball(grp, 0.62 * f, w2, 0, 0.65 * f, 0, 1, 0.75, 1); }
+    else if (hat === "headphones") { const c = hm(m.color2); const t = add(grp, new THREE.TorusGeometry(0.85 * f, 0.07 * f, 8, 24, Math.PI), c, 0, -0.35 * f, 0); for (const sx of [-1, 1]) { const e = add(grp, new THREE.CylinderGeometry(0.25 * f, 0.25 * f, 0.18 * f, 20), black, sx * 0.85 * f, -0.4 * f, 0); e.rotation.z = Math.PI / 2; } }
   }
   // ---- legs: tapered, with a knee, a foot and (maybe) claws
   const limbM = m.bones ? white : skin;

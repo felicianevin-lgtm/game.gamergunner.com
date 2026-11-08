@@ -357,3 +357,9 @@ body.playing .output { position: fixed; z-index: 30; max-width: 560px; height: 1
 .mon-words i { display: inline-block; padding: 0 8px; margin: 0 2px; border-radius: 99px; background: rgba(255, 255, 255, .08); color: var(--dim); font-style: normal; }
 .mon-check { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-weight: 600; cursor: pointer; }
 @media (max-width: 760px) { .mon-grid { grid-template-columns: 1fr; } }
+
+.mon-ai { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+.mon-ai-btn { border-color: #13c4c4; background: linear-gradient(90deg, rgba(19, 196, 196, .3), rgba(166, 75, 244, .3)); font-weight: 800; }
+.mon-ai-btn:disabled { opacity: .5; cursor: default; }
+#monAILeft { font-size: 12px; color: var(--dim); }
+.mon-ai-note { display: block; color: #cfe3ff; font-size: 13px; line-height: 1.45; }

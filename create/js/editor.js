@@ -21,7 +21,7 @@ import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI,
 import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
 import { api, account } from "./net.js";
-import { describe, buildMonster, monsterSize, SURPRISE } from "./monster.js";
+import { describe, buildMonster, monsterSize, sanitizeMonster, SURPRISE } from "./monster.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -751,12 +751,15 @@ function addGui(kind) {
 
 // ---------------------------------------------------------------- 👾 Make a Monster (monster.js)
 // Describe it, see it spin, press Make it! (o = a monster already in the game: change it instead)
+// The preview follows the words it knows as you type (free). 🤖 Make it with AI asks Claude on the relay
+// (relay monster-ai.js: signed-in players, 3 a day) to understand ANY description; its recipe then stays until you type again.
 function openMonsterMaker(o) {
   if (!game) return;
-  let reroll = 0, out = null;
+  let reroll = 0, out = null, ai = null; // ai = {out, note, left}
   openModal('<h2>👾 Make a Monster</h2><p>Describe your monster and watch it appear! Try colors, sizes, kinds (spider, dragon, ghost, robot, slime, alien, skeleton…) and parts (horns, wings, tail, teeth, tentacles, "three eyes", "six legs").</p>' +
     '<div class="mon-grid"><div><label class="field"><span>My monster is…</span><textarea id="monText" rows="4" maxlength="200" placeholder="a giant purple spider with glowing red eyes and horns"></textarea></label>' +
     '<div class="mon-words" id="monWords"></div>' +
+    '<div class="mon-ai"><button class="btn mon-ai-btn" type="button" id="monAI">🤖 Make it with AI</button><span id="monAILeft">Understands anything you type</span></div>' +
     '<div class="thumb-btns"><button class="btn" type="button" id="monSurprise">🎲 Surprise me</button><button class="btn" type="button" id="monReroll" title="Same words, a different look for the parts you didn\'t say">🔀 New look</button></div>' +
     (o ? "" : '<label class="mon-check"><input type="checkbox" id="monChase"> It chases the player (adds a script)</label>') +
     '</div><div class="mon-stage"><canvas id="monCanvas"></canvas></div></div>' +
@@ -769,13 +772,14 @@ function openMonsterMaker(o) {
   let model = null, alive = true, yaw = 0.6;
   function show() {
     const text = $("monText").value;
-    out = describe(text || "monster", reroll);
+    out = ai ? ai.out : describe(text || "monster", reroll);
     if (model) sc.remove(model);
     model = buildMonster(out.mon);
     const box = new THREE.Box3().setFromObject(model), d = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
     const holder = new THREE.Group(); model.position.sub(c); holder.add(model); model = holder; sc.add(model);
     const R = Math.max(d.x, d.y, d.z);
     cam.position.set(0, R * 0.35, -R * 1.9); cam.lookAt(0, 0, 0);
+    if (ai) { $("monWords").innerHTML = '<span class="mon-ai-note">🤖 ' + esc(ai.note || "Here's your monster!") + "</span>"; return; }
     $("monWords").innerHTML = (out.words.length ? "I understood: " + out.words.map((w) => "<b>" + esc(w) + "</b>").join(" ") : 'Type some words, like "big red dragon"!') +
       (out.unknown.length ? "<br>I don't know these words yet: " + out.unknown.map((w) => "<i>" + esc(w) + "</i>").join(" ") : "");
   }
@@ -789,7 +793,30 @@ function openMonsterMaker(o) {
   }
   let t = 0;
   $("monText").value = o ? o.text || "" : "";
-  $("monText").oninput = () => { clearTimeout(t); t = setTimeout(show, 150); };
+  $("monText").oninput = () => { ai = null; clearTimeout(t); t = setTimeout(show, 150); };
+  const me = account();
+  const left = (n) => { $("monAILeft").textContent = n > 0 ? n + " AI monster" + (n === 1 ? "" : "s") + " left today" : "No AI monsters left today (come back tomorrow!)"; $("monAI").disabled = n <= 0; };
+  if (!me) $("monAILeft").textContent = "Sign in on the home page to use the AI (3 a day)";
+  else api("/hub/monster-left", { t: me.t }).then((r) => { if (r.ok) left(r.left); }).catch(() => {});
+  $("monAI").onclick = async () => {
+    if (!me) { $("monAILeft").textContent = "Sign in on the home page first, then you get 3 AI monsters a day!"; return; }
+    const text = $("monText").value.trim();
+    if (text.length < 3) { $("monAILeft").textContent = "Type what your monster looks like first!"; $("monText").focus(); return; }
+    const b = $("monAI"); b.disabled = true; b.textContent = "🤖 Thinking…";
+    const r = await api("/hub/monster", { t: me.t, text }).catch(() => ({ ok: false, e: "net" }));
+    b.textContent = "🤖 Make it with AI"; b.disabled = false;
+    if (!r.ok) {
+      $("monAILeft").textContent = { signin: "Sign in on the home page first.", banned: "This account can't use the AI.", words: "Let's keep it friendly! Try other words.",
+        limit: "No AI monsters left today (come back tomorrow!)", busy: "The AI is super busy right now. Try again later!", off: "The AI isn't turned on yet.",
+        refused: "The AI couldn't make that one. Try describing it differently!", short: "Type a little more about your monster!", net: "Couldn't reach GunnerVerse. Check your internet." }[r.e] || "The AI couldn't make it. Try again!";
+      if (r.e === "limit") left(0);
+      return;
+    }
+    const mon = sanitizeMonster(r.mon);
+    ai = { out: { mon, words: [], unknown: [], kind: String(r.mon.name || "Monster").slice(0, 30) }, note: r.mon.understood };
+    left(r.left);
+    show();
+  };
   $("monText").addEventListener("keydown", (e) => e.stopPropagation());
   $("monSurprise").onclick = () => { $("monText").value = SURPRISE[Math.floor(Math.random() * SURPRISE.length)]; reroll = 0; show(); };
   $("monReroll").onclick = () => { reroll++; show(); };
@@ -797,11 +824,11 @@ function openMonsterMaker(o) {
   $("monGo").onclick = () => {
     show();
     const desc = $("monText").value.trim().slice(0, 200) || "A monster";
-    const name = out.kind || "monster"; // (named after the creature it understood)
+    const name = out.kind || "monster"; // (named after the creature it understood, or the AI's name for it)
     const chase = $("monChase") && $("monChase").checked;
     alive = false; closeModal();
     if (o) { pushUndo(); o.mon = out.mon; o.text = desc; o.size = monsterSize(out.mon); rebuild(o); changed(); drawProps(); return; }
-    const n = addAsset("monster", null, { mon: out.mon, text: desc, size: monsterSize(out.mon), name: name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() });
+    const n = addAsset("monster", null, { mon: out.mon, text: desc, size: monsterSize(out.mon), name: ai ? name : name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() });
     if (n && chase && game.scripts.length < MAX_SCRIPTS) {
       game.scripts.push({ id: uid(), name: "Chase", on: n.id, code: "// " + n.name + " chases the player!\nme.follow(player, 6)   // 6 = how fast\n\nme.onTouch(function () {\n  sound(\"scream\")\n  player.damage(25)\n})\n" });
       changed(); drawTree(); drawProps();
