@@ -78,6 +78,7 @@ function RUNTIME(send) {
     const m = st.match(/<anonymous>:(\d+):\d+/) || st.match(/Function:(\d+):\d+/);
     let msg = String((e && e.message) || e).slice(0, 300);
     if (/Cannot read propert(y|ies) of (null|undefined)/.test(msg)) msg += ". (Something you used isn't there: check the names you typed.)";
+    else if (/\b(document|window|localStorage|THREE|require|alert|prompt)\b is not defined/.test(msg)) msg += ". (That's code for a web page, not GunnerVerse. Use me, find(\"Name\"), say(...) and the other commands. 🤖 Ask an AI explains them to the AI.)";
     cmd("err", s.name, m ? Math.max(1, +m[1] - 2) : 0, n === 6 ? msg + " (stopped showing this error)" : msg, s.id || "");
   }
   function run(fn, sc, ...args) {

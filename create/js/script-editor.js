@@ -1,7 +1,9 @@
 // The SCRIPT EDITOR in GunnerVerse Studio: opens over the 3D view when you click a script in the Explorer (or ＋ Add
 // Script). Line numbers, colored code, Tab = 2 spaces, Enter keeps the indent, a typo check while you type, 📚 Examples
 // to start from, a list of every command (click one to put it in your script), and ✨ Make a script: pick "when" and
-// "do what" from lists (your game's own parts and GUI) and it writes the code for you. See scripts.js for what runs.
+// "do what" from lists (your game's own parts and GUI) and it writes the code for you. 🤖 Ask an AI copies a full guide
+// (every command, the rules, the names in your game) to paste into an AI chat like Gemini or ChatGPT; pasting the AI's
+// answer back here drops the ``` marks and extra talk around the code. See scripts.js for what runs.
 import { HELP, EXAMPLES, checkTypos } from "./scripts.js";
 
 const $ = (id) => document.getElementById(id);
@@ -38,7 +40,7 @@ function build() {
     '<div class="script-ed hidden" id="scriptEd" role="dialog" aria-label="Script editor">' +
     '<div class="se-bar"><span class="se-ico">📜</span><input id="seName" maxlength="40" aria-label="Script name" spellcheck="false"><span class="se-on" id="seOn"></span>' +
     '<div class="se-drop"><button class="tb" type="button" id="seEx">📚 <span>Examples ▾</span></button><div class="se-menu hidden" id="seExMenu"></div></div>' +
-    '<button class="tb se-make" type="button" id="seMake">✨ <span>Make a script</span></button><button class="tb" type="button" id="seHelpBtn">❓ <span>Commands</span></button><button class="tb" type="button" id="seClose">✕ <span>Close</span></button></div>' +
+    '<button class="tb se-make" type="button" id="seMake">✨ <span>Make a script</span></button><button class="tb se-ai" type="button" id="seAi">🤖 <span>Ask an AI</span></button><button class="tb" type="button" id="seHelpBtn">❓ <span>Commands</span></button><button class="tb" type="button" id="seClose">✕ <span>Close</span></button></div>' +
     '<div class="se-body"><div class="se-code"><div class="se-gutter" id="seGut"></div><div class="se-wrap"><pre class="se-hl" id="seHl" aria-hidden="true"></pre>' +
     '<textarea id="seTa" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="Script code"></textarea></div></div>' +
     '<aside class="se-help" id="seHelp"></aside></div>' +
@@ -65,6 +67,15 @@ function build() {
   $("seClose").onclick = closeScript;
   $("seHelpBtn").onclick = () => $("scriptEd").classList.toggle("no-help");
   $("seMake").onclick = openMaker;
+  $("seAi").onclick = openAi;
+  ta.addEventListener("paste", (e) => { // (an AI's answer: keep just the code)
+    const text = e.clipboardData && e.clipboardData.getData("text/plain");
+    const code = text && codeFromAnswer(text);
+    if (code == null) return;
+    e.preventDefault();
+    insert(code);
+    $("seStatus").className = "se-status good"; $("seStatus").textContent = "✓ Pasted just the code (the AI's ``` marks and extra words were left out).";
+  });
   $("seEx").onclick = (e) => { e.stopPropagation(); $("seExMenu").classList.toggle("hidden"); };
   document.addEventListener("click", (e) => { if (built && !$("seExMenu").contains(e.target)) $("seExMenu").classList.add("hidden"); });
 }
@@ -126,6 +137,73 @@ function save() {
   if (cur.onChange) cur.onChange();
 }
 export function flushScript() { if (cur) save(); }
+
+// ---------------------------------------------------------------- 🤖 Ask an AI
+// An AI's answer usually has words around ```javascript ... ``` blocks. Returns the code inside (all blocks), or null
+// when there are no ``` marks (plain code: paste it as it is).
+export function codeFromAnswer(text) {
+  const blocks = [...text.matchAll(/```[a-zA-Z]*[ \t]*\r?\n([\s\S]*?)```/g)].map((m) => m[1].replace(/\s+$/, ""));
+  return blocks.length ? blocks.join("\n\n") + "\n" : null;
+}
+// The guide for the AI: what GunnerVerse scripts are, every command, the rules, and this game's names.
+export function aiGuide(want, info) {
+  const lines = [];
+  lines.push("You are helping a kid write a script for a game made in GunnerVerse Studio (a 3D game maker in the web browser, a bit like Roblox Studio but with JavaScript).");
+  lines.push("Please write ONE JavaScript script that does this:", "", ">>> " + (want.trim() || "(describe what the script should do here)"), "");
+  lines.push("RULES (very important):",
+    "- This is NOT a web page. There is no document, window, HTML, canvas, localStorage, fetch, import, require, alert or THREE. Only use the commands listed below.",
+    "- The script runs once when the game starts. Use me.onClick / me.onTouch / onKey / after / every / onUpdate to make things happen later.",
+    "- Get parts and GUI by their exact name with find(\"Name\") (names are case-sensitive; use the names in the list below).",
+    "- Positions are studs: x = left/right, y = up, z = forward/back. A part's x, y, z is the middle of its BOTTOM. The ground is usually at y = 0.",
+    "- For GUI things (buttons, labels, panels, pictures) x and y are percent of the screen (0 to 100), measured to the middle.",
+    "- Angles are degrees. Things face toward -z.",
+    "- Keep it simple and add short comments a kid can understand. Use function () { } (not arrow functions) so it's easy to read.",
+    "- Answer with the code in ONE ```javascript block.", "");
+  lines.push("THIS SCRIPT IS " + (info.kind === "game" ? "a game script: there is no `me` (me is null). Use find(\"Name\")." : "inside \"" + info.meName + "\" (a " + (info.kind === "gui" ? "GUI thing" : "part") + "), so `me` means \"" + info.meName + "\"."), "");
+  lines.push("COMMANDS YOU CAN USE:");
+  for (const [group, items] of HELP) {
+    lines.push("", "## " + group);
+    for (const [code, desc] of items) lines.push("- " + code.replace(/\n\s*\n/g, " ... ").replace(/\n/g, " ") + "   // " + desc);
+  }
+  lines.push("", "Also: me.name, me.visible, me.text, me.color, me.rotation, me.size, me.resize(x, y, z), me.onTouchEnd(fn), player.rotation, findAll(\"Name\"), all(), wait(seconds) inside an async function, console.log(...) (= print).");
+  lines.push("Thing methods work on anything from find(): find(\"Door\").hide(), find(\"Shop\").toggle(), find(\"Monster\").follow(player, 6).");
+  const things = info.things || [];
+  if (things.length) {
+    lines.push("", "THE THINGS IN THIS GAME (name - what it is):");
+    for (const t of things.slice(0, 150)) lines.push("- \"" + t.name + "\" - " + (t.kind === "gui" ? "GUI " + ({ frame: "panel", image: "picture", devmenu: "developer menu button" }[t.type] || t.type) : "part (" + t.type + ")"));
+  }
+  if (info.code && info.code.trim()) lines.push("", "THE SCRIPT SO FAR (change or add to it):", "```javascript", info.code.trim(), "```");
+  lines.push("", "EXAMPLE of a correct GunnerVerse script:", "```javascript", "// When this button is clicked, open or close the panel named \"Shop\"", "me.onClick(function () {", "  find(\"Shop\").toggle()", "  sound(\"click\")", "})", "```");
+  return lines.join("\n");
+}
+function openAi() {
+  if (!cur) return;
+  const box = document.createElement("div");
+  box.className = "se-maker";
+  box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Ask an AI"><h3>🤖 Ask an AI</h3>' +
+    '<p>AIs like Gemini or ChatGPT don\'t know GunnerVerse yet. This copies a guide that teaches the AI every GunnerVerse command and the names of the things in your game.</p>' +
+    '<label>What should the script do?<textarea id="aiWant" rows="3" maxlength="600" placeholder="Example: when I click this button, open the panel called Shop and play a sound"></textarea></label>' +
+    '<ol class="se-ai-steps"><li>Type what you want above, then press <b>📋 Copy for AI</b>.</li><li>Paste it into the AI chat (Ctrl+V) and send it.</li>' +
+    '<li>Copy the AI\'s answer, close this box, click in your script and paste (Ctrl+V). The code gets picked out for you.</li><li>Press ▶ Play to try it. If the Output box shows an error, copy the error to the AI and ask it to fix it.</li></ol>' +
+    '<details><summary>See the guide</summary><textarea id="aiText" rows="10" readonly></textarea></details>' +
+    '<p class="se-ai-msg" id="aiMsg"></p>' +
+    '<div class="se-mk-btns"><button class="tb" type="button" id="aiNo">Close</button><button class="tb se-make" type="button" id="aiGo">📋 Copy for AI</button></div></div>';
+  $("scriptEd").appendChild(box);
+  const q = (id) => box.querySelector("#" + id);
+  const make = () => aiGuide(q("aiWant").value, { kind: cur.kind, meName: cur.meName, things: cur.things ? cur.things() : [], code: $("seTa").value.replace(/^\/\/ 📜.*\n?/gm, "") });
+  const refresh = () => { q("aiText").value = make(); };
+  q("aiWant").oninput = refresh; refresh();
+  box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") box.remove(); });
+  q("aiNo").onclick = () => { box.remove(); $("seTa").focus(); };
+  q("aiGo").onclick = async () => {
+    refresh();
+    let ok = false;
+    try { await navigator.clipboard.writeText(q("aiText").value); ok = true; } catch {}
+    if (!ok) { box.querySelector("details").open = true; q("aiText").select(); ok = document.execCommand("copy"); }
+    q("aiMsg").textContent = ok ? "✓ Copied! Now paste it into the AI chat." : "Select all the guide text above and copy it (Ctrl+C).";
+  };
+  q("aiWant").focus();
+}
 
 // ---------------------------------------------------------------- ✨ Make a script (writes the code for you)
 const WHEN = {
