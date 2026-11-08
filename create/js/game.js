@@ -8,6 +8,7 @@
 // Storage: "gv_studio_list" = [{id, name, updated}] newest first, "gv_studio_game_<id>" = the game.
 import { BY_TYPE, BEHAVIORS } from "./assets.js";
 import { sanitizeGui } from "./gui.js";
+import { sanitizeMonster } from "./monster.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space" };
 export const DEFAULT_SETTINGS = { sky: "day", gravity: 70, walk: 14, jump: 26 };
@@ -75,6 +76,7 @@ export function sanitize(g) {
         c.b[key] = kind === "number" ? num(v, -1000, 1000, dflt) : kind === "check" ? !!v : kind === "axis" ? (["x", "y", "z"].includes(v) ? v : dflt) : String(v == null ? dflt : v).slice(0, 80);
       }
     } else c.b = { k: "none" };
+    if (o.type === "monster") c.mon = sanitizeMonster(o.mon); // (the monster's recipe, monster.js)
     if (Number(o.transp) > 0) c.transp = Math.min(100, Math.round(Number(o.transp))); // (see-through %, 100 = invisible)
     if (/^[a-z0-9]{6,40}$/i.test(o.file || "")) c.file = o.file;
     if (typeof o.anim === "string" && o.anim) c.anim = o.anim.slice(0, 60);

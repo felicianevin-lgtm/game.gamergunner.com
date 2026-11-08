@@ -391,6 +391,8 @@ export function startPlay(world, game, opts) {
       else if (e.k === "checkpoint") { const cp = new THREE.Vector3(e.o.pos[0], e.o.pos[1] + e.o.size[1] + 0.2, e.o.pos[2]); if (cp.distanceTo(checkpoint) > 0.5) { checkpoint.copy(cp); showMsg("Checkpoint!"); beep(660, 0.2, "triangle", 990); } }
       else if (e.k === "finish" && !won && !lost) { won = true; showMsg((b.message || "You win!") + "\n" + fmt(time) + (totalCoins ? "  ·  🪙 " + coins + " / " + totalCoins : ""), 999); beep(523, 0.15, "square"); setTimeout(() => beep(784, 0.3, "square"), 150); }
     }
+    // monsters breathe (and ghosts bob): just the look, not where they really are
+    for (const e of ents) if (e.k !== "car" && e.o.type === "monster" && e.g.userData.inner) { const m = e.g.userData.inner; m.position.y = Math.sin(time * 3 + e.base.x) * e.o.size[1] * (e.o.mon && e.o.mon.float ? 0.05 : 0.015); }
     // spinning coins
     for (const e of ents) if (e.k === "coin" && !e.done && !e.scripted) e.g.quaternion.copy(e.baseQ).premultiply(q.setFromAxisAngle(Y, time * 2.5));
     // touch Switches + parts whose scripts wait for a touch (they fire once each time you step on)

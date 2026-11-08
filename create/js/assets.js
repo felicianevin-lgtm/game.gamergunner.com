@@ -5,6 +5,7 @@
 //   box: {c: [x, y, z] center, h: [x, y, z] half size, rx: tilt around X (radians, for slopes)}
 // `b` is the behavior a new copy starts with (see BEHAVIORS), `solid: false` = players walk through it.
 import * as THREE from "../vendor/three.module.js";
+import { monsterInner } from "./monster.js";
 
 // ---------------------------------------------------------------- materials
 const matCache = new Map();
@@ -301,6 +302,8 @@ export const ASSETS = [
     } },
   { type: "light", label: "Light Bulb", icon: "💡", cat: "Gameplay", base: [1, 1.4, 1], color: "#fff2b0", solid: false, b: { k: "light", power: 3, range: 30 },
     build: (o) => { const g = new THREE.Group(); cyl(g, 0.25, 0.3, 0.4, M("#3a3d42", "metal"), 0, 1.2, 0, 12); ball(g, 0.45, M(o.color, "neon"), 0, 0.7, 0); return g; } },
+  { type: "monster", label: "Monster", icon: "👾", cat: "Gameplay", hidden: true, base: [1, 1, 1], color: "#a64bf4", text: "",
+    build: (o) => monsterInner(o.mon) }, // (made with ＋ Add > Make a Monster: monster.js)
   // (imported things: see files.js. They're added from ＋ Add > Import or the Toolbox's "My imports".)
   { type: "model", label: "Imported Model", icon: "📦", cat: "Imported", hidden: true, base: [1, 1, 1], color: "#ffffff",
     build: () => { const g = new THREE.Group(); g.userData.model = true; return g; } },

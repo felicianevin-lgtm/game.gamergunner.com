@@ -21,6 +21,7 @@ import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI,
 import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
 import { api, account } from "./net.js";
+import { describe, buildMonster, monsterSize, SURPRISE } from "./monster.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -534,6 +535,7 @@ function drawProps(numbersOnly) {
   if (o.type === "model") html += '<div class="group-title">Imported model</div>' + row("Animation", '<select id="pAnim"><option value="">(none)</option>' + (o.anim ? '<option value="' + esc(o.anim) + '" selected>' + esc(o.anim === "*" ? "First animation" : o.anim) + "</option>" : "") + "</select>") +
     '<p class="note">' + esc((game.files[o.file] || {}).name || "Missing file") + ". Scripts can play animations too: me.play(\"Walk\")</p>";
   if (o.type === "picture") html += '<div class="group-title">Picture</div>' + row("Picture", pictureSelect("pPic", o.file));
+  if (o.type === "monster") html += '<div class="group-title">Monster</div><p class="note">' + esc(o.text || "A monster") + '</p><button type="button" class="btn add-script" id="pMonster">👾 Change my monster</button>';
   html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>" + scriptBox(o.id);
   box.innerHTML = html;
   wireScriptBox(o.id);
@@ -546,6 +548,7 @@ function drawProps(numbersOnly) {
     });
     $("pAnim").onchange = (e) => edit(() => { if (e.target.value) o.anim = e.target.value; else delete o.anim; }, true);
   }
+  if ($("pMonster")) $("pMonster").onclick = () => openMonsterMaker(o);
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
 
   const edit = (fn, look) => { pushUndo(); fn(); if (look) rebuild(o); else placeObject(groups.get(o.id), o); changed(); };
@@ -746,6 +749,67 @@ function addGui(kind) {
   changed();
 }
 
+// ---------------------------------------------------------------- 👾 Make a Monster (monster.js)
+// Describe it, see it spin, press Make it! (o = a monster already in the game: change it instead)
+function openMonsterMaker(o) {
+  if (!game) return;
+  let reroll = 0, out = null;
+  openModal('<h2>👾 Make a Monster</h2><p>Describe your monster and watch it appear! Try colors, sizes, kinds (spider, dragon, ghost, robot, slime, alien, skeleton…) and parts (horns, wings, tail, teeth, tentacles, "three eyes", "six legs").</p>' +
+    '<div class="mon-grid"><div><label class="field"><span>My monster is…</span><textarea id="monText" rows="4" maxlength="200" placeholder="a giant purple spider with glowing red eyes and horns"></textarea></label>' +
+    '<div class="mon-words" id="monWords"></div>' +
+    '<div class="thumb-btns"><button class="btn" type="button" id="monSurprise">🎲 Surprise me</button><button class="btn" type="button" id="monReroll" title="Same words, a different look for the parts you didn\'t say">🔀 New look</button></div>' +
+    (o ? "" : '<label class="mon-check"><input type="checkbox" id="monChase"> It chases the player (adds a script)</label>') +
+    '</div><div class="mon-stage"><canvas id="monCanvas"></canvas></div></div>' +
+    '<div class="modal-actions"><button class="btn" id="monCancel" type="button">Cancel</button><button class="btn go" id="monGo" type="button">' + (o ? "✓ Change it" : "👾 Make it!") + "</button></div>");
+  const cv = $("monCanvas");
+  const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+  r.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.5)); const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(-3, 6, -6); sc.add(sun);
+  const cam = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+  let model = null, alive = true, yaw = 0.6;
+  function show() {
+    const text = $("monText").value;
+    out = describe(text || "monster", reroll);
+    if (model) sc.remove(model);
+    model = buildMonster(out.mon);
+    const box = new THREE.Box3().setFromObject(model), d = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const holder = new THREE.Group(); model.position.sub(c); holder.add(model); model = holder; sc.add(model);
+    const R = Math.max(d.x, d.y, d.z);
+    cam.position.set(0, R * 0.35, -R * 1.9); cam.lookAt(0, 0, 0);
+    $("monWords").innerHTML = out.words.length ? "I understood: " + out.words.map((w) => "<b>" + esc(w) + "</b>").join(" ") : '<span class="dim">Type some words, like "big red dragon"!</span>';
+  }
+  function loop() {
+    if (!alive || !cv.isConnected) { alive = false; r.dispose(); return; }
+    requestAnimationFrame(loop);
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (w && h && cv.width !== Math.floor(w * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+    yaw += 0.01; if (model) model.rotation.y = yaw;
+    r.render(sc, cam);
+  }
+  let t = 0;
+  $("monText").value = o ? o.text || "" : "";
+  $("monText").oninput = () => { clearTimeout(t); t = setTimeout(show, 150); };
+  $("monText").addEventListener("keydown", (e) => e.stopPropagation());
+  $("monSurprise").onclick = () => { $("monText").value = SURPRISE[Math.floor(Math.random() * SURPRISE.length)]; reroll = 0; show(); };
+  $("monReroll").onclick = () => { reroll++; show(); };
+  $("monCancel").onclick = () => { alive = false; closeModal(); };
+  $("monGo").onclick = () => {
+    show();
+    const desc = $("monText").value.trim().slice(0, 200) || "A monster";
+    const name = (desc.match(/\b(spider|dragon|ghost|robot|slime|skeleton|zombie|octopus|alien|bug|worm|snake|bear|wolf|bat|shark|cyclops|troll|goblin|demon|yeti|crab|mummy|eyeball|dinosaur|beetle|jelly)\b/i) || [, "Monster"])[1];
+    const chase = $("monChase") && $("monChase").checked;
+    alive = false; closeModal();
+    if (o) { pushUndo(); o.mon = out.mon; o.text = desc; o.size = monsterSize(out.mon); rebuild(o); changed(); drawProps(); return; }
+    const n = addAsset("monster", null, { mon: out.mon, text: desc, size: monsterSize(out.mon), name: name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() });
+    if (n && chase && game.scripts.length < MAX_SCRIPTS) {
+      game.scripts.push({ id: uid(), name: "Chase", on: n.id, code: "// " + n.name + " chases the player!\nme.follow(player, 6)   // 6 = how fast\n\nme.onTouch(function () {\n  sound(\"scream\")\n  player.damage(25)\n})\n" });
+      changed(); drawTree(); drawProps();
+    }
+  };
+  show(); loop();
+  $("monText").focus();
+}
+
 // ---------------------------------------------------------------- the ＋ Add menu (top bar)
 const QUICK = ["spawn", "coin", "lava", "jumppad", "checkpoint", "finish", "car", "tree"];
 function drawAddMenu() {
@@ -755,6 +819,7 @@ function drawAddMenu() {
     '<div class="menu-sec">Parts</div>' + part.map((a) => item('data-add="' + a.type + '"', a.icon, a.label)).join("") +
     '<div class="menu-sec">Quick assets</div>' + QUICK.map((t) => item('data-add="' + t + '"', BY_TYPE[t].icon, BY_TYPE[t].label)).join("") +
     '<div class="menu-sec">GUI (on the screen)</div>' + Object.entries(GUI_KINDS).map(([k, v]) => item('data-gui="' + k + '"', v.icon, "Add " + v.label)).join("") +
+    '<div class="menu-sec">Monsters</div>' + item('data-monster="1"', "👾", "Make a Monster…") +
     '<div class="menu-sec">Scripts</div>' + item('data-script="1"', "📜", "Add Script (to what's selected)") +
     '<div class="menu-sec">From your computer</div>' + item('data-import="1"', "📥", "Import a 3D model or picture…") +
     '<div class="menu-sec"></div>' + item('data-more="1"', "🧰", "All assets (Toolbox)");
@@ -763,6 +828,7 @@ function drawAddMenu() {
     if (b.dataset.add) addAsset(b.dataset.add);
     else if (b.dataset.gui) addGui(b.dataset.gui);
     else if (b.dataset.script) addScript(selected || "");
+    else if (b.dataset.monster) openMonsterMaker();
     else if (b.dataset.import) pickFile((f) => importAndPlace(f));
     else { category = "All"; drawCats(); $("assetSearch").value = ""; drawAssets(); $("assetSearch").focus(); }
   }));
