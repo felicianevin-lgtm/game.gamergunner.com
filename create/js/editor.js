@@ -776,7 +776,8 @@ function openMonsterMaker(o) {
     const holder = new THREE.Group(); model.position.sub(c); holder.add(model); model = holder; sc.add(model);
     const R = Math.max(d.x, d.y, d.z);
     cam.position.set(0, R * 0.35, -R * 1.9); cam.lookAt(0, 0, 0);
-    $("monWords").innerHTML = out.words.length ? "I understood: " + out.words.map((w) => "<b>" + esc(w) + "</b>").join(" ") : '<span class="dim">Type some words, like "big red dragon"!</span>';
+    $("monWords").innerHTML = (out.words.length ? "I understood: " + out.words.map((w) => "<b>" + esc(w) + "</b>").join(" ") : 'Type some words, like "big red dragon"!') +
+      (out.unknown.length ? "<br>I don't know these words yet: " + out.unknown.map((w) => "<i>" + esc(w) + "</i>").join(" ") : "");
   }
   function loop() {
     if (!alive || !cv.isConnected) { alive = false; r.dispose(); return; }
@@ -796,7 +797,7 @@ function openMonsterMaker(o) {
   $("monGo").onclick = () => {
     show();
     const desc = $("monText").value.trim().slice(0, 200) || "A monster";
-    const name = (desc.match(/\b(spider|dragon|ghost|robot|slime|skeleton|zombie|octopus|alien|bug|worm|snake|bear|wolf|bat|shark|cyclops|troll|goblin|demon|yeti|crab|mummy|eyeball|dinosaur|beetle|jelly)\b/i) || [, "Monster"])[1];
+    const name = out.kind || "monster"; // (named after the creature it understood)
     const chase = $("monChase") && $("monChase").checked;
     alive = false; closeModal();
     if (o) { pushUndo(); o.mon = out.mon; o.text = desc; o.size = monsterSize(out.mon); rebuild(o); changed(); drawProps(); return; }
