@@ -33,6 +33,7 @@ img { display: block; }
 .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 400 15px var(--display);
   color: #fff; flex: none; border: 2px solid rgba(255, 255, 255, .15); }
 .avatar.big { width: 84px; height: 84px; font-size: 34px; border-width: 3px; }
+img.avatar.pic { object-fit: cover; background: radial-gradient(circle at 50% 35%, #2a3d33, #0e1513); }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 10px;
   border: 0; cursor: pointer; font: 400 15px var(--display); letter-spacing: .04em; text-transform: uppercase; text-decoration: none;
   background: linear-gradient(180deg, var(--green-hi), var(--green)); color: #fff; box-shadow: 0 4px 14px rgba(31, 174, 69, .3); }
@@ -212,3 +213,26 @@ h2.row-title small { font: 400 14px "Inter", sans-serif; color: var(--dim); }
 .game-page .desc.small { color: var(--dim); font-size: 13px; margin-top: 14px; }
 .game-page .by a { color: var(--green-hi); text-decoration: none; }
 .game-page .by a:hover { text-decoration: underline; }
+
+/* ---------- #/avatar: the avatar maker (create/js/avatar-ui.js) ---------- */
+.av-wrap { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; gap: 18px; align-items: start; margin-top: 14px; }
+.av-stage { position: sticky; top: 76px; background: radial-gradient(circle at 50% 40%, #1d3a2a, #0b1210 70%); border: 1px solid var(--edge); border-radius: 18px; padding: 10px; }
+.av-stage canvas { width: 100%; aspect-ratio: 4 / 5; display: block; cursor: grab; touch-action: none; }
+.av-btns { display: flex; gap: 8px; justify-content: center; margin-top: 6px; }
+.av-note { color: var(--dim); font-size: 13px; text-align: center; margin: 8px 6px 4px; }
+.av-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.av-tabs button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--edge); background: var(--panel); color: inherit; cursor: pointer; font-weight: 600; }
+.av-tabs button.on { border-color: var(--green-hi); background: rgba(31, 174, 69, .18); }
+.av-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.av-grid button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; border: 2px solid var(--edge); background: var(--panel); color: inherit; cursor: pointer; font-weight: 600; font-size: 13px; }
+.av-grid button img { width: 72px; height: 72px; border-radius: 10px; background: #0b1210; }
+.av-grid button.on { border-color: var(--green-hi); background: rgba(31, 174, 69, .16); }
+.av-grid button:hover { border-color: #3a5a4a; }
+.av-colors { margin-top: 16px; }
+.av-colors b { display: block; margin-bottom: 8px; }
+.av-colors > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.av-colors button { width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .15); cursor: pointer; }
+.av-colors button.on { outline: 3px solid #fff; outline-offset: 2px; }
+.av-more { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; border: 2px dashed var(--edge); cursor: pointer; position: relative; overflow: hidden; }
+.av-more input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+@media (max-width: 760px) { .av-wrap { grid-template-columns: 1fr; } .av-stage { position: static; max-width: 340px; margin: 0 auto; } }

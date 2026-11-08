@@ -1,7 +1,36 @@
 // PUBLISH from GunnerVerse Studio: title, description and a thumbnail (a snapshot of the game or any uploaded picture,
 // made 640 x 360), then the game goes live on the GunnerVerse home page right away (relay publish.js). Publishing again
 // updates the same game; Unpublish takes it down. Needs a GunnerVerse account (the home page's Sign up).
-import { api, account, thumbUrl } from "./net.js";
+// Imported models and pictures the game uses are uploaded first (once each: relay files.js), and its scripts go along.
+import { api, account, thumbUrl, RELAY } from "./net.js";
+import { getFile, setSid } from "./files.js";
+
+// The imported files this game really uses.
+function usedFiles(game) {
+  const ids = new Set();
+  for (const o of game.objects) if (o.file && game.files[o.file]) ids.add(o.file);
+  for (const g of game.gui || []) if (g.file && game.files[g.file]) ids.add(g.file);
+  return [...ids];
+}
+const UP_ERR = { toobig: "is too big to upload", full: "can't upload: you've uploaded lots of files already", notfile: "doesn't look like a real model or picture",
+  signin: "needs you to sign in again", slowdown: "has to wait: that's a lot of uploading! Try again in a little while", banned: "can't be uploaded from this account" };
+async function uploadFiles(game, me, ids, say) {
+  let i = 0;
+  for (const id of ids) {
+    i++;
+    const f = game.files[id];
+    if (f.sid) continue;
+    const rec = await getFile(id);
+    if (!rec) throw new Error('"' + f.name + '" is missing from this computer. Delete it from your game (it shows as a red box) and import it again.');
+    if (rec.sid) { f.sid = rec.sid; continue; }
+    say("Uploading " + i + " / " + ids.length + "…");
+    const r = await fetch(RELAY + "/hub/file?type=" + rec.type, { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-GG-T": me.t }, body: rec.bytes })
+      .then((x) => x.json()).catch(() => ({ ok: false, e: "net" }));
+    if (!r.ok) throw new Error(r.e === "net" ? "Couldn't reach GunnerVerse. Check your internet." : '"' + f.name + '" ' + (UP_ERR[r.e] || "couldn't upload") + ".");
+    f.sid = r.sid;
+    await setSid(id, r.sid);
+  }
+}
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const W = 640, H = 360;
@@ -70,13 +99,18 @@ export function openPublish(ui) {
       else $("pbErr").textContent = "Couldn't unpublish. Try again.";
     }).catch(() => { $("pbErr").textContent = "Couldn't reach GunnerVerse. Check your internet."; });
   };
-  $("pbGo").onclick = () => {
+  $("pbGo").onclick = async () => {
     const title = $("pbTitle").value.trim(), desc = $("pbDesc").value.trim();
     if (title.length < 3) { $("pbErr").textContent = "Give your game a title (at least 3 letters)."; return; }
     if (!updating && !thumb) { $("pbErr").textContent = "Add a thumbnail: take a snapshot or upload a picture."; return; }
     if (!game.objects.some((o) => o.b.k === "spawn")) { if (!confirm("Your game has no Spawn Point, so players start in the middle. Publish anyway?")) return; }
     const go = $("pbGo"); go.disabled = true; go.textContent = "Publishing…"; $("pbErr").textContent = "";
-    const copy = { name: game.name, settings: game.settings, objects: game.objects, gui: game.gui || [] };
+    const used = usedFiles(game);
+    try { await uploadFiles(game, me, used, (t) => { go.textContent = t; }); ui.saveNow(true); }
+    catch (err) { go.disabled = false; go.textContent = updating ? "⬆ Update" : "⬆ Publish"; $("pbErr").textContent = err.message; return; }
+    go.textContent = "Publishing…";
+    const copy = { name: game.name, settings: game.settings, objects: game.objects, gui: game.gui || [], scripts: game.scripts || [],
+      files: Object.fromEntries(used.map((id) => [id, game.files[id]])) };
     api("/hub/publish", { t: me.t, id: game.pub || "", title, desc, game: copy, thumb: thumb || undefined }).then((r) => {
       go.disabled = false; go.textContent = updating ? "⬆ Update" : "⬆ Publish";
       if (!r.ok) {

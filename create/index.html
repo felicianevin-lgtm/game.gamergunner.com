@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="studio.css?v=3">
+  <link rel="stylesheet" href="studio.css?v=4">
 </head>
 <body>
   <!-- top toolbar -->
@@ -53,7 +53,10 @@
   <main class="view" id="view">
     <canvas id="canvas" tabindex="0"></canvas>
     <div class="gui-layer edit" id="guiLayer"></div>
-    <div class="view-help" id="viewHelp">Right-drag: look · Middle-drag: pan · Wheel: zoom · W A S D Q E: fly · F: focus</div>
+    <button class="gui-vis" id="btnGuiVis" type="button" title="Hide the GUI while you build">🖥️ GUI</button>
+    <div class="view-help" id="viewHelp">Right-click: menu · Right-drag: look · Middle-drag: pan · Wheel: zoom · W A S D Q E: fly · F: focus</div>
+    <div class="output hidden" id="output"><div class="out-bar"><b>Output</b><small>script errors and print()</small><button type="button" id="outClear">Clear</button><button type="button" id="outClose">✕</button></div><div class="out-list" id="outList"></div></div>
+    <div class="toast hidden" id="toast" role="status"></div>
   </main>
 
   <!-- right: Explorer + Properties -->
@@ -73,6 +76,7 @@
     <div class="hud-top">
       <span class="hud-chip" id="hudCoins">🪙 0</span>
       <span class="hud-chip" id="hudTime">⏱ 0:00</span>
+      <span class="hud-chip hidden" id="hudHealth">❤ 100</span>
       <button class="hud-stop" id="btnStop" type="button">■ Stop</button>
     </div>
     <div class="hud-msg" id="hudMsg"></div>
@@ -80,6 +84,8 @@
     <div class="bubbles" id="bubbles"></div>
   </div>
 
+  <div class="add-menu ctx-menu hidden" id="ctxMenu" role="menu"></div>
+  <input type="file" id="fileIn" hidden>
   <div class="modal hidden" id="modal" role="dialog" aria-modal="true"><div class="modal-box" id="modalBox"></div></div>
   <div class="small-screen" id="smallScreen">
     <img src="../img/favicon.png" alt="" width="64" height="64">
@@ -88,6 +94,6 @@
     <a class="play" href="../#/">← Back to games</a>
   </div>
 
-  <script type="module" src="js/editor.js?v=5"></script>
+  <script type="module" src="js/editor.js?v=6"></script>
 </body>
 </html>

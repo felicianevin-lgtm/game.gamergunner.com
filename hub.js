@@ -1,7 +1,8 @@
 // GunnerVerse home page: the games list, search, the player's account (top right) and the game pages.
 // Talks to the relay's /hub/* routes (relay/src/index.js). The account is shared with the game through
 // localStorage "gg_account" = {u, t, d} (see unity/Assets/Plugins/WebGL/GGAccount.jslib): sign up here or in the game.
-// Pages (in the address after #): #/  #/game/<id>  #/search/<words>  #/friends  #/u/<username>  #/create  #/me  #/admin
+// Pages (in the address after #): #/  #/game/<id>  #/search/<words>  #/friends  #/avatar  #/u/<username>  #/create  #/me  #/admin
+// #/avatar (and the avatar pictures) use create/js/avatar-ui.js, loaded when it's needed (it brings the 3D code).
 // Player-made games come from GunnerVerse Studio (create/) through the relay's publish.js: they play at
 // create/play.html?g=<id>, their pictures live on the relay ("@/hub/thumb/..."), anyone signed in can Report one, and
 // #/admin (dev password, not linked anywhere) lists reports and removes games / bans makers.
@@ -54,8 +55,24 @@
     if (!(c >= 0 && c < COLORS.length) && me) { c = 0; for (var i = 0; i < me.u.length; i++) c = (c * 31 + me.u.charCodeAt(i)) % COLORS.length; }
     return COLORS[c >= 0 ? c : 0];
   }
-  function avatar(name, color, big) {
+  // A person's avatar picture (their 3D avatar once avatar-ui.js is loaded, otherwise their first letter).
+  function avatar(name, color, big, av) {
+    var pic = AVM && av ? AVM.avatarPicture(av, big ? 192 : 96, false) : "";
+    if (pic) return '<img class="avatar pic' + (big ? " big" : "") + '" alt="" src="' + pic + '">';
     return '<span class="avatar' + (big ? " big" : "") + '" style="background:' + color + '">' + esc((name || "?").charAt(0).toUpperCase()) + "</span>";
+  }
+  var AVM = null, avLoading = null; // create/js/avatar-ui.js
+  function loadAV() {
+    if (!avLoading) avLoading = import("./create/js/avatar-ui.js").then(function (m) { AVM = m; return m; }).catch(function () { avLoading = null; return null; });
+    return avLoading;
+  }
+  function hasOwnAvatar() { try { return !!localStorage.getItem("gv_avatar"); } catch (e) { return false; } }
+  function myAvatar() { return AVM ? AVM.loadAvatar() : null; }
+  var avTimer = 0;
+  function sendAvatar(a) { // (to your account, so friends see it; a moment after you stop changing it)
+    clearTimeout(avTimer);
+    if (!me) return;
+    avTimer = setTimeout(function () { api("/social/avatar", { t: me.t, a: a }).catch(function () {}); }, 1200);
   }
   function shownName() { return me ? (me.d || me.u) : ""; }
   function colorFor(u) { var c = 0; u = String(u || "").toLowerCase(); for (var i = 0; i < u.length; i++) c = (c * 31 + u.charCodeAt(i)) % COLORS.length; return COLORS[c]; }
@@ -68,7 +85,7 @@
       document.getElementById("signupBtn").onclick = function () { openSignup(); };
       return;
     }
-    accountBox.innerHTML = '<button class="me-chip" id="meChip" type="button" aria-label="Your account">' + avatar(shownName(), myColor()) +
+    accountBox.innerHTML = '<button class="me-chip" id="meChip" type="button" aria-label="Your account">' + avatar(shownName(), myColor(), false, myAvatar()) +
       '<span class="me-name"><b>' + esc(shownName()) + "</b><small>@" + esc(me.u) + "</small></span></button>";
     document.getElementById("meChip").onclick = function () { location.hash = "#/me"; };
   }
@@ -166,7 +183,12 @@
     clearTimeout(socialTimer);
     if (!me || banned) { social = null; drawSide(); return Promise.resolve(); }
     return api("/social/state", { t: me.t, d: me.d || "" }).then(function (r) {
-      if (r.ok) social = r;
+      if (r.ok) {
+        social = r;
+        var mine = r.me && r.me.av;
+        if (mine && !hasOwnAvatar()) { try { localStorage.setItem("gv_avatar", JSON.stringify(mine)); } catch (e) {} drawAccount(); } // (made on another device)
+        else if (!mine && hasOwnAvatar() && AVM) sendAvatar(AVM.loadAvatar());
+      }
       else if (r.e === "signin") { saveAccount(null); social = null; }
       drawSide();
       if (location.hash.indexOf("#/friends") === 0 && !modalBusy()) pageFriends();
@@ -196,7 +218,7 @@
     var on = social.friends.filter(function (f) { return f.st !== "off"; });
     box.innerHTML = '<div class="side-head">Friends online <small>' + on.length + "</small></div>" +
       (on.length ? on.slice(0, 8).map(function (f) {
-        return '<a class="side-friend" href="#/u/' + esc(f.u) + '">' + avatar(personName(f), colorFor(f.u)) + "<span><b>" + esc(personName(f)) + "</b>" + statusText(f) + "</span></a>";
+        return '<a class="side-friend" href="#/u/' + esc(f.u) + '">' + avatar(personName(f), colorFor(f.u), false, f.av) + "<span><b>" + esc(personName(f)) + "</b>" + statusText(f) + "</span></a>";
       }).join("") : '<p class="side-none">' + (social.friends.length ? "Nobody's on right now." : 'No friends yet. <a href="#/friends">Add some!</a>') + "</p>");
   }
   function joinFriend(f) {
@@ -210,7 +232,7 @@
     };
   }
   function personRow(f, buttons) {
-    return '<div class="person"><a href="#/u/' + esc(f.u) + '" class="person-main">' + avatar(personName(f), colorFor(f.u)) +
+    return '<div class="person"><a href="#/u/' + esc(f.u) + '" class="person-main">' + avatar(personName(f), colorFor(f.u), false, f.av) +
       "<span><b>" + esc(personName(f)) + "</b><small>@" + esc(f.u) + "</small>" + (f.st ? statusText(f) : "") + "</span></a>" +
       '<div class="person-btns">' + buttons + "</div></div>";
   }
@@ -297,7 +319,7 @@
       else if (r.rel === "out") b = '<span class="tag">Request sent</span>' + btn("Cancel", "cancel", r.u, 1) + btn("Block", "block", r.u, 1);
       else if (r.rel === "blocked") b = '<span class="tag">Blocked</span>' + btn("Unblock", "unblock", r.u, 1);
       else b = '<button class="btn" type="button" id="puAdd">+ Add friend</button>' + btn("Block", "block", r.u, 1);
-      main.innerHTML = back + '<div class="profile-head">' + avatar(personName(p), colorFor(p.u), true) +
+      main.innerHTML = back + '<div class="profile-head">' + avatar(personName(p), colorFor(p.u), true, r.av) +
         "<div><h1>" + esc(personName(p)) + "</h1><p>@" + esc(p.u) + " · " + r.friends + " friend" + (r.friends === 1 ? "" : "s") + "</p>" +
         (f ? "<p>" + statusText(f) + "</p>" : "") + '</div></div><div class="actions">' + b + "</div>";
       wireButtons(main);
@@ -470,14 +492,28 @@
     }
     var mine = games.filter(function (g) { return liked[g.id]; });
     var nf = social ? social.friends.length : 0;
-    main.innerHTML = '<div class="profile-head">' + avatar(shownName(), myColor(), true) + "<div><h1>" + esc(shownName()) + "</h1><p>@" + esc(me.u) +
+    main.innerHTML = '<div class="profile-head">' + avatar(shownName(), myColor(), true, myAvatar()) + "<div><h1>" + esc(shownName()) + "</h1><p>@" + esc(me.u) +
       (social ? ' · <a href="#/friends">' + nf + " friend" + (nf === 1 ? "" : "s") + "</a>" : "") + "</p></div></div>" +
-      '<div class="actions"><button class="btn ghost" id="meEdit" type="button">Edit profile</button></div>' +
+      '<div class="actions"><a class="btn" href="#/avatar">☻ Change my avatar</a><button class="btn ghost" id="meEdit" type="button">Edit profile</button></div>' +
       (banned ? '<p class="err">This account is banned.</p>' : "") +
       '<h2 class="row-title">Games you liked</h2>' + (mine.length ? '<div class="grid">' + mine.map(card).join("") + "</div>" : '<p class="empty">Tap 👍 on a game to save it here.</p>') +
       '<h2 class="row-title">Your games</h2><div class="grid" id="myGames">' + games.filter(isMine).map(card).join("") + createCard + "</div>" +
       '<p class="hello-sub" style="margin-top:26px">Your account is saved in this browser. Using another device? Pick a different username there for now.</p>';
     document.getElementById("meEdit").onclick = openEditProfile;
+  }
+
+  // ---------------------------------------------------------------- avatar (#/avatar)
+  function pageAvatar() {
+    setNav("avatar");
+    main.innerHTML = '<h1 class="page-title">My Avatar</h1><p class="hello-sub">Make your character! Pick a body, face, hair, hats, clothes and cool stuff. You\'ll look like this in every game made in GunnerVerse Studio.</p>' +
+      '<div id="avBox"><p class="empty">Loading…</p></div>' + (me ? "" : '<p class="hello-sub">Tip: <a href="#/me">sign up</a> so your friends can see your avatar too.</p>');
+    loadAV().then(function (m) {
+      var box = document.getElementById("avBox");
+      if (!box) return;
+      if (!m) { box.innerHTML = '<p class="err">The avatar maker couldn\'t load. Refresh and try again.</p>'; return; }
+      m.mountAvatarEditor(box, { onChange: function (a) { sendAvatar(a); drawAccount(); } });
+      drawAccount();
+    });
   }
 
   // ---------------------------------------------------------------- admin (#/admin, dev password)
@@ -525,6 +561,7 @@
     if (parts[0] === "game" && parts[1]) pageGame(parts[1]);
     else if (parts[0] === "search") pageSearch(parts.slice(1).join("/"));
     else if (parts[0] === "friends") pageFriends();
+    else if (parts[0] === "avatar") pageAvatar();
     else if (parts[0] === "u" && parts[1]) pageUser(parts[1]);
     else if (parts[0] === "create") pageCreate();
     else if (parts[0] === "me") pageMe();
@@ -558,4 +595,5 @@
   route();
   loadGames().then(route);
   checkAccount();
+  setTimeout(function () { loadAV().then(function (m) { if (m) { drawAccount(); drawSide(); if (!/^#\/(avatar|create)/.test(location.hash)) route(); } }); }, 600); // (avatar pictures)
 })();

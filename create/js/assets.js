@@ -289,6 +289,24 @@ export const ASSETS = [
       return g;
     } },
 
+  { type: "switch", label: "Wall Button", icon: "🔴", cat: "Gameplay", base: [1.6, 1.6, 0.5], color: "#e8261c", b: { k: "switch", target: "", how: "click" },
+    build: (o) => { const g = new THREE.Group(); box(g, 1.6, 1.6, 0.25, M("#3a3d42", "metal"), 0, 0.8, 0.12); cyl(g, 0.5, 0.5, 0.3, M(o.color, o.mat === "plastic" ? "neon" : o.mat), 0, 0.8, -0.1, 20).rotation.x = Math.PI / 2; return g; } },
+  { type: "camera", label: "Security Camera", icon: "📹", cat: "Gameplay", base: [1.2, 1.4, 2], color: "#d8dde4",
+    build: (o) => { // looks toward -z (its front); a GUI button can "Look through" it
+      const g = new THREE.Group();
+      box(g, 0.5, 0.5, 0.2, M("#3a3d42", "metal"), 0, 1.15, 0.9); cyl(g, 0.08, 0.08, 0.6, M("#3a3d42", "metal"), 0, 1.0, 0.65, 8).rotation.x = Math.PI / 2;
+      box(g, 0.9, 0.8, 1.5, M(o.color, o.mat), 0, 0.9, -0.05); cyl(g, 0.3, 0.3, 0.2, M("#111", "smooth"), 0, 0.9, -0.85, 18).rotation.x = Math.PI / 2;
+      ball(g, 0.09, M("#ff2020", "neon"), 0.32, 1.22, -0.8);
+      return g;
+    } },
+  { type: "light", label: "Light Bulb", icon: "💡", cat: "Gameplay", base: [1, 1.4, 1], color: "#fff2b0", solid: false, b: { k: "light", power: 3, range: 30 },
+    build: (o) => { const g = new THREE.Group(); cyl(g, 0.25, 0.3, 0.4, M("#3a3d42", "metal"), 0, 1.2, 0, 12); ball(g, 0.45, M(o.color, "neon"), 0, 0.7, 0); return g; } },
+  // (imported things: see files.js. They're added from ＋ Add > Import or the Toolbox's "My imports".)
+  { type: "model", label: "Imported Model", icon: "📦", cat: "Imported", hidden: true, base: [1, 1, 1], color: "#ffffff",
+    build: () => { const g = new THREE.Group(); g.userData.model = true; return g; } },
+  { type: "picture", label: "Picture", icon: "🖼️", cat: "Imported", hidden: true, base: [4, 3, 0.2], color: "#ffffff",
+    build: () => { const g = new THREE.Group(); g.userData.picture = true; box(g, 4, 3, 0.2, M("#2b2f36"), 0, 1.5, 0); return g; } },
+
   // ----- decor
   { type: "sign", label: "Sign", icon: "🪧", cat: "Decor", base: [5, 4, 0.4], color: "#8b5a2b", text: "My awesome game!",
     build: (o) => {
@@ -336,4 +354,8 @@ export const BEHAVIORS = {
   door: { label: "Door (opens)", note: "Slides open when someone walks up to it." },
   npc: { label: "Talks", note: "Says its Text when you walk up to it." },
   car: { label: "Drivable car", note: "Walk up and press E to drive.", params: [["speed", "Top speed", "number", 40]] },
+  switch: { label: "Switch (turns something on / off)", note: "Click it (or touch it) in the game to show or hide the thing you pick. Great for doors, lights and secret walls!",
+    params: [["target", "Turns on / off", "target", ""], ["how", "Works when you", "how", "click"]] },
+  light: { label: "Light (glows)", note: "Lights up everything around it. Looks best with the Night sky!", params: [["power", "Brightness", "number", 3], ["range", "How far", "number", 30]] },
 };
+export const SWITCH_HOW = { click: "Click it", touch: "Touch it" };

@@ -5,6 +5,7 @@ import { createWorld } from "./world.js";
 import { sanitize } from "./game.js";
 import { startPlay } from "./play.js";
 import { api } from "./net.js";
+import { useFiles } from "./files.js";
 
 const $ = (id) => document.getElementById(id);
 const id = new URLSearchParams(location.search).get("g") || "";
@@ -20,6 +21,7 @@ if (!/^[a-z0-9]{8,16}$/.test(id)) fail("That game link isn't right.");
 else api("/hub/game/" + id).then((r) => {
   if (!r.ok) { fail(r.e === "nogame" ? "This game isn't on GunnerVerse anymore." : "The game couldn't load. Try again in a minute."); return; }
   game = sanitize({ ...r.game, id });
+  useFiles(game.files, true); // (imported models + pictures come from the relay)
   game.name = r.card.title;
   document.title = r.card.title + " | GunnerVerse";
   $("loadTitle").textContent = r.card.title;
@@ -31,7 +33,7 @@ else api("/hub/game/" + id).then((r) => {
 function start() {
   if (!game || playing) return;
   $("loading").classList.add("hidden");
-  playing = startPlay(world, sanitize(JSON.parse(JSON.stringify(game))), { onStop() { playing = null; location.href = back; } });
+  playing = startPlay(world, sanitize(JSON.parse(JSON.stringify(game))), { onStop(again) { playing = null; if (again) start(); else location.href = back; } }); // (again: "Try again" after losing)
 }
 $("btnStart").onclick = start;
 

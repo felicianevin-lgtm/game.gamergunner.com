@@ -1,18 +1,25 @@
 // GunnerVerse Studio: the editor. Toolbox (free assets) on the left, the 3D world in the middle, Explorer + Properties
 // on the right, tools along the top (＋ Add menu, Select / Move / Rotate / Scale, snap, undo, copy, delete, Publish, Play).
-// Screen GUI (labels, buttons, the Developer Menu button) lives in game.gui (gui.js): it shows over the 3D view and in the
-// Explorer under "ScreenGui"; selecting one shows its settings in Properties.
-// Mouse: left click selects, right-drag looks around, middle-drag pans, wheel zooms; W A S D Q E fly (Shift = faster).
-// Games save in this browser by themselves (game.js). Play test lives in play.js.
+// Screen GUI (labels, buttons, panels, pictures, the Developer Menu button) lives in game.gui (gui.js): it shows over the
+// 3D view (drag it anywhere, drag a panel's corner to resize) and in the Explorer under "ScreenGui".
+// SCRIPTS (scripts.js) live inside parts / GUI things (or the whole game): they show in the Explorer under their thing,
+// "＋ Add Script" is at the bottom of Properties, and clicking one opens the script editor (script-editor.js).
+// IMPORTS (files.js): ＋ Add > Import (or drop a file on the world) brings in 3D models and pictures; they wait in the
+// Toolbox's "My imports".
+// Mouse: left click selects, RIGHT CLICK opens a menu (delete, copy, add script...), right-drag looks around,
+// middle-drag pans, wheel zooms; W A S D Q E fly (Shift = faster).
+// Games save in this browser by themselves (game.js). Play test lives in play.js; script errors show in the Output box.
 import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/OrbitControls.js";
 import { TransformControls } from "../vendor/TransformControls.js";
-import { ASSETS, BY_TYPE, BEHAVIORS, CATEGORIES, MATERIALS } from "./assets.js";
+import { ASSETS, BY_TYPE, BEHAVIORS, CATEGORIES, MATERIALS, SWITCH_HOW } from "./assets.js";
 import { createWorld, buildObject, placeObject, boundsBox } from "./world.js";
-import { SKIES, TEMPLATES, newObj, fillBehavior, sanitize, listGames, loadGame, saveGame, deleteGame, makeGame, r2 } from "./game.js";
+import { SKIES, TEMPLATES, newObj, fillBehavior, sanitize, listGames, loadGame, saveGame, deleteGame, makeGame, r2, uid, MAX_SCRIPTS } from "./game.js";
 import { startPlay } from "./play.js";
 import { openPublish } from "./publish.js";
-import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, newGui, renderGui } from "./gui.js";
+import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI, newGui, renderGui } from "./gui.js";
+import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
+import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -29,6 +36,9 @@ let snapIndex = 0;
 let undoStack = [], redoStack = [];
 let dirty = false, saveTimer = 0, playing = null;
 let category = "All";
+let myFiles = [];              // imported files in this browser (files.js listFiles)
+let selScript = null;          // the script open in the script editor
+const lastErr = new Map();     // script name -> the line its last error was on
 
 const world = createWorld($("canvas"));
 const { scene, camera, renderer } = world;
@@ -55,7 +65,8 @@ scene.add(selBox);
 // ---------------------------------------------------------------- objects in the world
 function obj(id) { return game.objects.find((o) => o.id === id) || null; }
 function guiItem(id) { return (game.gui || []).find((g) => g.id === id) || null; }
-function drawGui() { if (game) renderGui($("guiLayer"), game.gui, { selected, onClick: (g) => select(g.id) }); }
+function drawGui() { if (game) renderGui($("guiLayer"), game.gui, { edit: true, selected, fileUrl }); }
+function scriptsOf(id) { return (game.scripts || []).filter((x) => x.on === id); }
 function rebuild(o) {
   const old = groups.get(o.id);
   if (old) { world.root.remove(old); disposeGroup(old); }
@@ -70,15 +81,24 @@ function rebuildAll() {
   transform.detach();
   for (const g of groups.values()) { world.root.remove(g); disposeGroup(g); }
   groups.clear();
+  clearMixers();
   for (const o of game.objects) rebuild(o);
   if (selected && !obj(selected) && !guiItem(selected)) selected = null;
   select(selected);
 }
 
 // ---------------------------------------------------------------- history + saving
-function snapshot() { return JSON.stringify({ o: game.objects, s: game.settings, g: game.gui }); }
+function snapshot() { return JSON.stringify({ o: game.objects, s: game.settings, g: game.gui, sc: game.scripts || [] }); }
 function pushUndo() { undoStack.push(snapshot()); if (undoStack.length > 80) undoStack.shift(); redoStack = []; updateButtons(); }
-function restore(snap) { const d = JSON.parse(snap); game.objects = d.o; game.settings = d.s; game.gui = d.g || []; world.setSky(game.settings.sky); rebuildAll(); drawTree(); drawProps(); changed(true); }
+function restore(snap) {
+  const d = JSON.parse(snap);
+  game.objects = d.o; game.settings = d.s; game.gui = d.g || [];
+  // scripts come back or go away, but what you typed in a script stays (the script editor has its own Ctrl+Z)
+  const now = new Map((game.scripts || []).map((x) => [x.id, x]));
+  game.scripts = (d.sc || []).map((x) => now.get(x.id) || x);
+  if (scriptOpen() && !game.scripts.some((x) => x.id === scriptOpen())) closeScript();
+  world.setSky(game.settings.sky); rebuildAll(); drawTree(); drawProps(); changed(true);
+}
 function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); updateButtons(); }
 function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); updateButtons(); }
 function changed(skipTree) {
@@ -154,9 +174,17 @@ function hitAt(clientX, clientY) {
   const ground = new THREE.Vector3();
   return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ground) ? { id: null, point: ground } : null;
 }
-let downAt = null;
-canvas.addEventListener("pointerdown", (e) => { canvas.focus(); if (e.button === 0) downAt = { x: e.clientX, y: e.clientY }; });
+let downAt = null, rightAt = null;
+canvas.addEventListener("pointerdown", (e) => { canvas.focus(); if (e.button === 0) downAt = { x: e.clientX, y: e.clientY }; if (e.button === 2) rightAt = { x: e.clientX, y: e.clientY }; });
 canvas.addEventListener("pointerup", (e) => {
+  if (e.button === 2 && rightAt && !playing) { // a right CLICK (not a drag to look around): the menu
+    const moved = Math.hypot(e.clientX - rightAt.x, e.clientY - rightAt.y);
+    rightAt = null;
+    if (moved > 5) return;
+    const h = hitAt(e.clientX, e.clientY);
+    if (h && h.id) { select(h.id); thingMenu(h.id, e.clientX, e.clientY); }
+    return;
+  }
   if (e.button !== 0 || !downAt || playing) return;
   const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
   downAt = null;
@@ -168,60 +196,152 @@ canvas.addEventListener("pointerup", (e) => {
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 // ---------------------------------------------------------------- adding, copying, deleting
-function addAsset(type, at) {
-  if (!game) return;
+function addAsset(type, at, extra) {
+  if (!game) return null;
   pushUndo();
   let p = at;
   if (!p) { const r = canvas.getBoundingClientRect(); const h = hitAt(r.left + r.width / 2, r.top + r.height / 2); p = h ? h.point : orbit.target.clone(); }
   const s = SNAPS[snapIndex] || 0;
   const snap = (v) => (s ? Math.round(v / s) * s : v);
-  const o = newObj(type, [snap(p.x), r2(Math.max(p.y, -1000)), snap(p.z)]);
+  const o = newObj(type, [snap(p.x), r2(Math.max(p.y, -1000)), snap(p.z)], extra);
   // face the camera (vehicles and characters look toward you)
   const yaw = Math.atan2(camera.position.x - p.x, camera.position.z - p.z) / D2R;
-  if (["car", "truck", "kart", "npc", "sign", "door", "finish"].includes(type)) o.rot[1] = r2(Math.round((yaw + 180) / 15) * 15 % 360);
+  if (["car", "truck", "kart", "npc", "sign", "door", "finish", "model", "picture", "switch", "camera"].includes(type)) o.rot[1] = r2(Math.round((yaw + 180) / 15) * 15 % 360);
   o.name = uniqueName(o.name);
   game.objects.push(o);
   rebuild(o);
   if (tool === "select") setTool("translate");
   select(o.id);
   changed();
+  return o;
 }
 function uniqueName(base) {
   const names = new Set(game.objects.map((o) => o.name));
   if (!names.has(base)) return base;
   for (let i = 2; ; i++) if (!names.has(base + " " + i)) return base + " " + i;
 }
+function copyScripts(fromId, toId) {
+  for (const sc of scriptsOf(fromId)) if (game.scripts.length < MAX_SCRIPTS) game.scripts.push({ ...sc, id: uid(), on: toId });
+}
 function duplicate() {
   const gi = guiItem(selected);
   if (gi) {
-    if (game.gui.length >= 20) return;
+    const kids = gi.kind === "frame" ? game.gui.filter((x) => x.parent === gi.id) : [];
+    if (game.gui.length + 1 + kids.length > MAX_GUI) { alert("You can have up to " + MAX_GUI + " GUI things."); return; }
     pushUndo();
-    const c = { ...gi, id: Math.random().toString(36).slice(2, 10) };
-    game.gui.push(c); select(c.id); changed();
+    const c = { ...gi, id: uid(), x: Math.min(100, gi.x + 3), y: Math.min(100, gi.y + 3) };
+    game.gui.push(c); copyScripts(gi.id, c.id);
+    for (const k of kids) { const kc = { ...k, id: uid(), parent: c.id, x: Math.min(100, k.x + 3), y: Math.min(100, k.y + 3) }; game.gui.push(kc); copyScripts(k.id, kc.id); }
+    select(c.id); changed();
     return;
   }
   const o = obj(selected);
   if (!o) return;
   pushUndo();
   const c = JSON.parse(JSON.stringify(o));
-  c.id = Math.random().toString(36).slice(2, 10);
+  c.id = uid();
   c.name = uniqueName(o.name.replace(/ \d+$/, ""));
   c.pos = [r2(o.pos[0] + Math.max(1, Math.min(o.size[0], 8))), o.pos[1], o.pos[2]];
   game.objects.push(c);
+  copyScripts(o.id, c.id);
   rebuild(c);
   select(c.id);
   changed();
 }
 function remove() {
-  if (guiItem(selected)) { pushUndo(); game.gui = game.gui.filter((g) => g.id !== selected); select(null); changed(); return; }
+  const gi = guiItem(selected);
+  if (gi) {
+    pushUndo();
+    const gone = new Set([gi.id, ...game.gui.filter((g) => g.parent === gi.id).map((g) => g.id)]); // (a panel takes what's inside it)
+    game.gui = game.gui.filter((g) => !gone.has(g.id));
+    dropScripts(gone);
+    select(null); changed(); return;
+  }
   const o = obj(selected);
   if (!o) return;
   pushUndo();
   game.objects = game.objects.filter((x) => x.id !== o.id);
+  dropScripts(new Set([o.id]));
   transform.detach();
   const g = groups.get(o.id); if (g) { world.root.remove(g); disposeGroup(g); groups.delete(o.id); }
   select(null);
   changed();
+}
+function dropScripts(ids) {
+  if (scriptOpen() && ids.has((game.scripts.find((x) => x.id === scriptOpen()) || {}).on)) closeScript();
+  game.scripts = game.scripts.filter((x) => !ids.has(x.on));
+}
+
+// ---------------------------------------------------------------- scripts
+function thingName(id) { const t = obj(id) || guiItem(id); return t ? t.name : ""; }
+function addScript(onId) {
+  if (!game) return;
+  if (game.scripts.length >= MAX_SCRIPTS) { alert("You can have up to " + MAX_SCRIPTS + " scripts."); return; }
+  pushUndo();
+  const t = onId ? obj(onId) || guiItem(onId) : null;
+  const kind = !t ? "game" : t.kind === "label" ? "label" : "part";
+  const sc = { id: uid(), name: "Script", on: t ? t.id : "", code: starterCode(kind, t ? t.name : "") };
+  game.scripts.push(sc);
+  changed();
+  editScript(sc.id);
+}
+function editScript(id) {
+  const sc = game.scripts.find((x) => x.id === id);
+  if (!sc) return;
+  if (playing) playing.stop();
+  const t = sc.on ? obj(sc.on) || guiItem(sc.on) : null;
+  selScript = id;
+  openScript(sc, {
+    where: t ? "inside " + t.name + " (me = " + t.name + ")" : "for the whole game",
+    kind: !t ? "game" : guiItem(sc.on) ? "gui" : "part",
+    errLine: lastErr.get(sc.name) || 0,
+    onChange() { changed(); },
+    onClose() { selScript = null; drawTree(); canvas.focus(); },
+  });
+  drawTree();
+}
+function removeScript(id) {
+  const sc = game.scripts.find((x) => x.id === id);
+  if (!sc || !confirm('Delete the script "' + sc.name + '"?')) return;
+  pushUndo();
+  if (scriptOpen() === id) closeScript();
+  game.scripts = game.scripts.filter((x) => x.id !== id);
+  changed(); drawProps();
+}
+
+// ---------------------------------------------------------------- the right-click menu
+function showMenu(x, y, items) {
+  const m = $("ctxMenu");
+  m.innerHTML = items.map((it, i) => it === "-" ? '<div class="menu-sec"></div>' : '<button type="button" data-i="' + i + '" class="' + (it.danger ? "danger" : "") + '"><span class="mi">' + it.icon + "</span>" + esc(it.label) + "</button>").join("");
+  m.classList.remove("hidden");
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, innerWidth - r.width - 6) + "px"; m.style.top = Math.min(y, innerHeight - r.height - 6) + "px";
+  m.querySelectorAll("button").forEach((b) => (b.onclick = () => { hideMenu(); items[+b.dataset.i].fn(); }));
+}
+function hideMenu() { $("ctxMenu").classList.add("hidden"); }
+document.addEventListener("pointerdown", (e) => { if (!$("ctxMenu").contains(e.target)) hideMenu(); }, true);
+window.addEventListener("blur", hideMenu);
+function thingMenu(id, x, y) {
+  const g = guiItem(id), o = obj(id);
+  if (!g && !o) return;
+  const items = [
+    { icon: "📜", label: "Add Script", fn: () => addScript(id) },
+    { icon: "✏️", label: "Rename", fn: () => { select(id); const n = $(g ? "gName" : "pObjName"); if (n) { n.focus(); n.select(); } } },
+    { icon: "⧉", label: "Duplicate", fn: () => { select(id); duplicate(); } },
+  ];
+  if (o) items.push({ icon: "🎯", label: "Zoom to it", fn: () => { select(id); focusSelected(); } });
+  if (g) items.push({ icon: g.visible ? "🙈" : "👁️", label: g.visible ? "Hide at start" : "Show at start", fn: () => { pushUndo(); g.visible = !g.visible; changed(); drawGui(); drawProps(); } });
+  items.push("-", { icon: "🗑️", label: "Delete", danger: true, fn: () => { select(id); remove(); } });
+  showMenu(x, y, items);
+}
+function scriptMenu(id, x, y) {
+  const sc = game.scripts.find((s2) => s2.id === id);
+  if (!sc) return;
+  showMenu(x, y, [
+    { icon: "📜", label: "Open", fn: () => editScript(id) },
+    { icon: "⧉", label: "Duplicate", fn: () => { if (game.scripts.length >= MAX_SCRIPTS) return; pushUndo(); game.scripts.push({ ...sc, id: uid(), name: sc.name + " copy" }); changed(); drawProps(); } },
+    "-", { icon: "🗑️", label: "Delete script", danger: true, fn: () => removeScript(id) },
+  ]);
 }
 function focusSelected() {
   const o = obj(selected);
@@ -235,12 +355,13 @@ function focusSelected() {
 
 // ---------------------------------------------------------------- Toolbox
 function drawCats() {
-  $("cats").innerHTML = CATEGORIES.map((c) => '<button type="button" data-cat="' + c + '" class="' + (c === category ? "on" : "") + '">' + c + "</button>").join("");
+  $("cats").innerHTML = CATEGORIES.concat("My imports").map((c) => '<button type="button" data-cat="' + c + '" class="' + (c === category ? "on" : "") + '">' + c + "</button>").join("");
   $("cats").querySelectorAll("button").forEach((b) => (b.onclick = () => { category = b.dataset.cat; drawCats(); drawAssets(); }));
 }
 function drawAssets() {
   const q = $("assetSearch").value.trim().toLowerCase();
-  const list = ASSETS.filter((a) => (category === "All" || a.cat === category) && (!q || (a.label + " " + a.cat).toLowerCase().includes(q)));
+  if (category === "My imports") return drawImports(q);
+  const list = ASSETS.filter((a) => !a.hidden && (category === "All" || a.cat === category) && (!q || (a.label + " " + a.cat).toLowerCase().includes(q)));
   $("assets").innerHTML = list.map((a) => '<div class="asset" draggable="true" data-type="' + a.type + '" title="' + esc(a.label) + '"><span class="ico">' + a.icon + '</span><span class="nm">' + esc(a.label) + "</span></div>").join("") ||
     '<p class="note">No assets match.</p>';
   $("assets").querySelectorAll(".asset").forEach((el) => {
@@ -249,11 +370,62 @@ function drawAssets() {
   });
 }
 $("assetSearch").oninput = drawAssets;
+function drawImports(q) {
+  const list = myFiles.filter((f) => !q || f.name.toLowerCase().includes(q));
+  $("assets").innerHTML = '<div class="asset import-tile" id="impTile" title="Bring in a 3D model or a picture from your computer"><span class="ico">📥</span><span class="nm">Import…</span></div>' +
+    list.map((f) => '<div class="asset" data-file="' + f.id + '" title="' + esc(f.name) + " (" + (f.size / 1048576).toFixed(1) + ' MB) · right-click to delete"><span class="ico">' + (f.kind === "model" ? "📦" : '<img alt="" src="' + esc(fileUrl(f.id)) + '">') + '</span><span class="nm">' + esc(f.name) + "</span></div>").join("") +
+    (myFiles.length ? "" : '<p class="note">Import 3D models (.glb .fbx .obj) or pictures (.png .jpg) from your computer. They wait here for any game.</p>');
+  $("impTile").onclick = () => pickFile((f) => importAndPlace(f));
+  $("assets").querySelectorAll("[data-file]").forEach((el) => {
+    const f = myFiles.find((x) => x.id === el.dataset.file);
+    el.onclick = () => placeFile(f);
+    el.oncontextmenu = (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, [{ icon: "➕", label: "Add to my game", fn: () => placeFile(f) },
+      "-", { icon: "🗑️", label: "Delete from My imports", danger: true, fn: async () => { if (!confirm('Delete "' + f.name + '" from My imports? Games already using it will show a red box.')) return; await deleteFile(f.id); await refreshFiles(); } }]); };
+  });
+}
+async function refreshFiles() { myFiles = await listFiles(); await loadPictures(Object.fromEntries(myFiles.map((f) => [f.id, f]))); if (category === "My imports") drawAssets(); }
+
+// ---------------------------------------------------------------- importing models + pictures (files.js)
+function pickFile(then, accept) {
+  const inp = $("fileIn");
+  inp.accept = accept || ACCEPT;
+  inp.value = "";
+  inp.onchange = () => { if (inp.files && inp.files[0]) then(inp.files[0]); };
+  inp.click();
+}
+function toast(text, secs) { const t = $("toast"); t.textContent = text; t.classList.toggle("hidden", !text); clearTimeout(toast.tm); if (secs) toast.tm = setTimeout(() => t.classList.add("hidden"), secs * 1000); }
+async function importIt(file) {
+  toast("📥 Importing " + file.name + "…");
+  try { const rec = await importFile(file); await refreshFiles(); toast("✓ " + rec.name + " imported! It's in Toolbox > My imports.", 3); return rec; }
+  catch (err) { toast(""); alert(err.message || "That file couldn't be imported."); return null; }
+}
+async function importAndPlace(file, at) { const rec = await importIt(file); if (rec) await placeFile(myFiles.find((f) => f.id === rec.id) || rec, at); return rec; }
+function useFile(f) { game.files = game.files || {}; if (!game.files[f.id]) game.files[f.id] = { name: f.name, type: f.type }; noteFile(f.id, f.type); }
+async function placeFile(f, at) {
+  if (!game || !f) return;
+  useFile(f);
+  if (f.kind === "model" || isModel(f.type)) {
+    let size = [4, 5, 4];
+    try { size = await startSize(f.id, f.type); } catch { alert("That model couldn't be opened."); return; }
+    addAsset("model", at, { file: f.id, name: f.name, size, solid: true });
+  } else {
+    const img = new Image(); img.src = fileUrl(f.id);
+    await img.decode().catch(() => {});
+    const k = img.naturalWidth ? img.naturalHeight / img.naturalWidth : 0.75;
+    addAsset("picture", at, { file: f.id, name: f.name, size: [r2(Math.min(8, 4 / Math.max(k, 0.25))), r2(Math.min(8, 4 / Math.max(k, 0.25)) * k), 0.2] });
+  }
+}
 const view = $("view");
-view.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("text/gv-asset")) { e.preventDefault(); view.classList.add("drop-ok"); } });
+view.addEventListener("dragover", (e) => { const t = [...e.dataTransfer.types]; if (t.includes("text/gv-asset") || t.includes("Files")) { e.preventDefault(); view.classList.add("drop-ok"); } });
 view.addEventListener("dragleave", () => view.classList.remove("drop-ok"));
 view.addEventListener("drop", (e) => {
   view.classList.remove("drop-ok");
+  if (e.dataTransfer.files && e.dataTransfer.files.length) { // a model or picture dropped from the computer
+    e.preventDefault();
+    const h = hitAt(e.clientX, e.clientY);
+    [...e.dataTransfer.files].slice(0, 5).reduce((p, f) => p.then(() => importAndPlace(f, h ? h.point : null)), Promise.resolve());
+    return;
+  }
   const type = e.dataTransfer.getData("text/gv-asset");
   if (!BY_TYPE[type]) return;
   e.preventDefault();
@@ -265,20 +437,35 @@ view.addEventListener("drop", (e) => {
 function drawTree() {
   if (!game) return;
   $("objCount").textContent = game.objects.length + " thing" + (game.objects.length === 1 ? "" : "s");
+  const scRows = (id, depth) => scriptsOf(id).map((sc) => '<div class="tree-row child script-row d' + depth + (sc.id === selScript ? " on" : "") + '" data-script="' + sc.id + '"><span class="ti">📜</span><span class="tn">' + esc(sc.name) + "</span></div>").join("");
   let html = '<div class="tree-row tree-root' + (selected ? "" : " on") + '" data-id=""><span class="ti">🌐</span><span class="tn">Workspace</span></div>';
   for (const o of game.objects) {
     const a = BY_TYPE[o.type], b = o.b && o.b.k !== "none" ? BEHAVIORS[o.b.k].label.split(" ")[0] : "";
     html += '<div class="tree-row child' + (o.id === selected ? " on" : "") + '" data-id="' + o.id + '"><span class="ti">' + a.icon + '</span><span class="tn">' + esc(o.name) + "</span>" +
-      (b ? '<span class="tb2">' + esc(b) + "</span>" : "") + "</div>";
+      (b ? '<span class="tb2">' + esc(b) + "</span>" : "") + "</div>" + scRows(o.id, 2);
   }
-  html += '<div class="tree-row tree-root gui-root"><span class="ti">🖥️</span><span class="tn">ScreenGui</span></div>';
-  for (const g of game.gui || []) html += '<div class="tree-row child' + (g.id === selected ? " on" : "") + '" data-id="' + g.id + '"><span class="ti">' + GUI_KINDS[g.kind].icon + '</span><span class="tn">' + esc(g.name) + '</span><span class="tb2">' + esc(GUI_SPOTS[g.pos]) + "</span></div>";
+  html += '<div class="tree-row tree-root gui-root" data-root="gui"><span class="ti">🖥️</span><span class="tn">ScreenGui</span></div>';
+  const guiRow = (g, depth) => '<div class="tree-row child d' + depth + (g.id === selected ? " on" : "") + (g.visible ? "" : " faded") + '" data-id="' + g.id + '"><span class="ti">' + GUI_KINDS[g.kind].icon + '</span><span class="tn">' + esc(g.name) + "</span>" +
+    (g.visible ? "" : '<span class="tb2">hidden</span>') + "</div>" + scRows(g.id, depth + 1);
+  for (const g of (game.gui || []).filter((x) => !x.parent)) {
+    html += guiRow(g, 1);
+    for (const k of game.gui.filter((x) => x.parent === g.id)) html += guiRow(k, 2);
+  }
   if (!(game.gui || []).length) html += '<div class="tree-row child tree-empty">Add GUI from ＋ Add</div>';
+  html += '<div class="tree-row tree-root" data-root="scripts"><span class="ti">📜</span><span class="tn">Game Scripts</span><button type="button" class="tree-add" id="addGameScript" title="Add a script for the whole game">＋</button></div>' + scRows("", 1);
   $("tree").innerHTML = html;
-  $("tree").querySelectorAll(".tree-row:not(.gui-root):not(.tree-empty)").forEach((r) => {
+  $("tree").querySelectorAll(".tree-row[data-id]").forEach((r) => {
     r.onclick = () => select(r.dataset.id || null);
     r.ondblclick = () => { if (r.dataset.id) { select(r.dataset.id); focusSelected(); } };
+    r.oncontextmenu = (e) => { e.preventDefault(); if (r.dataset.id) { select(r.dataset.id); thingMenu(r.dataset.id, e.clientX, e.clientY); } else showMenu(e.clientX, e.clientY, [{ icon: "📜", label: "Add Game Script", fn: () => addScript("") }]); };
   });
+  $("tree").querySelectorAll(".tree-row[data-script]").forEach((r) => {
+    r.onclick = () => editScript(r.dataset.script);
+    r.oncontextmenu = (e) => { e.preventDefault(); scriptMenu(r.dataset.script, e.clientX, e.clientY); };
+  });
+  const gr = $("tree").querySelector('[data-root="gui"]');
+  gr.oncontextmenu = (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, Object.entries(GUI_KINDS).map(([k, v]) => ({ icon: v.icon, label: "Add " + v.label, fn: () => addGui(k) }))); };
+  $("addGameScript").onclick = (e) => { e.stopPropagation(); addScript(""); };
   const on = $("tree").querySelector(".tree-row.on.child");
   if (on) on.scrollIntoView({ block: "nearest" });
 }
@@ -304,13 +491,15 @@ function drawProps(numbersOnly) {
       row("Walk speed", '<input type="number" id="pWalk" min="4" max="60" value="' + s.walk + '">') +
       row("Jump power", '<input type="number" id="pJump" min="5" max="80" value="' + s.jump + '">') +
       row("Gravity", '<input type="number" id="pGrav" min="10" max="200" value="' + s.gravity + '">') +
-      '<div class="group-title">Tips</div><p class="note">Add a Spawn Point so players know where to start, some Coins to collect, and a Finish Line to win. Press ▶ Play to try it.</p>';
+      '<div class="group-title">Tips</div><p class="note">Add a Spawn Point so players know where to start, some Coins to collect, and a Finish Line to win. Press ▶ Play to try it.</p>' +
+      scriptBox("");
     const set = (key, v) => { pushUndo(); game.settings[key] = v; changed(true); };
     $("pName").onchange = (e) => { game.name = e.target.value.trim() || "My Game"; $("gameName").value = game.name; changed(true); };
     $("pSky").onchange = (e) => { set("sky", e.target.value); world.setSky(e.target.value); };
     $("pWalk").onchange = (e) => set("walk", clamp(e.target.value, 4, 60, 14));
     $("pJump").onchange = (e) => set("jump", clamp(e.target.value, 5, 80, 26));
     $("pGrav").onchange = (e) => set("gravity", clamp(e.target.value, 10, 200, 70));
+    wireScriptBox("");
     return;
   }
   const a = BY_TYPE[o.type];
@@ -334,10 +523,26 @@ function drawProps(numbersOnly) {
     if (kind === "number") html += row(label, '<input type="number" data-b="' + key + '" value="' + v + '">');
     else if (kind === "check") html += row(label, '<input type="checkbox" data-b="' + key + '"' + (v ? " checked" : "") + ">");
     else if (kind === "axis") html += row(label, '<select data-b="' + key + '">' + [["x", "Left / right"], ["z", "Forward / back"], ["y", "Up / down"]].map(([k2, t]) => '<option value="' + k2 + '"' + (k2 === v ? " selected" : "") + ">" + t + "</option>").join("") + "</select>");
+    else if (kind === "target") html += row(label, targetSelect('data-b="' + key + '"', v, o.id, "any"));
+    else if (kind === "how") html += row(label, '<select data-b="' + key + '">' + Object.entries(SWITCH_HOW).map(([k2, t]) => '<option value="' + k2 + '"' + (k2 === v ? " selected" : "") + ">" + t + "</option>").join("") + "</select>");
     else html += row(label, '<input type="text" maxlength="60" data-b="' + key + '" value="' + esc(v) + '">');
   }
-  html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>";
+  if (o.type === "model") html += '<div class="group-title">Imported model</div>' + row("Animation", '<select id="pAnim"><option value="">(none)</option>' + (o.anim ? '<option value="' + esc(o.anim) + '" selected>' + esc(o.anim === "*" ? "First animation" : o.anim) + "</option>" : "") + "</select>") +
+    '<p class="note">' + esc((game.files[o.file] || {}).name || "Missing file") + ". Scripts can play animations too: me.play(\"Walk\")</p>";
+  if (o.type === "picture") html += '<div class="group-title">Picture</div>' + row("Picture", pictureSelect("pPic", o.file));
+  html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>" + scriptBox(o.id);
   box.innerHTML = html;
+  wireScriptBox(o.id);
+  if ($("pAnim")) {
+    animationNames(o.file).then((names) => {
+      const sel = $("pAnim"); if (!sel) return;
+      sel.innerHTML = '<option value="">(none)</option>' + (names.length ? '<option value="*">▶ First animation</option>' : "") + names.map((n) => '<option value="' + esc(n) + '">' + esc(n) + "</option>").join("");
+      sel.value = o.anim || "";
+      if (!names.length) sel.insertAdjacentHTML("beforeend", "<option disabled>This model has no animations</option>");
+    });
+    $("pAnim").onchange = (e) => edit(() => { if (e.target.value) o.anim = e.target.value; else delete o.anim; }, true);
+  }
+  if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
 
   const edit = (fn, look) => { pushUndo(); fn(); if (look) rebuild(o); else placeObject(groups.get(o.id), o); changed(); };
   $("pObjName").onchange = (e) => { pushUndo(); o.name = e.target.value.trim() || a.label; $("propsFor").textContent = o.name; changed(); };
@@ -356,56 +561,172 @@ function drawProps(numbersOnly) {
   $("pSolid").onchange = (e) => { pushUndo(); o.solid = e.target.checked; changed(); };
   $("pVisible").onchange = (e) => { pushUndo(); o.visible = e.target.checked; changed(); };
   if ($("pText")) $("pText").onchange = (e) => edit(() => { o.text = e.target.value.slice(0, 120); }, true);
-  $("pBeh").onchange = (e) => { pushUndo(); o.b = { k: e.target.value }; fillBehavior(o); if (o.b.k === "npc" && o.text == null) o.text = "Hi!"; changed(); drawProps(); };
+  $("pBeh").onchange = (e) => { pushUndo(); o.b = { k: e.target.value }; fillBehavior(o); if (o.b.k === "npc" && o.text == null) o.text = "Hi!"; rebuild(o); changed(); drawProps(); };
   box.querySelectorAll("[data-b]").forEach((inp) => {
     inp.onchange = () => {
       pushUndo();
       const key = inp.dataset.b;
       o.b[key] = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? clamp(inp.value, -1000, 1000, 0) : inp.value.slice(0, 60);
       changed();
+      if (o.b.k === "light") rebuild(o);
     };
   });
+}
+// A <select> of things to point at (Switch targets, button targets). what: any / gui / part / camera
+function targetSelect(attr, v, self, what) {
+  const opt = (id, label) => '<option value="' + id + '"' + (id === v ? " selected" : "") + ">" + esc(label) + "</option>";
+  let html = "<select " + attr + ">" + opt("", "(pick one)");
+  if (what === "any" || what === "part" || what === "camera") {
+    const parts = game.objects.filter((o) => o.id !== self && (what !== "camera" || o.type === "camera"));
+    html += '<optgroup label="' + (what === "camera" ? "Security Cameras" : "Parts") + '">' + parts.map((o) => opt(o.id, BY_TYPE[o.type].icon + " " + o.name)).join("") + "</optgroup>";
+    if (what === "camera" && !parts.length) html += "<option disabled>Add a Security Camera first (Toolbox > Gameplay)</option>";
+  }
+  if (what === "any" || what === "gui") html += '<optgroup label="GUI">' + (game.gui || []).filter((g) => g.id !== self).map((g) => opt(g.id, GUI_KINDS[g.kind].icon + " " + g.name)).join("") + "</optgroup>";
+  return html + "</select>";
+}
+// Imported pictures to choose from (+ import a new one).
+function pictureSelect(id, v) {
+  const pics = myFiles.filter((f) => f.kind === "image");
+  return '<select id="' + id + '"><option value="">(pick a picture)</option>' + pics.map((f) => '<option value="' + f.id + '"' + (f.id === v ? " selected" : "") + ">" + esc(f.name) + "</option>").join("") +
+    (v && !pics.some((f) => f.id === v) ? '<option value="' + v + '" selected>' + esc((game.files[v] || {}).name || "Picture") + "</option>" : "") + '<option value="+">📥 Import a new picture…</option></select>';
+}
+function wirePicture(sel, cur, set) {
+  sel.onchange = () => {
+    if (sel.value === "+") { sel.value = cur || ""; pickFile(async (f) => { const rec = await importIt(f); if (rec && rec.kind === "image") { useFile(rec); set(rec.id); drawProps(); } else if (rec) alert("That's a 3D model. Pick a picture (PNG or JPG)."); }, ".png,.jpg,.jpeg,.webp,.gif"); return; }
+    const f = myFiles.find((x) => x.id === sel.value);
+    if (f) useFile(f);
+    set(sel.value);
+  };
+}
+// The scripts inside a thing, and the ＋ Add Script button (at the bottom of Properties).
+function scriptBox(id) {
+  const list = scriptsOf(id);
+  return '<div class="group-title">Scripts</div>' + list.map((sc) => '<button type="button" class="script-chip" data-open="' + sc.id + '">📜 ' + esc(sc.name) + "</button>").join("") +
+    '<button type="button" class="btn add-script" id="addScriptBtn">＋ Add Script</button>' +
+    '<p class="note">' + (id ? "Scripts make it do anything you want, with JavaScript." : "Game scripts run when the game starts. Use find(\"Name\") to get things.") + "</p>";
+}
+function wireScriptBox(id) {
+  $("addScriptBtn").onclick = () => addScript(id);
+  $("props").querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => editScript(b.dataset.open)));
 }
 function drawGuiProps(box, g) {
   $("propsFor").textContent = g.name;
   const sel = (id, opts, v) => '<select id="' + id + '">' + Object.entries(opts).map(([k, t]) => '<option value="' + k + '"' + (k === v ? " selected" : "") + ">" + esc(t) + "</option>").join("") + "</select>";
-  let html = row("Name", '<input type="text" id="gName" maxlength="40" value="' + esc(g.name) + '">') +
-    row(g.kind === "label" ? "Text" : "Button text", '<input type="text" id="gText" maxlength="40" value="' + esc(g.text) + '">') +
-    '<div class="group-title">Where on the screen</div><div class="spot-grid">' +
-    Object.entries(GUI_SPOTS).map(([k, t]) => '<button type="button" data-spot="' + k + '" title="' + t + '" class="' + (k === g.pos ? "on" : "") + '"></button>').join("") + "</div>" +
-    '<p class="note">' + esc(GUI_SPOTS[g.pos]) + "</p>" +
-    '<div class="group-title">Look</div>' +
-    row("Color", '<input type="color" id="gColor" value="' + g.color + '">') +
-    '<div class="row"><span></span><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div></div>" +
-    row("Size", sel("gSize", GUI_SIZES, g.size));
+  const frames = game.gui.filter((x) => x.kind === "frame" && x.id !== g.id);
+  const sized = g.kind === "frame" || g.kind === "image";
+  let html = row("Name", '<input type="text" id="gName" maxlength="40" value="' + esc(g.name) + '">');
+  if (g.kind !== "image") html += row(g.kind === "label" ? "Text" : g.kind === "frame" ? "Title" : "Button text", '<input type="text" id="gText" maxlength="60" value="' + esc(g.text) + '">');
+  html += row("Shown at start", '<input type="checkbox" id="gVis"' + (g.visible ? " checked" : "") + ' title="Untick to hide it until a button or script opens it">');
+  if (g.kind !== "frame" && frames.length) html += row("Inside panel", '<select id="gParent"><option value="">(none)</option>' + frames.map((f) => '<option value="' + f.id + '"' + (f.id === g.parent ? " selected" : "") + ">" + esc(f.name) + "</option>").join("") + "</select>");
+  html += '<div class="group-title">Where on the screen</div><p class="note">Drag it on the screen to move it' + (sized ? ". Drag its bottom-right corner to change its size." : ".") + "</p>" +
+    row("Across / down", '<div class="xyz two"><input type="number" id="gX" min="0" max="100" step="1" value="' + g.x + '" aria-label="Across %"><input type="number" id="gY" min="0" max="100" step="1" value="' + g.y + '" aria-label="Down %"></div>') +
+    '<div class="row"><label>Quick spots</label><div class="spot-grid">' + Object.entries(GUI_SPOTS).map(([k, t]) => '<button type="button" data-spot="' + k + '" title="' + t[2] + '" class="' + (t[0] === g.x && t[1] === g.y ? "on" : "") + '"></button>').join("") + "</div></div>";
+  if (sized) html += row("Width / height", '<div class="xyz two"><input type="number" id="gW" min="3" max="100" step="1" value="' + g.w + '" aria-label="Width %"><input type="number" id="gH" min="3" max="100" step="1" value="' + g.h + '" aria-label="Height %"></div>');
+  html += '<div class="group-title">Look</div>';
+  if (g.kind === "image") html += row("Picture", pictureSelect("gFile", g.file));
+  else html += row("Color", '<input type="color" id="gColor" value="' + g.color + '">') +
+    '<div class="row"><span></span><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div></div>";
+  if (!sized) html += row("Size", sel("gSize", GUI_SIZES, g.size));
+  if (g.kind === "frame") html += row("✕ close button", '<input type="checkbox" id="gClose"' + (g.close ? " checked" : "") + ">");
   if (g.kind === "button") {
     html += '<div class="group-title">When clicked</div>' + row("Does", sel("gAction", BUTTON_ACTIONS, g.action));
     if (g.action === "message") html += row("Message", '<input type="text" id="gMsg" maxlength="80" value="' + esc(g.message) + '">');
+    if (NEEDS_TARGET[g.action]) html += row(NEEDS_TARGET[g.action], targetSelect('id="gTarget"', g.target, g.id, g.action));
+    if (g.action === "gui") html += '<p class="note">Tip: make a Panel, untick "Shown at start", and this button opens it!</p>';
   }
   if (g.kind === "devmenu") {
     html += '<div class="group-title">Developer menu</div>' + row("Code", '<input type="text" id="gCode" maxlength="12" value="' + esc(g.code) + '">') +
       '<p class="note">In Play, this button asks for the code. The right code opens the dev menu: fly, super speed, super jump, no lava, teleport to the finish and collect every coin. Anyone who knows the code can use it, so keep it secret!</p>';
   }
-  html += '<div class="group-title">GUI</div><p class="note">' + GUI_KINDS[g.kind].icon + " " + esc(GUI_KINDS[g.kind].label) + " · shows on the screen in Play</p>";
+  html += scriptBox(g.id);
   box.innerHTML = html;
+  wireScriptBox(g.id);
   const set = (fn, redraw) => { pushUndo(); fn(); changed(); drawGui(); if (redraw) drawProps(); };
   $("gName").onchange = (e) => set(() => { g.name = e.target.value.trim() || GUI_KINDS[g.kind].label; $("propsFor").textContent = g.name; });
-  $("gText").oninput = (e) => { g.text = e.target.value.slice(0, 40); drawGui(); };
-  $("gText").onchange = (e) => set(() => { g.text = e.target.value.slice(0, 40); });
-  box.querySelectorAll("[data-spot]").forEach((b) => (b.onclick = () => set(() => { g.pos = b.dataset.spot; }, true)));
-  $("gColor").onchange = (e) => set(() => { g.color = e.target.value; });
-  box.querySelectorAll(".swatches button").forEach((b) => (b.onclick = () => { set(() => { g.color = b.dataset.c; }); $("gColor").value = b.dataset.c; }));
-  $("gSize").onchange = (e) => set(() => { g.size = e.target.value; });
+  if ($("gText")) { $("gText").oninput = (e) => { g.text = e.target.value.slice(0, 60); drawGui(); }; $("gText").onchange = (e) => set(() => { g.text = e.target.value.slice(0, 60); }); }
+  $("gVis").onchange = (e) => set(() => { g.visible = e.target.checked; });
+  if ($("gParent")) $("gParent").onchange = (e) => set(() => { g.parent = e.target.value; });
+  const num = (id, key, lo, hi) => { $(id).onchange = (e) => { const v = clamp(e.target.value, lo, hi, g[key]); set(() => { g[key] = Math.round(v * 10) / 10; }, true); }; };
+  num("gX", "x", 0, 100); num("gY", "y", 0, 100);
+  if (sized) { num("gW", "w", 3, 100); num("gH", "h", 3, 100); }
+  box.querySelectorAll("[data-spot]").forEach((b) => (b.onclick = () => { const t = GUI_SPOTS[b.dataset.spot]; moveGui(g, t[0], t[1]); }));
+  if ($("gColor")) {
+    $("gColor").onchange = (e) => set(() => { g.color = e.target.value; });
+    box.querySelectorAll(".swatches button").forEach((b) => (b.onclick = () => { set(() => { g.color = b.dataset.c; }); $("gColor").value = b.dataset.c; }));
+  }
+  if ($("gFile")) wirePicture($("gFile"), g.file, (id) => set(() => { g.file = id; }));
+  if ($("gSize")) $("gSize").onchange = (e) => set(() => { g.size = e.target.value; });
+  if ($("gClose")) $("gClose").onchange = (e) => set(() => { g.close = e.target.checked; });
   if ($("gAction")) $("gAction").onchange = (e) => set(() => { g.action = e.target.value; }, true);
+  if ($("gTarget")) $("gTarget").onchange = (e) => set(() => { g.target = e.target.value; });
   if ($("gMsg")) $("gMsg").onchange = (e) => set(() => { g.message = e.target.value.slice(0, 80); });
   if ($("gCode")) $("gCode").onchange = (e) => { const v = e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 12); if (!v) { e.target.value = g.code; return; } set(() => { g.code = v; }); e.target.value = v; };
 }
+// Move a GUI thing (a panel takes what's inside it along).
+function moveGui(g, x, y) {
+  pushUndo();
+  const dx = x - g.x, dy = y - g.y;
+  g.x = x; g.y = y;
+  if (g.kind === "frame") for (const k of game.gui.filter((k2) => k2.parent === g.id)) { k.x = Math.round(Math.min(100, Math.max(0, k.x + dx)) * 10) / 10; k.y = Math.round(Math.min(100, Math.max(0, k.y + dy)) * 10) / 10; }
+  changed(); drawGui(); drawProps();
+}
+
+// Drag GUI on the screen: hold and move it anywhere; a panel's / picture's corner handle resizes it.
+let gdrag = null;
+const guiLayer = $("guiLayer");
+guiLayer.addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".gui-item");
+  if (!el || e.button !== 0 || playing) return;
+  e.preventDefault(); e.stopPropagation();
+  const g = guiItem(el.dataset.id);
+  if (!g) return;
+  const kids = g.kind === "frame" ? game.gui.filter((k) => k.parent === g.id) : [];
+  gdrag = { g, el, resize: !!e.target.dataset.handle, x0: e.clientX, y0: e.clientY, rect: guiLayer.getBoundingClientRect(), moved: false,
+    kids: kids.map((k) => ({ k, el: guiLayer.querySelector('[data-id="' + k.id + '"]') })) };
+  guiLayer.setPointerCapture(e.pointerId);
+});
+const r1 = (v) => Math.round(v * 10) / 10;
+function dragValues(e) {
+  const d = gdrag, dx = ((e.clientX - d.x0) / d.rect.width) * 100, dy = ((e.clientY - d.y0) / d.rect.height) * 100, g = d.g;
+  if (d.resize) {
+    const w = Math.min(100, Math.max(3, g.w + dx)), h = Math.min(100, Math.max(3, g.h + dy));
+    return { x: r1(g.x + (w - g.w) / 2), y: r1(g.y + (h - g.h) / 2), w: r1(w), h: r1(h), dx: 0, dy: 0 };
+  }
+  const x = r1(Math.min(100, Math.max(0, g.x + dx))), y = r1(Math.min(100, Math.max(0, g.y + dy)));
+  return { x, y, w: g.w, h: g.h, dx: x - g.x, dy: y - g.y };
+}
+guiLayer.addEventListener("pointermove", (e) => {
+  if (!gdrag) return;
+  if (!gdrag.moved && Math.hypot(e.clientX - gdrag.x0, e.clientY - gdrag.y0) < 4) return;
+  gdrag.moved = true;
+  const v = dragValues(e);
+  gdrag.el.style.left = v.x + "%"; gdrag.el.style.top = v.y + "%";
+  if (gdrag.resize) { gdrag.el.style.width = v.w + "%"; gdrag.el.style.height = v.h + "%"; }
+  for (const { k, el } of gdrag.kids) if (el) { el.style.left = Math.min(100, Math.max(0, k.x + v.dx)) + "%"; el.style.top = Math.min(100, Math.max(0, k.y + v.dy)) + "%"; }
+});
+guiLayer.addEventListener("pointerup", (e) => {
+  if (!gdrag) return;
+  const d = gdrag, v = d.moved ? dragValues(e) : null;
+  gdrag = null;
+  if (!d.moved) { select(d.g.id); return; }
+  if (d.resize) { pushUndo(); Object.assign(d.g, { x: v.x, y: v.y, w: v.w, h: v.h }); changed(); select(d.g.id); }
+  else { select(d.g.id); moveGui(d.g, v.x, v.y); }
+});
+guiLayer.addEventListener("contextmenu", (e) => {
+  const el = e.target.closest(".gui-item");
+  if (!el) return;
+  e.preventDefault();
+  select(el.dataset.id); thingMenu(el.dataset.id, e.clientX, e.clientY);
+});
+$("btnGuiVis").onclick = () => { const off = guiLayer.classList.toggle("gui-hide"); $("btnGuiVis").classList.toggle("off", off); $("btnGuiVis").title = off ? "Show the GUI" : "Hide the GUI while you build"; };
 function addGui(kind) {
   if (!game) return;
   game.gui = game.gui || [];
-  if (game.gui.length >= 20) { alert("You can have up to 20 GUI things."); return; }
+  if (game.gui.length >= MAX_GUI) { alert("You can have up to " + MAX_GUI + " GUI things."); return; }
   pushUndo();
   const g = newGui(kind, game.gui);
+  const panel = guiItem(selected);  // (adding while a panel is selected puts it inside the panel)
+  if (panel && panel.kind === "frame" && kind !== "frame") { g.parent = panel.id; g.x = panel.x; g.y = panel.y; }
   game.gui.push(g);
   select(g.id);
   changed();
@@ -420,17 +741,22 @@ function drawAddMenu() {
     '<div class="menu-sec">Parts</div>' + part.map((a) => item('data-add="' + a.type + '"', a.icon, a.label)).join("") +
     '<div class="menu-sec">Quick assets</div>' + QUICK.map((t) => item('data-add="' + t + '"', BY_TYPE[t].icon, BY_TYPE[t].label)).join("") +
     '<div class="menu-sec">GUI (on the screen)</div>' + Object.entries(GUI_KINDS).map(([k, v]) => item('data-gui="' + k + '"', v.icon, "Add " + v.label)).join("") +
+    '<div class="menu-sec">Scripts</div>' + item('data-script="1"', "📜", "Add Script (to what's selected)") +
+    '<div class="menu-sec">From your computer</div>' + item('data-import="1"', "📥", "Import a 3D model or picture…") +
     '<div class="menu-sec"></div>' + item('data-more="1"', "🧰", "All assets (Toolbox)");
   $("addMenu").querySelectorAll("button").forEach((b) => (b.onclick = () => {
     closeAddMenu();
     if (b.dataset.add) addAsset(b.dataset.add);
     else if (b.dataset.gui) addGui(b.dataset.gui);
+    else if (b.dataset.script) addScript(selected || "");
+    else if (b.dataset.import) pickFile((f) => importAndPlace(f));
     else { category = "All"; drawCats(); $("assetSearch").value = ""; drawAssets(); $("assetSearch").focus(); }
   }));
 }
 function closeAddMenu() { $("addMenu").classList.add("hidden"); $("btnAdd").classList.remove("on"); }
 $("btnAdd").onclick = (e) => { e.stopPropagation(); const open = $("addMenu").classList.toggle("hidden"); $("btnAdd").classList.toggle("on", !open); };
 document.addEventListener("click", (e) => { if (!$("addMenu").contains(e.target)) closeAddMenu(); });
+document.addEventListener("contextmenu", (e) => { if (e.target.closest && e.target.closest(".bar, .toolbox")) e.preventDefault(); });
 
 function clamp(v, lo, hi, d) { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; }
 
@@ -459,7 +785,10 @@ function openGames(first) {
   if ($("mClose")) $("mClose").onclick = closeModal;
 }
 function openGame(g) {
+  closeScript();
   game = sanitize(g);
+  useFiles(game.files);
+  loadPictures(game.files).then(() => { drawGui(); for (const o of game.objects) if (o.type === "picture") rebuild(o); });
   undoStack = []; redoStack = [];
   selected = null;
   $("gameName").value = game.name;
@@ -477,13 +806,15 @@ $("gameName").onchange = (e) => { if (!game) return; game.name = e.target.value.
 // ---------------------------------------------------------------- Play test
 function play() {
   if (!game || playing) return;
+  flushScript(); closeScript(); hideMenu();
   saveNow();
   transform.detach(); selBox.visible = false;
+  clearOutput();
   const camSave = { p: camera.position.clone(), t: orbit.target.clone() };
   orbit.enabled = false;
   document.body.classList.add("playing");
   playing = startPlay(world, sanitize(JSON.parse(JSON.stringify(game))), {
-    onStop() {
+    onStop(again) {
       playing = null;
       document.body.classList.remove("playing");
       orbit.enabled = true;
@@ -491,9 +822,27 @@ function play() {
       world.setSky(game.settings.sky);
       rebuildAll();
       canvas.focus();
+      if (again) play();
     },
+    output,
   });
 }
+
+// ---------------------------------------------------------------- the Output box (script errors and print())
+function clearOutput() { $("outList").innerHTML = ""; $("output").classList.add("hidden"); lastErr.clear(); }
+function output(kind, text) {
+  const list = $("outList");
+  if (list.childElementCount > 200) list.firstChild.remove();
+  const m = /^📜 (.+?)(?: \(line (\d+)\))?: /.exec(text);
+  if (m && kind === "err" && m[2]) lastErr.set(m[1], +m[2]);
+  list.insertAdjacentHTML("beforeend", '<div class="out-' + kind + '">' + esc(text) + "</div>");
+  list.scrollTop = list.scrollHeight;
+  $("output").classList.remove("hidden");
+  const div = list.lastChild;
+  if (m) { div.title = "Click to open this script"; div.onclick = () => { const sc = game.scripts.find((x) => x.name === m[1]); if (sc) { if (playing) playing.stop(); editScript(sc.id); } }; }
+}
+$("outClose").onclick = () => $("output").classList.add("hidden");
+$("outClear").onclick = () => { $("outList").innerHTML = ""; };
 
 // ---------------------------------------------------------------- toolbar + keys
 document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
@@ -526,6 +875,7 @@ window.addEventListener("keydown", (e) => {
   if (ctrl) return;
   if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); remove(); return; }
   if (e.key === "Escape" && !$("addMenu").classList.contains("hidden")) { closeAddMenu(); return; }
+  if (e.key === "Escape" && !$("ctxMenu").classList.contains("hidden")) { hideMenu(); return; }
   if (e.key === "F5") { e.preventDefault(); play(); return; }
   if (k === "1") setTool("select"); else if (k === "2") setTool("translate"); else if (k === "3") setTool("rotate"); else if (k === "4") setTool("scale");
   else if (k === "f") focusSelected();
@@ -545,6 +895,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   world.resize();
   if (playing) { playing.update(dt); renderer.render(scene, camera); return; }
+  updateMixers(dt);
   if (keys.size && !typing()) { // fly the camera
     camera.getWorldDirection(fwd); right.crossVectors(fwd, camera.up).normalize();
     move.set(0, 0, 0);
@@ -570,6 +921,7 @@ function frame() {
 
 // ---------------------------------------------------------------- start
 drawCats(); drawAssets(); drawAddMenu(); applySnap(); updateButtons();
+refreshFiles().catch(() => {});
 let last = null;
 try { last = localStorage.getItem("gv_studio_last"); } catch {}
 const g0 = last && loadGame(last);
@@ -577,5 +929,5 @@ if (g0) openGame(g0);
 else { openGame(makeGame("baseplate")); dirty = false; openGames(true); }
 frame();
 // (handy for testing in the console: GVStudio.tick(60) runs 60 frames even when the tab is in the background)
-window.GVStudio = { get game() { return game; }, get playing() { return playing; }, addAsset, select, play, world,
+window.GVStudio = { get game() { return game; }, get playing() { return playing; }, addAsset, select, play, world, addScript, addGui, editScript, placeFile, get myFiles() { return myFiles; }, refreshFiles,
   tick(n, dt) { for (let i = 0; i < (n || 1) && playing; i++) playing.update(dt || 1 / 60); world.resize(); renderer.render(scene, camera); } };

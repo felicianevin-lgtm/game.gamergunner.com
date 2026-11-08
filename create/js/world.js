@@ -1,6 +1,33 @@
 // The 3D world both the editor and Play use: renderer, sky, sun, and turning a game object (game.js) into meshes.
 import * as THREE from "../vendor/three.module.js";
 import { BY_TYPE, gridMaterialFor, material } from "./assets.js";
+import { loadModel, modelCopy, pictureTexture, fileType } from "./files.js";
+
+// Imported models load in the background: a see-through box stands in until the model is ready (red if it's missing).
+function addModel(inner, o) {
+  const ph = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0x2f7df6, wireframe: true }));
+  ph.position.y = 0.5;
+  inner.add(ph);
+  if (!o.file) { ph.material.color.set(0xff3030); return; }
+  loadModel(o.file, fileType(o.file)).then((info) => {
+    inner.remove(ph);
+    const m = modelCopy(info, o.anim);
+    inner.add(m);
+    inner.userData.copy = m;
+  }).catch(() => ph.material.color.set(0xff3030));
+}
+// Imported pictures: shown on the front and back of a thin board.
+function addPicture(inner, o) {
+  if (!o.file) return;
+  pictureTexture(o.file, (tex) => {
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+    for (const z of [-0.11, 0.11]) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(4, 3), mat);
+      p.position.set(0, 1.5, z); if (z < 0) p.rotation.y = Math.PI;
+      inner.add(p);
+    }
+  });
+}
 
 const SKY = {
   day: { top: "#5aa9ff", fog: "#bfe3ff", sun: "#fff4dc", sunI: 2.4, hemi: 1.0, ground: "#4a6b3a" },
@@ -87,6 +114,13 @@ export function buildObject(o) {
   inner.scale.set(o.size[0] / a.base[0], o.size[1] / a.base[1], o.size[2] / a.base[2]);
   const g = new THREE.Group();
   g.add(inner);
+  if (inner.userData.model) addModel(inner, o);
+  if (inner.userData.picture) addPicture(inner, o);
+  if (o.b && o.b.k === "light") { // (a glowing part lights up what's around it)
+    const l = new THREE.PointLight(o.color, Math.max(0, Number(o.b.power) || 0) * 6, Math.max(1, Number(o.b.range) || 30), 1);
+    l.position.set(0, o.size[1] / 2, 0);
+    g.add(l);
+  }
   g.userData.id = o.id;
   g.userData.inner = inner;
   placeObject(g, o);

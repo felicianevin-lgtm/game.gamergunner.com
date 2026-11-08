@@ -2,13 +2,16 @@
 // relay (publish.js) and remembers the published id in `pub`:
 //   {v: 1, id, name, created, updated, pub?, settings: {sky, gravity, walk, jump}, objects: [obj, ...]}
 //   obj = {id, type (assets.js), name, pos: [x, y, z] (bottom center), rot: [x, y, z] degrees, size: [x, y, z],
-//          color, mat, solid, visible, b: {k: behavior, ...settings}, text}
+//          color, mat, solid, visible, b: {k: behavior, ...settings}, text, file + anim (imported models / pictures)}
+//   gui = [item] (gui.js), files = {id: {name, type, sid?}} (imported files, files.js),
+//   scripts = [{id, name, on: the object or GUI id it's inside ("" = the whole game), code: JavaScript}] (scripts.js)
 // Storage: "gv_studio_list" = [{id, name, updated}] newest first, "gv_studio_game_<id>" = the game.
 import { BY_TYPE, BEHAVIORS } from "./assets.js";
 import { sanitizeGui } from "./gui.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space" };
 export const DEFAULT_SETTINGS = { sky: "day", gravity: 70, walk: 14, jump: 26 };
+export const MAX_SCRIPTS = 40, MAX_SCRIPT_CHARS = 20000;
 const LIST_KEY = "gv_studio_list", GAME_KEY = "gv_studio_game_";
 
 export function uid() { return Math.random().toString(36).slice(2, 10); }
@@ -38,7 +41,19 @@ export function sanitize(g) {
     settings: { ...DEFAULT_SETTINGS }, objects: [] };
   if (/^[a-z0-9]{8,16}$/.test(g.pub || "")) out.pub = g.pub; // (published: the game's id on the GunnerVerse home page)
   if (g.desc) out.desc = String(g.desc).slice(0, 300);
-  out.gui = sanitizeGui(g.gui); // (screen GUI: labels, buttons, the dev menu button)
+  out.gui = sanitizeGui(g.gui); // (screen GUI: labels, buttons, panels, pictures, the dev menu button)
+  out.files = {};
+  for (const [id, f] of Object.entries(g.files && typeof g.files === "object" ? g.files : {}).slice(0, 40)) {
+    if (!/^[a-z0-9]{6,40}$/i.test(id) || !f || !/^(png|jpeg|glb|gltf|fbx|obj)$/.test(f.type)) continue;
+    out.files[id] = { name: String(f.name || "Imported").slice(0, 30), type: f.type };
+    if (/^[a-z0-9]{8,32}$/.test(f.sid || "")) out.files[id].sid = f.sid;
+  }
+  out.scripts = [];
+  for (const sc of Array.isArray(g.scripts) ? g.scripts.slice(0, MAX_SCRIPTS) : []) {
+    if (!sc || typeof sc.code !== "string") continue;
+    out.scripts.push({ id: String(sc.id || uid()).replace(/[^a-z0-9]/gi, "").slice(0, 16) || uid(), name: String(sc.name || "Script").slice(0, 40),
+      on: /^[a-z0-9]{1,20}$/i.test(sc.on || "") ? sc.on : "", code: sc.code.slice(0, MAX_SCRIPT_CHARS) });
+  }
   const s = g.settings || {};
   out.settings.sky = SKIES[s.sky] ? s.sky : "day";
   out.settings.gravity = num(s.gravity, 10, 200, 70); out.settings.walk = num(s.walk, 4, 60, 14); out.settings.jump = num(s.jump, 5, 80, 26);
@@ -60,6 +75,8 @@ export function sanitize(g) {
         c.b[key] = kind === "number" ? num(v, -1000, 1000, dflt) : kind === "check" ? !!v : kind === "axis" ? (["x", "y", "z"].includes(v) ? v : dflt) : String(v == null ? dflt : v).slice(0, 80);
       }
     } else c.b = { k: "none" };
+    if (/^[a-z0-9]{6,40}$/i.test(o.file || "")) c.file = o.file;
+    if (typeof o.anim === "string" && o.anim) c.anim = o.anim.slice(0, 60);
     if (typeof o.text === "string" || BY_TYPE[o.type].text) c.text = String(o.text == null ? BY_TYPE[o.type].text || "" : o.text).slice(0, 120);
     out.objects.push(c);
   }
@@ -120,5 +137,5 @@ export const TEMPLATES = {
 };
 export function makeGame(templateKey, name) {
   const t = TEMPLATES[templateKey] || TEMPLATES.baseplate;
-  return { v: 1, id: uid(), name: name || "My " + t.label + " Game", created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS }, objects: t.make(), gui: [] };
+  return { v: 1, id: uid(), name: name || "My " + t.label + " Game", created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS }, objects: t.make(), gui: [], files: {}, scripts: [] };
 }
