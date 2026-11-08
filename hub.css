@@ -236,3 +236,7 @@ h2.row-title small { font: 400 14px "Inter", sans-serif; color: var(--dim); }
 .av-more { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; border: 2px dashed var(--edge); cursor: pointer; position: relative; overflow: hidden; }
 .av-more input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 @media (max-width: 760px) { .av-wrap { grid-template-columns: 1fr; } .av-stage { position: static; max-width: 340px; margin: 0 auto; } }
+
+/* ---------- passwords ---------- */
+.account { display: flex; gap: 8px; align-items: center; }
+.pw-tip { border: 1px solid var(--gold); border-radius: 10px; padding: 10px 12px; color: var(--cream); background: rgba(255, 197, 49, .08); }

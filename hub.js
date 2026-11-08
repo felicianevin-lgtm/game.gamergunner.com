@@ -49,6 +49,98 @@
     try { if (a) localStorage.setItem("gg_account", JSON.stringify({ u: a.u, t: a.t, d: a.d || "" })); else localStorage.removeItem("gg_account"); } catch (e) {}
     drawAccount();
   }
+  // ---------------------------------------------------------------- passwords (relay index.js /login, /setpass)
+  // The password becomes a 64-character key HERE (PBKDF2, salted with the username), and only the key is sent.
+  var PW_MIN = 6;
+  function passKey(u, p) {
+    var enc = new TextEncoder();
+    return crypto.subtle.importKey("raw", enc.encode(p), "PBKDF2", false, ["deriveBits"]).then(function (k) {
+      return crypto.subtle.deriveBits({ name: "PBKDF2", salt: enc.encode("gunnerverse-pw:" + u.toLowerCase()), iterations: 150000, hash: "SHA-256" }, k, 256);
+    }).then(function (b) { return Array.prototype.map.call(new Uint8Array(b), function (x) { return ("0" + x.toString(16)).slice(-2); }).join(""); });
+  }
+  function passProblem(u, p, p2) {
+    if (p.length < PW_MIN) return "Passwords need at least " + PW_MIN + " letters or numbers.";
+    if (p.length > 64) return "That password is too long.";
+    if (p.toLowerCase() === u.toLowerCase()) return "Your password can't be your username.";
+    if (p2 != null && p !== p2) return "The two passwords don't match.";
+    return "";
+  }
+  var hasPass = false;
+  // Log out: the game (PlayerIdentity.cs) sees {"out":1} and lets go of the account too.
+  function logOut() {
+    try { localStorage.setItem("gg_account", JSON.stringify({ out: 1 })); localStorage.removeItem("gv_avatar"); } catch (e) {}
+    me = null; social = null; liked = {}; banned = false; hasPass = false;
+    drawAccount(); drawSide(); location.hash = "#/";
+    route();
+  }
+  function openLogin(back) {
+    openModal('<h2 id="modalTitle">Log in</h2><p>Use the username and password you made.</p><form id="liForm">' +
+      '<label class="field"><span>Username</span><input id="liUser" maxlength="17" autocomplete="username" autocapitalize="off" spellcheck="false"></label>' +
+      '<label class="field"><span>Password</span><input id="liPw" type="password" maxlength="64" autocomplete="current-password"></label>' +
+      '<p class="err" id="liErr" role="alert"></p>' +
+      '<div class="modal-actions"><button type="button" class="btn ghost" id="liCancel">Cancel</button><button class="btn" id="liGo">Log in</button></div></form>' +
+      '<p style="margin:14px 0 0">New here? <a href="#" id="liNew">Make an account</a>. Forgot your password? Ask a grown-up to contact Gamer Gunner\'s team.</p>');
+    document.getElementById("liCancel").onclick = closeModal;
+    document.getElementById("liNew").onclick = function (e) { e.preventDefault(); openSignup(); };
+    document.getElementById("liForm").onsubmit = function (e) {
+      e.preventDefault();
+      var u = document.getElementById("liUser").value.trim().replace(/^@/, ""), p = document.getElementById("liPw").value;
+      var err = document.getElementById("liErr"), go = document.getElementById("liGo");
+      if (!USER_RE.test(u)) { err.textContent = "Type your username (3 to 16 letters, numbers or _)."; return; }
+      if (!p) { err.textContent = "Type your password."; return; }
+      go.disabled = true; go.textContent = "Checking…"; err.textContent = "";
+      passKey(u, p).then(function (pw) { return api("/login", { u: u, pw: pw }); }).then(function (r) {
+        go.disabled = false; go.textContent = "Log in";
+        if (r.ok) {
+          try { localStorage.removeItem("gv_avatar"); } catch (x) {} // (your avatar comes from your account)
+          hasPass = true;
+          saveAccount({ u: r.u, t: r.t, d: r.u }); closeModal();
+          if (back) { location.href = withRelay("play/"); return; }
+          checkAccount(); location.hash = "#/me"; route();
+          return;
+        }
+        err.textContent = {
+          wrong: "That username or password isn't right.", nopass: "That account doesn't have a password yet. Open it on the device where you made it and add one in Profile.",
+          locked: "Too many wrong tries. Wait 15 minutes and try again.", banned: "This account is banned.", slowdown: "Too many tries. Wait a minute.",
+        }[r.e] || "Something went wrong. Try again.";
+      }).catch(function () { go.disabled = false; go.textContent = "Log in"; err.textContent = "Couldn't reach GunnerVerse. Check your internet and try again."; });
+    };
+    document.getElementById("liUser").focus();
+  }
+  function openSetPassword() {
+    var changing = hasPass;
+    openModal('<h2 id="modalTitle">' + (changing ? "Change your password" : "Add a password") + "</h2>" +
+      "<p>" + (changing ? "Type your old password, then the new one." : "With a password you can log in to @" + esc(me.u) + " on any computer, tablet or phone.") + '</p><form id="pwForm">' +
+      (changing ? '<label class="field"><span>Old password</span><input id="pwOld" type="password" maxlength="64" autocomplete="current-password"></label>' : "") +
+      '<label class="field"><span>New password</span><input id="pwNew" type="password" maxlength="64" autocomplete="new-password"><small>At least ' + PW_MIN + " letters or numbers. Don't use one you use anywhere else.</small></label>" +
+      '<label class="field"><span>Type it again</span><input id="pwNew2" type="password" maxlength="64" autocomplete="new-password"></label>' +
+      '<p class="tip">Write it down somewhere safe, or ask a grown-up to remember it. Never tell it to anyone in a game!</p>' +
+      '<p class="err" id="pwErr" role="alert"></p>' +
+      '<div class="modal-actions"><button type="button" class="btn ghost" id="pwCancel">Cancel</button><button class="btn" id="pwGo">Save password</button></div></form>');
+    document.getElementById("pwCancel").onclick = closeModal;
+    document.getElementById("pwForm").onsubmit = function (e) {
+      e.preventDefault();
+      var p = document.getElementById("pwNew").value, p2 = document.getElementById("pwNew2").value, old = changing ? document.getElementById("pwOld").value : "";
+      var err = document.getElementById("pwErr"), go = document.getElementById("pwGo");
+      var bad = passProblem(me.u, p, p2);
+      if (changing && !old) bad = "Type your old password.";
+      if (bad) { err.textContent = bad; return; }
+      go.disabled = true; go.textContent = "Saving…"; err.textContent = "";
+      Promise.all([passKey(me.u, p), changing ? passKey(me.u, old) : ""]).then(function (k) { return api("/setpass", { t: me.t, pw: k[0], old: k[1] || undefined }); }).then(function (r) {
+        go.disabled = false; go.textContent = "Save password";
+        if (r.ok) { hasPass = true; closeModal(); openModal('<h2 id="modalTitle">🔒 Password saved!</h2><p>Now you can log in to @' + esc(me.u) + ' anywhere: press <b>Log in</b> at the top and type your username and password.</p><div class="modal-actions"><button class="btn" id="pwOk">OK</button></div>'); document.getElementById("pwOk").onclick = closeModal; route(); return; }
+        err.textContent = { wrongold: "Your old password isn't right.", needold: "Type your old password.", locked: "Too many wrong tries. Wait 15 minutes.", signin: "Your account wasn't found.", slowdown: "Too many tries. Wait a minute." }[r.e] || "Something went wrong. Try again.";
+      }).catch(function () { go.disabled = false; go.textContent = "Save password"; err.textContent = "Couldn't reach GunnerVerse. Check your internet."; });
+    };
+  }
+  function confirmLogOut() {
+    openModal('<h2 id="modalTitle">Log out?</h2>' + (hasPass ? "<p>You can log back in any time with your username and password.</p>" :
+      '<p class="err">⚠ @' + esc(me.u) + " doesn't have a password yet. If you log out, you can't get back into it! Add a password first.</p>") +
+      '<div class="modal-actions"><button class="btn ghost" id="loNo">Cancel</button>' + (hasPass ? "" : '<button class="btn" id="loPw">Add a password</button>') + '<button class="btn danger" id="loYes">Log out</button></div>');
+    document.getElementById("loNo").onclick = closeModal;
+    if (document.getElementById("loPw")) document.getElementById("loPw").onclick = openSetPassword;
+    document.getElementById("loYes").onclick = function () { closeModal(); logOut(); };
+  }
   function myColor() {
     var c = -1;
     try { c = parseInt(localStorage.getItem("gg_hub_color"), 10); } catch (e) {}
@@ -81,8 +173,9 @@
   // ---------------------------------------------------------------- account (top right)
   function drawAccount() {
     if (!me) {
-      accountBox.innerHTML = '<button class="btn" id="signupBtn" type="button">Sign up</button>';
+      accountBox.innerHTML = '<button class="btn ghost" id="loginBtn" type="button">Log in</button><button class="btn" id="signupBtn" type="button">Sign up</button>';
       document.getElementById("signupBtn").onclick = function () { openSignup(); };
+      document.getElementById("loginBtn").onclick = function () { openLogin(); };
       return;
     }
     accountBox.innerHTML = '<button class="me-chip" id="meChip" type="button" aria-label="Your account">' + avatar(shownName(), myColor(), false, myAvatar()) +
@@ -95,7 +188,7 @@
     api("/hub/me", { t: me.t }).then(function (r) {
       if (r.ok) {
         liked = {}; (r.liked || []).forEach(function (id) { liked[id] = 1; });
-        banned = !!r.b;
+        banned = !!r.b; hasPass = !!r.p;
         if (r.u && r.u !== me.u) saveAccount({ u: r.u, t: me.t, d: me.d });
         loadSocial();
         route();
@@ -125,21 +218,27 @@
       "<small>3 to 16 letters, numbers or _. You can't change it later. Don't use your real name.</small></label>" +
       '<label class="field"><span>Display name</span><input id="suDisplay" maxlength="16" autocomplete="off" placeholder="what people see">' +
       "<small>You can change this any time.</small></label>" +
+      '<label class="field"><span>Password</span><input id="suPw" type="password" maxlength="64" autocomplete="new-password">' +
+      "<small>At least " + PW_MIN + " letters or numbers, so you can log in on other devices. Write it down or ask a grown-up to remember it.</small></label>" +
+      '<label class="field"><span>Type the password again</span><input id="suPw2" type="password" maxlength="64" autocomplete="new-password"></label>' +
       '<p class="err" id="suErr" role="alert"></p>' +
       '<div class="modal-actions"><button type="button" class="btn ghost" id="suCancel">Cancel</button><button class="btn" id="suGo">Create account</button></div>' +
       "</form>" +
-      '<p style="margin:14px 0 0">Already playing GunnerVerse on this device? Your username from the game shows up here by itself after you open the game once.</p>');
+      '<p style="margin:14px 0 0">Already have an account? <a href="#" id="suLogin">Log in</a>.</p>');
     document.getElementById("suCancel").onclick = closeModal;
+    document.getElementById("suLogin").onclick = function (e) { e.preventDefault(); openLogin(); };
     document.getElementById("signupForm").onsubmit = function (e) {
       e.preventDefault();
       var u = document.getElementById("suUser").value.trim(), d = document.getElementById("suDisplay").value.trim();
       var err = document.getElementById("suErr"), go = document.getElementById("suGo");
       if (!USER_RE.test(u)) { err.textContent = "Usernames are 3 to 16 letters, numbers or _ (no spaces)."; return; }
       if (d && !DISPLAY_RE.test(d)) { err.textContent = "Display names can use letters, numbers, spaces, ' and -."; return; }
+      var p = document.getElementById("suPw").value, bad = passProblem(u, p, document.getElementById("suPw2").value);
+      if (bad) { err.textContent = bad; return; }
       err.textContent = ""; go.disabled = true; go.textContent = "Checking…";
-      api("/claim", { u: u }).then(function (r) {
+      passKey(u, p).then(function (pw) { return api("/claim", { u: u, pw: pw }); }).then(function (r) {
         go.disabled = false; go.textContent = "Create account";
-        if (r.ok) { saveAccount({ u: r.u, t: r.t, d: d || r.u }); closeModal(); checkAccount(); route(); return; }
+        if (r.ok) { try { localStorage.removeItem("gv_avatar"); } catch (x) {} hasPass = !!r.p; saveAccount({ u: r.u, t: r.t, d: d || r.u }); closeModal(); checkAccount(); route(); return; }
         err.textContent = {
           taken: "Somebody already has that username. Try another one!",
           bad: "Usernames are 3 to 16 letters, numbers or _ (no spaces).",
@@ -185,6 +284,7 @@
     return api("/social/state", { t: me.t, d: me.d || "" }).then(function (r) {
       if (r.ok) {
         social = r;
+        if (r.me && r.me.d && me && me.d !== r.me.d && DISPLAY_RE.test(r.me.d)) saveAccount({ u: me.u, t: me.t, d: r.me.d });
         var mine = r.me && r.me.av;
         if (mine && !hasOwnAvatar()) { try { localStorage.setItem("gv_avatar", JSON.stringify(mine)); } catch (e) {} drawAccount(); } // (made on another device)
         else if (!mine && hasOwnAvatar() && AVM) sendAvatar(AVM.loadAvatar());
@@ -486,20 +586,25 @@
   function pageMe() {
     setNav("me");
     if (!me) {
-      main.innerHTML = '<div class="soon-page"><div class="big-icon">◉</div><h1>Your profile</h1><p>Make a username to get a profile, like games, add friends and publish your own games.</p><button class="btn" id="meSignup" type="button">Sign up</button></div>';
+      main.innerHTML = '<div class="soon-page"><div class="big-icon">◉</div><h1>Your profile</h1><p>Make a username to get a profile, like games, add friends and publish your own games.</p><div class="actions" style="justify-content:center"><button class="btn" id="meSignup" type="button">Sign up</button><button class="btn ghost" id="meLogin" type="button">Log in</button></div></div>';
       document.getElementById("meSignup").onclick = function () { openSignup(); };
+      document.getElementById("meLogin").onclick = function () { openLogin(); };
       return;
     }
     var mine = games.filter(function (g) { return liked[g.id]; });
     var nf = social ? social.friends.length : 0;
     main.innerHTML = '<div class="profile-head">' + avatar(shownName(), myColor(), true, myAvatar()) + "<div><h1>" + esc(shownName()) + "</h1><p>@" + esc(me.u) +
       (social ? ' · <a href="#/friends">' + nf + " friend" + (nf === 1 ? "" : "s") + "</a>" : "") + "</p></div></div>" +
-      '<div class="actions"><a class="btn" href="#/avatar">☻ Change my avatar</a><button class="btn ghost" id="meEdit" type="button">Edit profile</button></div>' +
+      '<div class="actions"><a class="btn" href="#/avatar">☻ Change my avatar</a><button class="btn ghost" id="meEdit" type="button">Edit profile</button>' +
+      '<button class="btn ghost" id="mePw" type="button">' + (hasPass ? "🔒 Change password" : "🔒 Add a password") + '</button><button class="btn ghost" id="meOut" type="button">Log out</button></div>' +
+      (hasPass ? "" : '<p class="tip pw-tip">🔒 Add a password so you can log in to @' + esc(me.u) + " on other computers and tablets (and never lose your account).</p>") +
       (banned ? '<p class="err">This account is banned.</p>' : "") +
       '<h2 class="row-title">Games you liked</h2>' + (mine.length ? '<div class="grid">' + mine.map(card).join("") + "</div>" : '<p class="empty">Tap 👍 on a game to save it here.</p>') +
       '<h2 class="row-title">Your games</h2><div class="grid" id="myGames">' + games.filter(isMine).map(card).join("") + createCard + "</div>" +
-      '<p class="hello-sub" style="margin-top:26px">Your account is saved in this browser. Using another device? Pick a different username there for now.</p>';
+      '<p class="hello-sub" style="margin-top:26px">' + (hasPass ? "On another device? Press Log in and use your username and password." : "Your account is only on this device until you add a password.") + "</p>";
     document.getElementById("meEdit").onclick = openEditProfile;
+    document.getElementById("mePw").onclick = openSetPassword;
+    document.getElementById("meOut").onclick = confirmLogOut;
   }
 
   // ---------------------------------------------------------------- avatar (#/avatar)
@@ -539,6 +644,8 @@
       }).join("");
       main.innerHTML = '<h1 class="page-title">Admin</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +
         (rows ? '<div class="people">' + rows + "</div>" : '<p class="empty">No reports. 🎉</p>') +
+        '<h2 class="row-title">Reset a password</h2><form class="add-friend" id="rpForm"><label for="rpUser">Username (for a player who forgot their password: they add a new one on a device that\'s still logged in)</label><div class="add-row"><input id="rpUser" maxlength="17">' +
+        '<button class="btn danger">Reset</button></div><p class="add-msg" id="rpMsg"></p></form>' +
         '<h2 class="row-title">Remove any game</h2><form class="add-friend" id="rmForm"><label for="rmId">Game id (the letters after #/game/ in its address)</label><div class="add-row"><input id="rmId" maxlength="16">' +
         '<button class="btn danger">Remove</button></div><p class="add-msg" id="rmMsg"></p></form>' +
         '<p class="tip" style="margin-top:20px">Bans block the account from GunnerVerse and the game (same as the dev menu ban). Unban from the game\'s dev menu.</p>';
@@ -546,6 +653,14 @@
       Array.prototype.forEach.call(main.querySelectorAll("[data-rm]"), function (b) { b.onclick = act(function (b) { return call("/hub/admin/remove", { g: b.getAttribute("data-rm") }).then(function () { return call("/hub/admin/done", { id: b.getAttribute("data-rm") }); }); }); });
       Array.prototype.forEach.call(main.querySelectorAll("[data-done]"), function (b) { b.onclick = act(function (b) { return call("/hub/admin/done", { id: b.getAttribute("data-done") }); }); });
       Array.prototype.forEach.call(main.querySelectorAll("[data-ban]"), function (b) { b.onclick = act(function (b) { return fetch(RELAY + "/ban", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: pw, u: b.getAttribute("data-ban") }) }).then(function (r) { return r.json(); }); }); });
+      document.getElementById("rpForm").onsubmit = function (e) {
+        e.preventDefault();
+        var u = document.getElementById("rpUser").value.trim().replace(/^@/, "");
+        if (!u || !confirm("Remove @" + u + "'s password?")) return;
+        fetch(RELAY + "/resetpass", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: pw, u: u }) }).then(function (r) { return r.json(); })
+          .then(function (r) { document.getElementById("rpMsg").textContent = r.ok ? "Done: @" + u + " has no password now. They can add a new one in Profile on a device that's still logged in." : r.e === "nouser" ? "No player with that username." : "Didn't work."; })
+          .catch(function () { document.getElementById("rpMsg").textContent = "Couldn't reach GunnerVerse."; });
+      };
       document.getElementById("rmForm").onsubmit = function (e) {
         e.preventDefault();
         var id = document.getElementById("rmId").value.trim().replace(/^.*#\/game\//, "");
@@ -562,6 +677,7 @@
     else if (parts[0] === "search") pageSearch(parts.slice(1).join("/"));
     else if (parts[0] === "friends") pageFriends();
     else if (parts[0] === "avatar") pageAvatar();
+    else if (parts[0] === "login") { if (me) { location.replace(parts[1] === "play" ? withRelay("play/") : "#/me"); return; } pageHome(); openLogin(parts[1] === "play"); }
     else if (parts[0] === "u" && parts[1]) pageUser(parts[1]);
     else if (parts[0] === "create") pageCreate();
     else if (parts[0] === "me") pageMe();
