@@ -5,6 +5,8 @@
 // tells you which words it didn't know, and picks the rest from the description itself (same words = same monster).
 // A monster is an object of type "monster" with obj.mon = its recipe (MON_KEYS) and obj.text = the description.
 // world.js builds it (monsterInner), scaled to the object's Size.
+// ANIMATIONS: every leg, arm, tentacle, wing and the tail hangs from its own joint (rig), so animateMonster() can make
+// it walk, stand and breathe, dance or fly. obj.anim picks one (MON_ANIMS); "auto" walks when it moves (play.js).
 import * as THREE from "../vendor/three.module.js";
 
 export const MON_KEYS = { // recipe: key -> [kind, ...]  (game.js + the relay keep only these)
@@ -185,6 +187,7 @@ export function sanitizeMonster(m) {
   for (const k of ["eyes", "legs", "arms", "heads", "horns", "tentacles"]) out[k] = Math.round(out[k]);
   return out;
 }
+export const MON_ANIMS = { auto: "Walk when it moves", walk: "Always walk", idle: "Stand and breathe", dance: "Dance", fly: "Fly / flap", none: "Don't move" };
 export const SURPRISE = ["a giant purple spider with glowing red eyes", "a cute pink slime with big eyes", "a scary green dragon with spikes and wings", "a metal robot with three eyes and antennae",
   "a spooky ghost with glowing blue eyes", "a tiny orange crab with big claws", "a huge black werewolf with red eyes", "a two headed yellow dinosaur", "a floating eyeball with tentacles",
   "a blue alien with four arms", "a creepy skeleton with horns", "a rainbow jelly with tentacles", "a big furry yeti with sharp teeth", "a gold beetle with wings",
@@ -249,6 +252,10 @@ export function buildMonster(mon) {
     return curve;
   };
   const W = m.width;
+  const rig = { legs: [], arms: [], tents: [], wings: [], tail: null, body: null, bodyY: 0, moveWithBody: [] };
+  g.userData.rig = rig;
+  // a joint at point `at`: things built in it use points measured from the joint, so turning the joint swings them
+  const pivot = (parent, at) => { const j = new THREE.Group(); j.position.set(...at); parent.add(j); return { j, rel: (q) => [q[0] - at[0], q[1] - at[1], q[2] - at[2]] }; };
   // ---- body shapes (sizes before the whole thing is scaled to its Size)
   const legLen = m.legs ? ({ tall: 1.1, box: 1.1, spider: 0.5, ghost: 0 }[m.body] ?? 0.75) : 0;
   const lift = m.float ? 1.0 : m.tentacles && !m.legs ? 0.8 : legLen;
@@ -387,16 +394,22 @@ export function buildMonster(mon) {
   }
   // ---- legs: tapered, with a knee, a foot and (maybe) claws
   const limbM = m.bones ? white : skin;
-  const footAt = (fx, fz, r) => { ball(g, r * 1.3, limbM, fx, r * 0.9, fz - r * 0.4, 1, 0.65, 1.4); if (m.claws) for (let c = -1; c <= 1; c++) { const k = add(g, new THREE.ConeGeometry(r * 0.28, r * 0.9, 6), horn, fx + c * r * 0.55, r * 0.5, fz - r * 1.9); k.rotation.x = -Math.PI / 2 - 0.3; } };
+  const footAt = (par, rel, fx, fz, r) => { ball(par, r * 1.3, limbM, ...rel([fx, r * 0.9, fz - r * 0.4]), 1, 0.65, 1.4); if (m.claws) for (let c = -1; c <= 1; c++) { const k = add(par, new THREE.ConeGeometry(r * 0.28, r * 0.9, 6), horn, ...rel([fx + c * r * 0.55, r * 0.5, fz - r * 1.9])); k.rotation.x = -Math.PI / 2 - 0.3; } };
   if (m.legs) {
     const by = body.position.y;
-    if (m.legs <= 2 && ["tall", "box", "ghost"].includes(m.body)) for (const s of [-1, 1]) { const x = s * legRing.x; chain(g, [[x, by + legRing.y, 0], [x * 1.05, (by + legRing.y) * 0.5, -0.08], [x * 1.08, 0.25, 0]], 0.24 * W, 0.18, limbM, 12); footAt(x * 1.08, 0, 0.2); }
+    if (m.legs <= 2 && ["tall", "box", "ghost"].includes(m.body)) for (const s of [-1, 1]) {
+      const x = s * legRing.x, hip = [x, by + legRing.y, 0], { j, rel } = pivot(g, hip);
+      chain(j, [hip, [x * 1.05, (by + legRing.y) * 0.5, -0.08], [x * 1.08, 0.25, 0]].map(rel), 0.24 * W, 0.18, limbM, 12); footAt(j, rel, x * 1.08, 0, 0.2);
+      rig.legs.push({ j, phase: s > 0 ? Math.PI : 0, side: s, spidery: false });
+    }
     else for (let i = 0; i < m.legs; i++) {
       const side = i % 2 ? 1 : -1, k = Math.floor(i / 2), per = Math.ceil(m.legs / 2), spidery = m.legs >= 6 && !m.pincers;
       const z = per === 1 ? 0 : (k / (per - 1) - 0.5) * (m.body === "long" ? 2.1 : legRing.z * 2.6) + (m.body === "spider" ? 0.1 : 0);
-      const hip = [side * legRing.x, by + legRing.y + (spidery ? 0.25 : 0), z];
-      if (spidery) chain(g, [hip, [side * (legRing.x + 0.9), by + 0.85, z * 1.15], [side * (legRing.x + 1.6), by * 0.55, z * 1.35], [side * (legRing.x + 1.85), 0.05, z * 1.5]], 0.11, 0.04, limbM, 18, m.claws ? horn : null);
-      else { const knee = [side * (legRing.x + 0.12), hip[1] * 0.5, z - 0.1]; chain(g, [hip, knee, [side * (legRing.x + 0.1), 0.22, z]], 0.24 * W, 0.16, limbM, 12); footAt(side * (legRing.x + 0.1), z, 0.18); }
+      const hip = [side * legRing.x, by + legRing.y + (spidery ? 0.25 : 0), z], { j, rel } = pivot(g, hip);
+      if (spidery) chain(j, [hip, [side * (legRing.x + 0.9), by + 0.85, z * 1.15], [side * (legRing.x + 1.6), by * 0.55, z * 1.35], [side * (legRing.x + 1.85), 0.05, z * 1.5]].map(rel), 0.11, 0.04, limbM, 18, m.claws ? horn : null);
+      else { const knee = [side * (legRing.x + 0.12), hip[1] * 0.5, z - 0.1]; chain(j, [hip, knee, [side * (legRing.x + 0.1), 0.22, z]].map(rel), 0.24 * W, 0.16, limbM, 12); footAt(j, rel, side * (legRing.x + 0.1), z, 0.18); }
+      // (diagonal pairs step together, like real animals and bugs)
+      rig.legs.push({ j, phase: ((side > 0 ? 1 : 0) + k) % 2 ? Math.PI : 0, side, spidery });
     }
   }
   // ---- arms from the shoulders, with hands (or crab pincers)
@@ -405,26 +418,32 @@ export function buildMonster(mon) {
     const sy = by + (["long", "spider", "round", "blob"].includes(m.body) ? 0.1 : 0.75) - k * 0.38;
     const sx = side * (m.body === "long" ? 0.55 * W : m.body === "box" ? 0.85 * W : 0.66 * W), sz = m.body === "long" ? -0.85 : 0;
     const hand = [sx + side * 0.55, sy - (m.body === "long" ? 0.15 : 0.95), sz - 0.75];
-    chain(g, [[sx, sy, sz], [sx + side * 0.5, sy - 0.45, sz - 0.1], hand], 0.17 * W, 0.12, limbM, 12);
+    const { j, rel } = pivot(g, [sx, sy, sz]);
+    chain(j, [[sx, sy, sz], [sx + side * 0.5, sy - 0.45, sz - 0.1], hand].map(rel), 0.17 * W, 0.12, limbM, 12);
+    const hr = rel(hand);
     if (m.pincers) {
-      ball(g, 0.26, accent, hand[0], hand[1], hand[2] - 0.15, 1, 0.8, 1.4);
-      for (const t of [-1, 1]) { const p = add(g, new THREE.ConeGeometry(0.1, 0.45, 8), accent, hand[0] + t * 0.08, hand[1], hand[2] - 0.55); p.rotation.x = -Math.PI / 2; p.rotation.z = t * 0.25; }
+      ball(j, 0.26, accent, hr[0], hr[1], hr[2] - 0.15, 1, 0.8, 1.4);
+      for (const t of [-1, 1]) { const p = add(j, new THREE.ConeGeometry(0.1, 0.45, 8), accent, hr[0] + t * 0.08, hr[1], hr[2] - 0.55); p.rotation.x = -Math.PI / 2; p.rotation.z = t * 0.25; }
     } else {
-      ball(g, 0.16, m.metal ? dark : limbM, ...hand);
-      if (m.claws) for (let c = -1; c <= 1; c++) { const k2 = add(g, new THREE.ConeGeometry(0.04, 0.24, 6), horn, hand[0] + c * 0.07, hand[1] - 0.18, hand[2] - 0.06); k2.rotation.x = Math.PI + 0.3; }
+      ball(j, 0.16, m.metal ? dark : limbM, ...hr);
+      if (m.claws) for (let c = -1; c <= 1; c++) { const k2 = add(j, new THREE.ConeGeometry(0.04, 0.24, 6), horn, hr[0] + c * 0.07, hr[1] - 0.18, hr[2] - 0.06); k2.rotation.x = Math.PI + 0.3; }
     }
+    rig.arms.push({ j, side, phase: side > 0 ? 0 : Math.PI, y0: sy });
   }
   // ---- tentacles: tapered, curling outward
   for (let i = 0; i < m.tentacles; i++) {
     const a = (i / m.tentacles) * Math.PI * 2, r = 0.55 * W, by = body.position.y;
     const p = (d, y, curl) => [Math.cos(a) * d - Math.sin(a) * curl, y, Math.sin(a) * d + Math.cos(a) * curl];
-    chain(g, [p(r, by - 0.6, 0), p(r * 1.5, by * 0.55, 0.1), p(r * 2.2, 0.35, 0.4), p(r * 2.4, 0.12, 0.9), p(r * 2.0, 0.08, 1.2)], 0.17, 0.035, m.body === "blob" ? skin : accent, 22);
+    const root = p(r, by - 0.6, 0), { j, rel } = pivot(g, root);
+    chain(j, [root, p(r * 1.5, by * 0.55, 0.1), p(r * 2.2, 0.35, 0.4), p(r * 2.4, 0.12, 0.9), p(r * 2.0, 0.08, 1.2)].map(rel), 0.17, 0.035, m.body === "blob" ? skin : accent, 22);
+    rig.tents.push({ j, a, i });
   }
   // ---- back: spikes, wings, tail (+ stinger), fins, fur tufts
   if (m.spikes) { const n = m.body === "long" ? 7 : 5; for (let i = 0; i < n; i++) { const t = i / (n - 1), sz = 0.18 + Math.sin(t * Math.PI) * 0.22;
     const s = add(body, new THREE.ConeGeometry(sz * 0.5, sz * 2, 8), m.bones ? white : accent, 0, (m.body === "long" ? 0.6 : top * 0.9) + Math.sin(t * Math.PI) * 0.08, (t - 0.5) * (m.body === "long" ? 1.9 : 1.2) + (m.body === "spider" ? 0.85 : 0)); s.rotation.x = 0.25; } }
   if (m.wings) for (const s of [-1, 1]) {
     const w = new THREE.Group(); w.position.set(s * 0.45 * W, m.body === "long" ? 0.4 : top * 0.65, m.body === "long" ? -0.3 : 0.25); w.rotation.y = s * 0.35; w.rotation.z = s * -0.15; body.add(w);
+    rig.wings.push({ j: w, side: s });
     const span = 2.3, tips = [[s * span, 1.15], [s * span * 0.95, 0.15], [s * span * 0.7, -0.55]];
     for (const [x, y] of tips) chain(w, [[0, 0, 0], [x * 0.45, y * 0.6 + 0.35, 0.05], [x, y, 0.08]], 0.06, 0.025, horn, 12);
     const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(tips[0][0], tips[0][1]);
@@ -433,14 +452,46 @@ export function buildMonster(mon) {
     add(w, new THREE.ShapeGeometry(sh, 16), new THREE.MeshStandardMaterial({ color: m.color2, side: THREE.DoubleSide, roughness: 0.7, transparent: true, opacity: m.ghost ? 0.4 : 0.88 }), 0, 0, 0.06);
   }
   if (m.tail && tailFrom) {
-    const by = body.position.y, [tx, ty, tz] = tailFrom;
-    chain(g, [[tx, by + ty, tz], [tx, by + ty - 0.2, tz + 0.7], [tx, Math.max(0.3, by * 0.5), tz + 1.4], [tx, by * 0.55 + (m.stinger ? 1.2 : 0.2), tz + 2.1]], 0.28 * W, m.stinger ? 0.09 : 0.05, skin, 26, m.stinger ? null : null);
-    if (m.stinger) { const tip = [tx, by * 0.55 + 1.2, tz + 2.1]; ball(g, 0.2, accent, tip[0], tip[1] + 0.12, tip[2] - 0.1, 1, 1.3, 1); const st = add(g, new THREE.ConeGeometry(0.07, 0.45, 8), dark, tip[0], tip[1] + 0.05, tip[2] - 0.38); st.rotation.x = -Math.PI / 2 - 0.4; }
+    const by = body.position.y, [tx, ty, tz] = tailFrom, root = [tx, by + ty, tz], { j, rel } = pivot(g, root);
+    chain(j, [root, [tx, by + ty - 0.2, tz + 0.7], [tx, Math.max(0.3, by * 0.5), tz + 1.4], [tx, by * 0.55 + (m.stinger ? 1.2 : 0.2), tz + 2.1]].map(rel), 0.28 * W, m.stinger ? 0.09 : 0.05, skin, 26);
+    if (m.stinger) { const tip = rel([tx, by * 0.55 + 1.2, tz + 2.1]); ball(j, 0.2, accent, tip[0], tip[1] + 0.12, tip[2] - 0.1, 1, 1.3, 1); const st = add(j, new THREE.ConeGeometry(0.07, 0.45, 8), dark, tip[0], tip[1] + 0.05, tip[2] - 0.38); st.rotation.x = -Math.PI / 2 - 0.4; }
+    rig.tail = j;
   }
   if (m.fins) { const f = add(body, new THREE.ConeGeometry(0.4, 1.0, 3), accent, 0, top * 0.7 + 0.3, 0.1); f.scale.z = 0.25; f.rotation.x = 0.3;
     for (const s of [-1, 1]) { const p = add(body, new THREE.ConeGeometry(0.28, 0.75, 3), accent, s * 0.75 * W, -0.25, -0.35); p.rotation.z = s * 1.9; p.scale.z = 0.25; } }
   if (m.fur && !m.metal && !m.slime) for (let i = 0; i < 9; i++) { const a = i * 0.7, t = add(body, new THREE.ConeGeometry(0.1, 0.32, 5), skin, Math.cos(a) * 0.35 * W, top * 0.85 + (i % 3) * 0.04, Math.sin(a) * 0.35 + (m.body === "long" ? 0.2 : 0)); t.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); }
+  rig.body = body; rig.bodyY = body.position.y; rig.float = m.float || m.ghost; rig.blob = m.body === "blob";
+  rig.moveWithBody = rig.arms.map((a) => a.j).concat(rig.tents.map((t) => t.j), rig.tail ? [rig.tail] : []);
+  for (const o of rig.moveWithBody) o.userData.y0 = o.position.y;
   return g;
+}
+
+// Move a monster's rig. t = seconds, walk = 0 (standing) .. 1 (walking fast), style = MON_ANIMS key.
+export function animateMonster(rig, t, walk, style) {
+  if (!rig || !rig.body || style === "none") return;
+  const ph = t * 7, w = style === "walk" ? 1 : style === "auto" ? Math.min(1, walk) : 0, dance = style === "dance", fly = style === "fly" || (rig.float && style !== "dance");
+  let bob = Math.sin(t * 2) * 0.03 + Math.abs(Math.sin(ph)) * 0.09 * w; // (breathing + a little hop each step)
+  if (fly) bob += Math.sin(t * 3) * 0.12;
+  if (dance) bob = Math.abs(Math.sin(t * 6)) * 0.25;
+  rig.body.position.y = rig.bodyY + bob;
+  rig.body.rotation.y = dance ? Math.sin(t * 3) * 0.45 : 0;
+  rig.body.rotation.z = dance ? Math.sin(t * 6) * 0.08 : w * Math.sin(ph) * 0.04;
+  if (rig.blob) rig.body.scale.set(1 + Math.sin(t * 3) * 0.04 + w * Math.sin(ph * 2) * 0.05, 1 - Math.sin(t * 3) * 0.04 - w * Math.sin(ph * 2) * 0.05, 1);
+  for (const o of rig.moveWithBody) o.position.y = o.userData.y0 + bob;
+  for (const L of rig.legs) {
+    const s = Math.sin(ph + L.phase);
+    if (fly) { L.j.rotation.set(0.35 + Math.sin(t * 3 + L.phase) * 0.1, 0, 0); continue; }
+    if (dance) { L.j.rotation.set(Math.max(0, Math.sin(t * 6 + L.phase)) * -0.5, 0, 0); continue; }
+    if (L.spidery) L.j.rotation.set(0, s * 0.35 * w * L.side, Math.max(0, Math.cos(ph + L.phase)) * 0.3 * w * L.side);
+    else L.j.rotation.set(s * 0.6 * w, 0, 0);
+  }
+  for (const A of rig.arms) {
+    if (dance) A.j.rotation.set(-2.3 + Math.sin(t * 6 + A.phase) * 0.4, 0, A.side * Math.sin(t * 6) * 0.3);
+    else A.j.rotation.set(-Math.sin(ph + A.phase) * 0.55 * w + Math.sin(t * 1.6 + A.phase) * 0.05, 0, A.side * 0.05 * Math.sin(t * 2));
+  }
+  for (const T of rig.tents) T.j.rotation.set(Math.sin(t * 2.5 + T.i) * 0.18, 0, Math.cos(t * 2.2 + T.i * 1.3) * 0.18 + w * Math.sin(ph + T.i) * 0.15);
+  for (const W of rig.wings) W.j.rotation.z = W.side * (-0.15 + (fly ? Math.sin(t * 12) * 0.6 : dance ? Math.sin(t * 6) * 0.3 : Math.sin(t * 1.5) * 0.06 + w * Math.sin(ph) * 0.15));
+  if (rig.tail) rig.tail.rotation.y = Math.sin(t * (dance ? 6 : 2) + 1) * (dance ? 0.5 : 0.18 + w * 0.15);
 }
 // The monster scaled to fit a 1 x 1 x 1 box (bottom at 0, centered), like imported models: the object's Size sets its real size.
 export function monsterInner(mon) {
@@ -449,7 +500,7 @@ export function monsterInner(mon) {
   raw.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
   const fit = new THREE.Group(); fit.add(raw); fit.scale.set(1 / d.x, 1 / d.y, 1 / d.z);
   const inner = new THREE.Group(); inner.add(fit);
-  inner.userData.dims = d; inner.userData.monster = true;
+  inner.userData.dims = d; inner.userData.monster = true; inner.userData.rig = raw.userData.rig;
   return inner;
 }
 // The real size for a recipe: as tall as its height, with the shape's own width and depth.

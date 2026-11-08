@@ -15,6 +15,7 @@ import { startScripts } from "./scripts.js";
 import { filterText } from "./filter.js";
 import { buildAvatar, animateAvatar, loadAvatar } from "./avatar.js";
 import { fileUrl, updateMixers, clearMixers } from "./files.js";
+import { animateMonster, MON_ANIMS } from "./monster.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -391,8 +392,16 @@ export function startPlay(world, game, opts) {
       else if (e.k === "checkpoint") { const cp = new THREE.Vector3(e.o.pos[0], e.o.pos[1] + e.o.size[1] + 0.2, e.o.pos[2]); if (cp.distanceTo(checkpoint) > 0.5) { checkpoint.copy(cp); showMsg("Checkpoint!"); beep(660, 0.2, "triangle", 990); } }
       else if (e.k === "finish" && !won && !lost) { won = true; showMsg((b.message || "You win!") + "\n" + fmt(time) + (totalCoins ? "  ·  🪙 " + coins + " / " + totalCoins : ""), 999); beep(523, 0.15, "square"); setTimeout(() => beep(784, 0.3, "square"), 150); }
     }
-    // monsters breathe (and ghosts bob): just the look, not where they really are
-    for (const e of ents) if (e.k !== "car" && e.o.type === "monster" && e.g.userData.inner) { const m = e.g.userData.inner; m.position.y = Math.sin(time * 3 + e.base.x) * e.o.size[1] * (e.o.mon && e.o.mon.float ? 0.05 : 0.015); }
+    // monsters move their legs, arms, tentacles, wings and tail (monster.js animateMonster). "Walk when it moves" (auto)
+    // watches how fast the monster really goes (a script moving it, a moving platform...) and walks faster when it's faster.
+    for (const e of ents) {
+      const rig = e.o.type === "monster" && e.g.userData.inner && e.g.userData.inner.userData.rig;
+      if (!rig) continue;
+      if (!e.lastP) e.lastP = e.g.position.clone();
+      const v = e.g.position.distanceTo(e.lastP) / Math.max(dt, 1e-3); e.lastP.copy(e.g.position);
+      e.walkAmt = (e.walkAmt || 0) + (Math.min(1, v / Math.max(1, e.o.size[1] * 0.5)) - (e.walkAmt || 0)) * Math.min(1, dt * 6);
+      animateMonster(rig, time + (e.base.x % 7), e.walkAmt, e.monAnim || e.o.anim || "auto");
+    }
     // spinning coins
     for (const e of ents) if (e.k === "coin" && !e.done && !e.scripted) e.g.quaternion.copy(e.baseQ).premultiply(q.setFromAxisAngle(Y, time * 2.5));
     // touch Switches + parts whose scripts wait for a touch (they fire once each time you step on)
@@ -581,7 +590,11 @@ export function startPlay(world, game, opts) {
       else if (k === "solid" && e) { e.o.solid = !!b; e.boxes = e.o.solid ? worldBoxes(e.o, e.g.position, e.g.quaternion) : []; }
       else if (k === "color" && /^#[0-9a-f]{6}$/i.test(b)) { if (g) { g.color = b; guiDirty = true; } else if (e) { e.o.color = b; rebuildEnt(e); } }
       else if (k === "text") { const t = filterText(b, g ? 60 : 120); if (g) { g.text = t; guiDirty = true; } else if (e) { e.o.text = t; if (e.k !== "npc") rebuildEnt(e); } }
-      else if (k === "anim" && e) { const m = e.g.userData.inner && e.g.userData.inner.userData.copy; if (m && m.userData.play) m.userData.play(String(b) || true); }
+      else if (k === "anim" && e) {
+        const inner = e.g.userData.inner, m = inner && inner.userData.copy, name = String(b || "").toLowerCase();
+        if (m && m.userData.play) m.userData.play(String(b) || true);
+        else if (inner && inner.userData.rig) e.monAnim = name === "stop" ? "none" : MON_ANIMS[name] ? name : "walk"; // (monsters: walk, idle, dance, fly, stop)
+      }
       else if (k === "want") { if (a === "click") wantClick.add(String(b)); else if (a === "touch") wantTouch.add(String(b)); else if (a === "keys") wantKeys = true; }
       else if (k === "clone" && e && typeof b === "string" && /^k\d{1,6}$/.test(b) && !entById.has(b) && clones < 300) {
         clones++;

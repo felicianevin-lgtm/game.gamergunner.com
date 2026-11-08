@@ -21,7 +21,7 @@ import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI,
 import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
 import { api, account } from "./net.js";
-import { describe, buildMonster, monsterSize, sanitizeMonster, SURPRISE } from "./monster.js";
+import { describe, buildMonster, monsterSize, sanitizeMonster, animateMonster, MON_ANIMS, SURPRISE } from "./monster.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -535,7 +535,9 @@ function drawProps(numbersOnly) {
   if (o.type === "model") html += '<div class="group-title">Imported model</div>' + row("Animation", '<select id="pAnim"><option value="">(none)</option>' + (o.anim ? '<option value="' + esc(o.anim) + '" selected>' + esc(o.anim === "*" ? "First animation" : o.anim) + "</option>" : "") + "</select>") +
     '<p class="note">' + esc((game.files[o.file] || {}).name || "Missing file") + ". Scripts can play animations too: me.play(\"Walk\")</p>";
   if (o.type === "picture") html += '<div class="group-title">Picture</div>' + row("Picture", pictureSelect("pPic", o.file));
-  if (o.type === "monster") html += '<div class="group-title">Monster</div><p class="note">' + esc(o.text || "A monster") + '</p><button type="button" class="btn add-script" id="pMonster">👾 Change my monster</button>';
+  if (o.type === "monster") html += '<div class="group-title">Monster</div><p class="note">' + esc(o.text || "A monster") + '</p><button type="button" class="btn add-script" id="pMonster">👾 Change my monster</button>' +
+    row("Animation", '<select id="pMonAnim">' + Object.entries(MON_ANIMS).map(([k, v]) => '<option value="' + k + '"' + (k === (o.anim || "auto") ? " selected" : "") + ">" + esc(v) + "</option>").join("") + "</select>") +
+    '<p class="note">Scripts can change it too: me.play("dance"), me.play("walk"), me.play("stop")</p>';
   html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>" + scriptBox(o.id);
   box.innerHTML = html;
   wireScriptBox(o.id);
@@ -549,6 +551,7 @@ function drawProps(numbersOnly) {
     $("pAnim").onchange = (e) => edit(() => { if (e.target.value) o.anim = e.target.value; else delete o.anim; }, true);
   }
   if ($("pMonster")) $("pMonster").onclick = () => openMonsterMaker(o);
+  if ($("pMonAnim")) $("pMonAnim").onchange = (e) => { pushUndo(); o.anim = e.target.value; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
 
   const edit = (fn, look) => { pushUndo(); fn(); if (look) rebuild(o); else placeObject(groups.get(o.id), o); changed(); };
@@ -788,7 +791,7 @@ function openMonsterMaker(o) {
     requestAnimationFrame(loop);
     const w = cv.clientWidth, h = cv.clientHeight;
     if (w && h && cv.width !== Math.floor(w * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
-    yaw += 0.01; if (model) model.rotation.y = yaw;
+    yaw += 0.01; if (model) { model.rotation.y = yaw; const rig = model.children[0] && model.children[0].userData.rig; if (rig) animateMonster(rig, performance.now() / 1000, 0.7, "walk"); }
     r.render(sc, cam);
   }
   let t = 0;
@@ -828,7 +831,7 @@ function openMonsterMaker(o) {
     const chase = $("monChase") && $("monChase").checked;
     alive = false; closeModal();
     if (o) { pushUndo(); o.mon = out.mon; o.text = desc; o.size = monsterSize(out.mon); rebuild(o); changed(); drawProps(); return; }
-    const n = addAsset("monster", null, { mon: out.mon, text: desc, size: monsterSize(out.mon), name: ai ? name : name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() });
+    const n = addAsset("monster", null, { anim: "auto", mon: out.mon, text: desc, size: monsterSize(out.mon), name: ai ? name : name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() });
     if (n && chase && game.scripts.length < MAX_SCRIPTS) {
       game.scripts.push({ id: uid(), name: "Chase", on: n.id, code: "// " + n.name + " chases the player!\nme.follow(player, 6)   // 6 = how fast\n\nme.onTouch(function () {\n  sound(\"scream\")\n  player.damage(25)\n})\n" });
       changed(); drawTree(); drawProps();
@@ -1018,6 +1021,12 @@ function frame() {
   world.resize();
   if (playing) { playing.update(dt); renderer.render(scene, camera); return; }
   updateMixers(dt);
+  const now = clock.elapsedTime;
+  for (const o of game ? game.objects : []) {
+    if (o.type !== "monster") continue;
+    const gr = groups.get(o.id), rig = gr && gr.userData.inner && gr.userData.inner.userData.rig;
+    if (rig && !(transform.dragging && selected === o.id)) animateMonster(rig, now + (o.pos[0] % 7), 0, o.anim === "auto" || !o.anim ? "idle" : o.anim);
+  }
   if (keys.size && !typing()) { // fly the camera
     camera.getWorldDirection(fwd); right.crossVectors(fwd, camera.up).normalize();
     move.set(0, 0, 0);
