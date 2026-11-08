@@ -1,5 +1,7 @@
 // GunnerVerse Studio: the editor. Toolbox (free assets) on the left, the 3D world in the middle, Explorer + Properties
-// on the right, tools along the top (Select / Move / Rotate / Scale, snap, undo, copy, delete, Play).
+// on the right, tools along the top (＋ Add menu, Select / Move / Rotate / Scale, snap, undo, copy, delete, Publish, Play).
+// Screen GUI (labels, buttons, the Developer Menu button) lives in game.gui (gui.js): it shows over the 3D view and in the
+// Explorer under "ScreenGui"; selecting one shows its settings in Properties.
 // Mouse: left click selects, right-drag looks around, middle-drag pans, wheel zooms; W A S D Q E fly (Shift = faster).
 // Games save in this browser by themselves (game.js). Play test lives in play.js.
 import * as THREE from "../vendor/three.module.js";
@@ -10,6 +12,7 @@ import { createWorld, buildObject, placeObject, boundsBox } from "./world.js";
 import { SKIES, TEMPLATES, newObj, fillBehavior, sanitize, listGames, loadGame, saveGame, deleteGame, makeGame, r2 } from "./game.js";
 import { startPlay } from "./play.js";
 import { openPublish } from "./publish.js";
+import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, newGui, renderGui } from "./gui.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -20,7 +23,7 @@ const SNAPS = [1, 0.5, 0.25, 0, 2, 4];
 // ---------------------------------------------------------------- state
 let game = null;
 const groups = new Map();      // object id -> THREE.Group in the world
-let selected = null;           // the selected object's id
+let selected = null;           // the selected object's (or GUI item's) id
 let tool = "select";
 let snapIndex = 0;
 let undoStack = [], redoStack = [];
@@ -51,6 +54,8 @@ scene.add(selBox);
 
 // ---------------------------------------------------------------- objects in the world
 function obj(id) { return game.objects.find((o) => o.id === id) || null; }
+function guiItem(id) { return (game.gui || []).find((g) => g.id === id) || null; }
+function drawGui() { if (game) renderGui($("guiLayer"), game.gui, { selected, onClick: (g) => select(g.id) }); }
 function rebuild(o) {
   const old = groups.get(o.id);
   if (old) { world.root.remove(old); disposeGroup(old); }
@@ -66,14 +71,14 @@ function rebuildAll() {
   for (const g of groups.values()) { world.root.remove(g); disposeGroup(g); }
   groups.clear();
   for (const o of game.objects) rebuild(o);
-  if (selected && !obj(selected)) selected = null;
+  if (selected && !obj(selected) && !guiItem(selected)) selected = null;
   select(selected);
 }
 
 // ---------------------------------------------------------------- history + saving
-function snapshot() { return JSON.stringify({ o: game.objects, s: game.settings }); }
+function snapshot() { return JSON.stringify({ o: game.objects, s: game.settings, g: game.gui }); }
 function pushUndo() { undoStack.push(snapshot()); if (undoStack.length > 80) undoStack.shift(); redoStack = []; updateButtons(); }
-function restore(snap) { const d = JSON.parse(snap); game.objects = d.o; game.settings = d.s; world.setSky(game.settings.sky); rebuildAll(); drawTree(); drawProps(); changed(true); }
+function restore(snap) { const d = JSON.parse(snap); game.objects = d.o; game.settings = d.s; game.gui = d.g || []; world.setSky(game.settings.sky); rebuildAll(); drawTree(); drawProps(); changed(true); }
 function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); updateButtons(); }
 function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); updateButtons(); }
 function changed(skipTree) {
@@ -97,10 +102,10 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) saveN
 
 // ---------------------------------------------------------------- selecting + tools
 function select(id) {
-  selected = id && obj(id) ? id : null;
+  selected = id && (obj(id) || guiItem(id)) ? id : null;
   const g = selected && groups.get(selected);
   if (g && tool !== "select") transform.attach(g); else transform.detach();
-  drawTree(); drawProps(); updateButtons();
+  drawTree(); drawProps(); updateButtons(); drawGui();
 }
 function setTool(t) {
   tool = t;
@@ -187,6 +192,14 @@ function uniqueName(base) {
   for (let i = 2; ; i++) if (!names.has(base + " " + i)) return base + " " + i;
 }
 function duplicate() {
+  const gi = guiItem(selected);
+  if (gi) {
+    if (game.gui.length >= 20) return;
+    pushUndo();
+    const c = { ...gi, id: Math.random().toString(36).slice(2, 10) };
+    game.gui.push(c); select(c.id); changed();
+    return;
+  }
   const o = obj(selected);
   if (!o) return;
   pushUndo();
@@ -200,6 +213,7 @@ function duplicate() {
   changed();
 }
 function remove() {
+  if (guiItem(selected)) { pushUndo(); game.gui = game.gui.filter((g) => g.id !== selected); select(null); changed(); return; }
   const o = obj(selected);
   if (!o) return;
   pushUndo();
@@ -257,8 +271,11 @@ function drawTree() {
     html += '<div class="tree-row child' + (o.id === selected ? " on" : "") + '" data-id="' + o.id + '"><span class="ti">' + a.icon + '</span><span class="tn">' + esc(o.name) + "</span>" +
       (b ? '<span class="tb2">' + esc(b) + "</span>" : "") + "</div>";
   }
+  html += '<div class="tree-row tree-root gui-root"><span class="ti">🖥️</span><span class="tn">ScreenGui</span></div>';
+  for (const g of game.gui || []) html += '<div class="tree-row child' + (g.id === selected ? " on" : "") + '" data-id="' + g.id + '"><span class="ti">' + GUI_KINDS[g.kind].icon + '</span><span class="tn">' + esc(g.name) + '</span><span class="tb2">' + esc(GUI_SPOTS[g.pos]) + "</span></div>";
+  if (!(game.gui || []).length) html += '<div class="tree-row child tree-empty">Add GUI from ＋ Add</div>';
   $("tree").innerHTML = html;
-  $("tree").querySelectorAll(".tree-row").forEach((r) => {
+  $("tree").querySelectorAll(".tree-row:not(.gui-root):not(.tree-empty)").forEach((r) => {
     r.onclick = () => select(r.dataset.id || null);
     r.ondblclick = () => { if (r.dataset.id) { select(r.dataset.id); focusSelected(); } };
   });
@@ -271,6 +288,7 @@ function row(label, inner) { return '<div class="row"><label>' + label + "</labe
 function xyz(key, v, step) { return '<div class="xyz">' + [0, 1, 2].map((i) => '<input type="number" step="' + step + '" data-k="' + key + '" data-i="' + i + '" value="' + v[i] + '" aria-label="' + key + " " + "xyz"[i] + '">').join("") + "</div>"; }
 function drawProps(numbersOnly) {
   const box = $("props");
+  if (guiItem(selected)) { if (!numbersOnly) drawGuiProps(box, guiItem(selected)); return; }
   const o = obj(selected);
   if (numbersOnly && o) { // (while dragging: just refresh the numbers)
     box.querySelectorAll("input[data-k]").forEach((inp) => { if (inp !== document.activeElement) inp.value = o[inp.dataset.k][+inp.dataset.i]; });
@@ -348,6 +366,72 @@ function drawProps(numbersOnly) {
     };
   });
 }
+function drawGuiProps(box, g) {
+  $("propsFor").textContent = g.name;
+  const sel = (id, opts, v) => '<select id="' + id + '">' + Object.entries(opts).map(([k, t]) => '<option value="' + k + '"' + (k === v ? " selected" : "") + ">" + esc(t) + "</option>").join("") + "</select>";
+  let html = row("Name", '<input type="text" id="gName" maxlength="40" value="' + esc(g.name) + '">') +
+    row(g.kind === "label" ? "Text" : "Button text", '<input type="text" id="gText" maxlength="40" value="' + esc(g.text) + '">') +
+    '<div class="group-title">Where on the screen</div><div class="spot-grid">' +
+    Object.entries(GUI_SPOTS).map(([k, t]) => '<button type="button" data-spot="' + k + '" title="' + t + '" class="' + (k === g.pos ? "on" : "") + '"></button>').join("") + "</div>" +
+    '<p class="note">' + esc(GUI_SPOTS[g.pos]) + "</p>" +
+    '<div class="group-title">Look</div>' +
+    row("Color", '<input type="color" id="gColor" value="' + g.color + '">') +
+    '<div class="row"><span></span><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div></div>" +
+    row("Size", sel("gSize", GUI_SIZES, g.size));
+  if (g.kind === "button") {
+    html += '<div class="group-title">When clicked</div>' + row("Does", sel("gAction", BUTTON_ACTIONS, g.action));
+    if (g.action === "message") html += row("Message", '<input type="text" id="gMsg" maxlength="80" value="' + esc(g.message) + '">');
+  }
+  if (g.kind === "devmenu") {
+    html += '<div class="group-title">Developer menu</div>' + row("Code", '<input type="text" id="gCode" maxlength="12" value="' + esc(g.code) + '">') +
+      '<p class="note">In Play, this button asks for the code. The right code opens the dev menu: fly, super speed, super jump, no lava, teleport to the finish and collect every coin. Anyone who knows the code can use it, so keep it secret!</p>';
+  }
+  html += '<div class="group-title">GUI</div><p class="note">' + GUI_KINDS[g.kind].icon + " " + esc(GUI_KINDS[g.kind].label) + " · shows on the screen in Play</p>";
+  box.innerHTML = html;
+  const set = (fn, redraw) => { pushUndo(); fn(); changed(); drawGui(); if (redraw) drawProps(); };
+  $("gName").onchange = (e) => set(() => { g.name = e.target.value.trim() || GUI_KINDS[g.kind].label; $("propsFor").textContent = g.name; });
+  $("gText").oninput = (e) => { g.text = e.target.value.slice(0, 40); drawGui(); };
+  $("gText").onchange = (e) => set(() => { g.text = e.target.value.slice(0, 40); });
+  box.querySelectorAll("[data-spot]").forEach((b) => (b.onclick = () => set(() => { g.pos = b.dataset.spot; }, true)));
+  $("gColor").onchange = (e) => set(() => { g.color = e.target.value; });
+  box.querySelectorAll(".swatches button").forEach((b) => (b.onclick = () => { set(() => { g.color = b.dataset.c; }); $("gColor").value = b.dataset.c; }));
+  $("gSize").onchange = (e) => set(() => { g.size = e.target.value; });
+  if ($("gAction")) $("gAction").onchange = (e) => set(() => { g.action = e.target.value; }, true);
+  if ($("gMsg")) $("gMsg").onchange = (e) => set(() => { g.message = e.target.value.slice(0, 80); });
+  if ($("gCode")) $("gCode").onchange = (e) => { const v = e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 12); if (!v) { e.target.value = g.code; return; } set(() => { g.code = v; }); e.target.value = v; };
+}
+function addGui(kind) {
+  if (!game) return;
+  game.gui = game.gui || [];
+  if (game.gui.length >= 20) { alert("You can have up to 20 GUI things."); return; }
+  pushUndo();
+  const g = newGui(kind, game.gui);
+  game.gui.push(g);
+  select(g.id);
+  changed();
+}
+
+// ---------------------------------------------------------------- the ＋ Add menu (top bar)
+const QUICK = ["spawn", "coin", "lava", "jumppad", "checkpoint", "finish", "car", "tree"];
+function drawAddMenu() {
+  const part = ASSETS.filter((a) => a.cat === "Parts");
+  const item = (attr, icon, label) => '<button type="button" ' + attr + '><span class="mi">' + icon + "</span>" + esc(label) + "</button>";
+  $("addMenu").innerHTML =
+    '<div class="menu-sec">Parts</div>' + part.map((a) => item('data-add="' + a.type + '"', a.icon, a.label)).join("") +
+    '<div class="menu-sec">Quick assets</div>' + QUICK.map((t) => item('data-add="' + t + '"', BY_TYPE[t].icon, BY_TYPE[t].label)).join("") +
+    '<div class="menu-sec">GUI (on the screen)</div>' + Object.entries(GUI_KINDS).map(([k, v]) => item('data-gui="' + k + '"', v.icon, "Add " + v.label)).join("") +
+    '<div class="menu-sec"></div>' + item('data-more="1"', "🧰", "All assets (Toolbox)");
+  $("addMenu").querySelectorAll("button").forEach((b) => (b.onclick = () => {
+    closeAddMenu();
+    if (b.dataset.add) addAsset(b.dataset.add);
+    else if (b.dataset.gui) addGui(b.dataset.gui);
+    else { category = "All"; drawCats(); $("assetSearch").value = ""; drawAssets(); $("assetSearch").focus(); }
+  }));
+}
+function closeAddMenu() { $("addMenu").classList.add("hidden"); $("btnAdd").classList.remove("on"); }
+$("btnAdd").onclick = (e) => { e.stopPropagation(); const open = $("addMenu").classList.toggle("hidden"); $("btnAdd").classList.toggle("on", !open); };
+document.addEventListener("click", (e) => { if (!$("addMenu").contains(e.target)) closeAddMenu(); });
+
 function clamp(v, lo, hi, d) { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; }
 
 // ---------------------------------------------------------------- My games
@@ -441,6 +525,7 @@ window.addEventListener("keydown", (e) => {
   if (ctrl && k === "s") { e.preventDefault(); dirty = true; saveNow(); return; }
   if (ctrl) return;
   if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); remove(); return; }
+  if (e.key === "Escape" && !$("addMenu").classList.contains("hidden")) { closeAddMenu(); return; }
   if (e.key === "F5") { e.preventDefault(); play(); return; }
   if (k === "1") setTool("select"); else if (k === "2") setTool("translate"); else if (k === "3") setTool("rotate"); else if (k === "4") setTool("scale");
   else if (k === "f") focusSelected();
@@ -484,7 +569,7 @@ function frame() {
 }
 
 // ---------------------------------------------------------------- start
-drawCats(); drawAssets(); applySnap(); updateButtons();
+drawCats(); drawAssets(); drawAddMenu(); applySnap(); updateButtons();
 let last = null;
 try { last = localStorage.getItem("gv_studio_last"); } catch {}
 const g0 = last && loadGame(last);

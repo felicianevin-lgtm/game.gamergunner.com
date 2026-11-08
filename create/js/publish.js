@@ -76,7 +76,7 @@ export function openPublish(ui) {
     if (!updating && !thumb) { $("pbErr").textContent = "Add a thumbnail: take a snapshot or upload a picture."; return; }
     if (!game.objects.some((o) => o.b.k === "spawn")) { if (!confirm("Your game has no Spawn Point, so players start in the middle. Publish anyway?")) return; }
     const go = $("pbGo"); go.disabled = true; go.textContent = "Publishing…"; $("pbErr").textContent = "";
-    const copy = { name: game.name, settings: game.settings, objects: game.objects };
+    const copy = { name: game.name, settings: game.settings, objects: game.objects, gui: game.gui || [] };
     api("/hub/publish", { t: me.t, id: game.pub || "", title, desc, game: copy, thumb: thumb || undefined }).then((r) => {
       go.disabled = false; go.textContent = updating ? "⬆ Update" : "⬆ Publish";
       if (!r.ok) {

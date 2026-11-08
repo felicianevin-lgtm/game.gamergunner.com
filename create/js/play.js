@@ -2,8 +2,11 @@
 // (gravity + pushing out of solid boxes), a third-person camera, cars you drive with E, and every behavior from
 // assets.js BEHAVIORS: coins, checkpoints, lava, jump pads, spinners, moving platforms, doors, talking characters, finish.
 // The player is three spheres stacked up (feet, middle, head); solid things are boxes (world.js worldBoxes).
+// Screen GUI (gui.js) shows on top: buttons run their action, the Developer Menu button asks for its code and then
+// opens the dev menu (fly, super speed, super jump, no lava, teleport to the finish, collect every coin).
 import * as THREE from "../vendor/three.module.js";
 import { buildObject, worldBoxes, boundsBox } from "./world.js";
+import { renderGui } from "./gui.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -41,11 +44,13 @@ export function startPlay(world, game, opts) {
   let grounded = false, groundEnt = null, facing = spawnEnt ? spawnEnt.o.rot[1] * D2R : 0;
   let camYaw = facing, camPitch = 0.35, camDist = 14; // (camera behind the player)
   let coins = 0, time = 0, won = false, driving = null, msgTimer = 0;
+  const mods = { speed: false, jump: false, gravity: false, fly: false, god: false }; // (GUI buttons + dev menu)
   const totalCoins = ents.filter((e) => e.k === "coin").reduce((n, e) => n + (Number(e.o.b.points) || 1), 0);
 
   // ---------------------------------------------------------------- input
   const keys = new Set();
   const onKey = (e) => {
+    if (e.target && e.target.tagName === "INPUT") return; // (typing the dev menu code)
     const k = e.key.toLowerCase();
     if (e.type === "keydown") {
       if (e.key === "Escape") { stop(); return; }
@@ -73,6 +78,65 @@ export function startPlay(world, game, opts) {
   $("hud").classList.remove("hidden");
   const touchUI = (navigator.maxTouchPoints > 0 || "ontouchstart" in window) ? addTouchControls(keys, toggleCar) : null;
   if (touchUI) $("hudHelp").textContent = "Left stick: move · Jump · drag the screen to look";
+  const guiLayer = document.createElement("div");
+  guiLayer.className = "gui-layer in-play" + (touchUI ? " touch-on" : "");
+  $("hud").appendChild(guiLayer);
+  renderGui(guiLayer, game.gui || [], { onClick: (g, el) => guiClick(g, el) });
+  let devPanel = null;
+
+  function toggle(key, onText, offText) { mods[key] = !mods[key]; showMsg(mods[key] ? onText : offText, 1.4); beep(mods[key] ? 660 : 330, 0.12, "triangle"); refreshDev(); }
+  function guiClick(g, el) {
+    canvas.focus();
+    if (g.kind === "button") {
+      if (g.action === "message") showMsg(g.message || "Hello!", 2.2);
+      else if (g.action === "spawn") respawn("Back to the checkpoint!");
+      else if (g.action === "speed") toggle("speed", "Super speed ON!", "Super speed off");
+      else if (g.action === "jump") toggle("jump", "Super jump ON!", "Super jump off");
+      else if (g.action === "gravity") toggle("gravity", "Low gravity ON!", "Low gravity off");
+    } else if (g.kind === "devmenu") openDev(g, el);
+  }
+  // The Developer Menu: first the code, then the powers. It opens next to its button.
+  function openDev(g, el) {
+    if (devPanel) { devPanel.remove(); devPanel = null; return; }
+    devPanel = document.createElement("div");
+    devPanel.className = "dev-panel";
+    el.parentNode.insertBefore(devPanel, el.nextSibling);
+    if (devPanel.unlocked || g.unlocked) return refreshDev(g);
+    devPanel.innerHTML = '<b>🛠 Developer Menu</b><p>Type the code:</p><form><input maxlength="12" autocomplete="off" inputmode="text" aria-label="Code"><button type="submit">Open</button></form><p class="dev-err"></p>';
+    const input = devPanel.querySelector("input");
+    input.focus();
+    devPanel.querySelector("form").onsubmit = (e) => {
+      e.preventDefault();
+      if (input.value.trim() === g.code) { g.unlocked = true; beep(880, 0.15, "triangle", 1320); refreshDev(g); }
+      else { devPanel.querySelector(".dev-err").textContent = "Wrong code!"; input.value = ""; beep(160, 0.25, "sawtooth"); }
+    };
+  }
+  function refreshDev(g) {
+    if (!devPanel || !devPanel.isConnected) return;
+    if (g === undefined && !devPanel.querySelector("[data-dev]")) return;
+    const b = (k, label) => '<button type="button" data-dev="' + k + '" class="' + (mods[k] ? "on" : "") + '">' + label + (k in mods ? (mods[k] ? " ✓" : "") : "") + "</button>";
+    devPanel.innerHTML = '<b>🛠 Developer Menu</b>' + b("fly", "🕊 Fly") + b("speed", "⚡ Super speed") + b("jump", "🦘 Super jump") + b("god", "🛡 No lava") +
+      b("finish", "🏁 Teleport to finish") + b("coins", "🪙 Collect all coins") + '<button type="button" data-dev="close" class="close">Close</button>';
+    devPanel.querySelectorAll("[data-dev]").forEach((x) => (x.onclick = () => {
+      const k = x.dataset.dev;
+      if (k === "close") { devPanel.remove(); devPanel = null; canvas.focus(); return; }
+      if (k === "fly") { if (driving) leaveCar(); toggle("fly", "Flying! Space = up, Shift = down", "Fly off"); }
+      else if (k === "speed") toggle("speed", "Super speed ON!", "Super speed off");
+      else if (k === "jump") toggle("jump", "Super jump ON!", "Super jump off");
+      else if (k === "god") toggle("god", "No lava: you can't get hurt!", "Lava hurts again");
+      else if (k === "finish") {
+        const f = ents.find((e) => e.k === "finish");
+        if (!f) { showMsg("This game has no Finish Line", 1.6); return; }
+        if (driving) leaveCar();
+        pos.set(f.bounds.c.x, f.o.pos[1] + 0.2, f.bounds.c.z); vel.set(0, 0, 0);
+      } else if (k === "coins") {
+        let n = 0;
+        for (const e of ents) if (e.k === "coin" && !e.done) { e.done = true; e.g.visible = false; coins += Number(e.o.b.points) || 1; n++; }
+        showMsg(n ? "Got " + n + " coin" + (n === 1 ? "" : "s") + "!" : "No coins left", 1.6); beep(990, 0.2, "square", 1500);
+      }
+      refreshDev();
+    }));
+  }
   canvas.focus();
   showMsg(game.name, 2);
 
@@ -222,7 +286,7 @@ export function startPlay(world, game, opts) {
       if (e.bounds.c.distanceToSquared(pos) > (e.bounds.h.length() + 4) ** 2) continue;
       const box = e.k === "spin" && e.boxes.length ? e.boxes[0] : e.bounds;
       if (!touches(box, 0.12)) continue;
-      if (hurts) { respawn("Ouch! Back to the checkpoint"); break; }
+      if (hurts) { if (mods.god) continue; respawn("Ouch! Back to the checkpoint"); break; }
       if (e.k === "coin") { e.done = true; e.g.visible = false; coins += Number(b.points) || 1; beep(990, 0.12, "square", 1500); }
       else if (e.k === "jump") { if (driving) driving.vy = Math.max(driving.vy || 0, Number(b.power) || 30); else { vel.y = Number(b.power) || 30; grounded = false; } beep(330, 0.25, "triangle", 900); }
       else if (e.k === "checkpoint") { const cp = new THREE.Vector3(e.o.pos[0], e.o.pos[1] + e.o.size[1] + 0.2, e.o.pos[2]); if (cp.distanceTo(checkpoint) > 0.5) { checkpoint.copy(cp); showMsg("Checkpoint!"); beep(660, 0.2, "triangle", 990); } }
@@ -264,13 +328,18 @@ export function startPlay(world, game, opts) {
     const want = new THREE.Vector3();
     if (f || s) {
       const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw); // camera forward on the ground
-      want.set(fx * f - fz * s, 0, fz * f + fx * s).normalize().multiplyScalar(S.walk * (keys.has("shift") ? 1.5 : 1));
+      want.set(fx * f - fz * s, 0, fz * f + fx * s).normalize().multiplyScalar(S.walk * (keys.has("shift") && !mods.fly ? 1.5 : 1) * (mods.speed ? 2.2 : 1));
       facing += angleDiff(facing, Math.atan2(-want.x, -want.z)) * Math.min(1, dt * 12);
     }
     const acc = grounded ? 12 : 4;
     vel.x += (want.x - vel.x) * Math.min(1, dt * acc); vel.z += (want.z - vel.z) * Math.min(1, dt * acc);
-    if (keys.has(" ") && grounded) { vel.y = S.jump; grounded = false; beep(440, 0.08, "square", 660); }
-    vel.y -= S.gravity * dt;
+    if (mods.fly) { // flying: no gravity, Space up, Shift down
+      const up = (keys.has(" ") ? 1 : 0) - (keys.has("shift") ? 1 : 0);
+      vel.y += (up * S.walk * (mods.speed ? 2.2 : 1) - vel.y) * Math.min(1, dt * 8);
+    } else {
+      if (keys.has(" ") && grounded) { vel.y = S.jump * (mods.jump ? 1.7 : 1); grounded = false; beep(440, 0.08, "square", 660); }
+      vel.y -= S.gravity * (mods.gravity ? 0.35 : 1) * dt;
+    }
     vel.y = Math.max(vel.y, -120);
     pos.addScaledVector(vel, dt);
     collidePlayer();
@@ -341,6 +410,7 @@ export function startPlay(world, game, opts) {
     canvas.removeEventListener("wheel", onWheel);
     scene.remove(player);
     if (touchUI) touchUI.remove();
+    guiLayer.remove();
     while (world.root.children.length) world.root.remove(world.root.children[0]);
     $("hud").classList.add("hidden"); $("hudMsg").classList.remove("show"); $("bubbles").innerHTML = "";
     $("hudHelp").textContent = "W A S D move · Space jump · drag or arrows to look · E: car · Esc: stop";

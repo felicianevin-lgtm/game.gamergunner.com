@@ -5,6 +5,7 @@
 //          color, mat, solid, visible, b: {k: behavior, ...settings}, text}
 // Storage: "gv_studio_list" = [{id, name, updated}] newest first, "gv_studio_game_<id>" = the game.
 import { BY_TYPE, BEHAVIORS } from "./assets.js";
+import { sanitizeGui } from "./gui.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space" };
 export const DEFAULT_SETTINGS = { sky: "day", gravity: 70, walk: 14, jump: 26 };
@@ -37,6 +38,7 @@ export function sanitize(g) {
     settings: { ...DEFAULT_SETTINGS }, objects: [] };
   if (/^[a-z0-9]{8,16}$/.test(g.pub || "")) out.pub = g.pub; // (published: the game's id on the GunnerVerse home page)
   if (g.desc) out.desc = String(g.desc).slice(0, 300);
+  out.gui = sanitizeGui(g.gui); // (screen GUI: labels, buttons, the dev menu button)
   const s = g.settings || {};
   out.settings.sky = SKIES[s.sky] ? s.sky : "day";
   out.settings.gravity = num(s.gravity, 10, 200, 70); out.settings.walk = num(s.walk, 4, 60, 14); out.settings.jump = num(s.jump, 5, 80, 26);
@@ -118,5 +120,5 @@ export const TEMPLATES = {
 };
 export function makeGame(templateKey, name) {
   const t = TEMPLATES[templateKey] || TEMPLATES.baseplate;
-  return { v: 1, id: uid(), name: name || "My " + t.label + " Game", created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS }, objects: t.make() };
+  return { v: 1, id: uid(), name: name || "My " + t.label + " Game", created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS }, objects: t.make(), gui: [] };
 }

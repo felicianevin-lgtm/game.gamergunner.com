@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="studio.css?v=2">
+  <link rel="stylesheet" href="studio.css?v=3">
 </head>
 <body>
   <!-- top toolbar -->
@@ -20,6 +20,11 @@
     <input class="game-name" id="gameName" maxlength="40" aria-label="Game name" spellcheck="false">
     <span class="saved" id="savedNote"></span>
     <div class="tools" role="toolbar" aria-label="Tools">
+      <div class="add-wrap">
+        <button class="tb add-btn" id="btnAdd" type="button" title="Add parts, quick assets and GUI" aria-haspopup="true"><b>＋</b><span>Add ▾</span></button>
+        <div class="add-menu hidden" id="addMenu" role="menu"></div>
+      </div>
+      <span class="sep"></span>
       <button class="tb tool on" data-tool="select" title="Select (1)"><b>⬚</b><span>Select</span></button>
       <button class="tb tool" data-tool="translate" title="Move (2)"><b>✥</b><span>Move</span></button>
       <button class="tb tool" data-tool="rotate" title="Rotate (3)"><b>⟳</b><span>Rotate</span></button>
@@ -47,6 +52,7 @@
   <!-- middle: the 3D world -->
   <main class="view" id="view">
     <canvas id="canvas" tabindex="0"></canvas>
+    <div class="gui-layer edit" id="guiLayer"></div>
     <div class="view-help" id="viewHelp">Right-drag: look · Middle-drag: pan · Wheel: zoom · W A S D Q E: fly · F: focus</div>
   </main>
 
@@ -82,6 +88,6 @@
     <a class="play" href="../#/">← Back to games</a>
   </div>
 
-  <script type="module" src="js/editor.js?v=4"></script>
+  <script type="module" src="js/editor.js?v=5"></script>
 </body>
 </html>
