@@ -65,7 +65,7 @@ function RUNTIME(send) {
   const updates = [], timers = [], follows = new Map(), spins = new Map(), errs = new Map();
   let out = [], now = 0, cur = null, nclone = 1, ended = false;
   const P = { x: 0, y: 0, z: 0, ry: 0, coins: 0, health: 100, speed: 1, jump: 1 };
-  const shared = {};
+  const shared = {}, missing = new Set();
   const R2D = 180 / Math.PI;
   const cmd = (...a) => { if (out.length < 4000) out.push(a); };
   const nice = (v) => (typeof v === "number" ? Math.round(v * 1000) / 1000 : v);
@@ -76,7 +76,8 @@ function RUNTIME(send) {
     if (n > 6) return;
     const st = String((e && e.stack) || "");
     const m = st.match(/<anonymous>:(\d+):\d+/) || st.match(/Function:(\d+):\d+/);
-    const msg = String((e && e.message) || e).slice(0, 300);
+    let msg = String((e && e.message) || e).slice(0, 300);
+    if (/Cannot read propert(y|ies) of (null|undefined)/.test(msg)) msg += ". (Something you used isn't there: check the names you typed.)";
     cmd("err", s.name, m ? Math.max(1, +m[1] - 2) : 0, n === 6 ? msg + " (stopped showing this error)" : msg);
   }
   function run(fn, sc, ...args) {
@@ -166,7 +167,13 @@ function RUNTIME(send) {
   };
   const api = {
     player, shared,
-    find(name) { name = String(name); for (const s of things.values()) if (s.name === name) return get(s.id); return null; },
+    // (a name that isn't there: a friendly error, and a stand-in that does nothing, so the rest of the script keeps going)
+    find(name) {
+      name = String(name);
+      for (const s of things.values()) if (s.name === name) return get(s.id);
+      if (!missing.has(name)) { missing.add(name); report(new Error("There is nothing named \"" + name + "\" in your game. Check the name in the Explorer (capital letters count!)")); }
+      return new Thing({ id: "", name, kind: "part", type: "", x: 0, y: 0, z: 0, ry: 0, sx: 1, sy: 1, sz: 1, color: "#ffffff", visible: false, solid: false, text: "" });
+    },
     findAll(name) { name = String(name); return [...things.values()].filter((s) => s.name === name).map((s) => get(s.id)); },
     all() { return [...things.keys()].map(get); },
     say(text, secs) { cmd("msg", String(text).slice(0, 200), Math.max(0.5, Math.min(30, +secs || 2.2))); },

@@ -138,7 +138,7 @@ export function startPlay(world, game, opts) {
   const isKnown = (id) => guiById.has(id) || entById.has(id);
   function guiClick(g, el, ev) {
     canvas.focus();
-    if (g.kind === "frame") { if (ev && ev.target && ev.target.dataset.close) { setOn(g.id, false); beep(400, 0.06, "square"); } return; }
+    if (g.kind === "frame") { if (ev && ev.target && ev.target.dataset.close) { setOn(g.id, false); beep(400, 0.06, "square"); } else if (host) host.event("click", g.id); return; } // (panels: onClick scripts work too)
     if (host) host.event("click", g.id);
     if (g.kind === "button") {
       if (g.action === "message") showMsg(g.message || "Hello!", 2.2);
