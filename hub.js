@@ -328,7 +328,7 @@
     return '<a class="card" href="#/game/' + esc(g.id) + '">' + thumb(g) + '<div class="card-body"><div class="card-title">' + esc(g.title) + "</div>" +
       '<div class="card-by">by @' + esc(g.by) + (g.official ? '<span class="badge">✔ Official</span>' : "") + "</div>" + statsLine(g) + "</div></a>";
   }
-  var createCard = '<div class="card soon"><div class="big-icon">✚</div><b>Your game here</b><span>Build your own game in the Create studio and publish it for everyone. Coming soon!</span></div>';
+  var createCard = '<a class="card soon make" href="create/"><div class="big-icon">✚</div><b>Make your own game</b><span>Build it in GunnerVerse Studio with free cars, houses, coins, lava and more.</span></a>';
 
   function play(g) {
     api("/hub/play", { g: g.id }).catch(function () {});
@@ -415,15 +415,12 @@
       (hits.length ? '<div class="grid">' + hits.map(card).join("") + "</div>" : '<p class="empty">No games match that yet. Try another word, or check back when players start publishing their own games!</p>');
   }
 
-  function pageSoon(which) {
-    setNav(which);
-    var info = {
-      create: ["✚", "The Create studio is coming", "Build your own 3D game right here with free cars, trees, houses, coins, lava and more, then publish it so everyone can play."],
-    }[which];
-    main.innerHTML = '<div class="soon-page"><div class="big-icon">' + info[0] + "</div><h1>" + info[1] + "</h1><p>" + info[2] + "</p>" +
-      (me ? '<a class="btn" href="#/">Back to games</a>' : '<button class="btn" id="soonSignup" type="button">Sign up now so you\'re ready</button>') + "</div>";
-    var b = document.getElementById("soonSignup");
-    if (b) b.onclick = function () { openSignup(); };
+  function pageCreate() {
+    setNav("create");
+    main.innerHTML = '<div class="soon-page"><div class="big-icon">✚</div><h1>GunnerVerse Studio</h1>' +
+      "<p>Build your own 3D game right here: drag in free cars, trees, houses, coins, lava, jump pads and more, give things behaviors, and press Play to try it. " +
+      "Start from a Baseplate, an Obby or a Racing game. Your games save in this browser. Publishing them for everyone is coming soon!</p>" +
+      '<a class="btn big" href="create/">✚ Open the Studio</a><p class="tip" style="margin-top:14px">Works best on a computer with a mouse and keyboard.</p></div>';
   }
 
   function pageMe() {
@@ -453,7 +450,7 @@
     else if (parts[0] === "search") pageSearch(parts.slice(1).join("/"));
     else if (parts[0] === "friends") pageFriends();
     else if (parts[0] === "u" && parts[1]) pageUser(parts[1]);
-    else if (parts[0] === "create") pageSoon(parts[0]);
+    else if (parts[0] === "create") pageCreate();
     else if (parts[0] === "me") pageMe();
     else pageHome();
   }

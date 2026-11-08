@@ -103,6 +103,8 @@ h2.row-title small { font: 400 14px "Inter", sans-serif; color: var(--dim); }
   min-height: 200px; padding: 18px; text-align: center; color: var(--dim); cursor: default; }
 .card.soon:hover { transform: none; border-color: var(--edge); }
 .card.soon .big-icon { font-size: 38px; color: var(--green-hi); }
+.card.soon.make { cursor: pointer; text-decoration: none; }
+.card.soon.make:hover { border-color: var(--green-hi); border-style: solid; transform: translateY(-3px); }
 .card.soon b { color: var(--cream); }
 
 .empty { color: var(--dim); padding: 30px 0; }

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Create | GunnerVerse Studio</title>
+  <meta name="description" content="Build your own 3D game in GunnerVerse Studio: free cars, trees, houses, coins, lava and more, right in your browser.">
+  <meta name="theme-color" content="#070a0d">
+  <link rel="icon" type="image/png" href="../img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="studio.css?v=1">
+</head>
+<body>
+  <!-- top toolbar -->
+  <header class="bar" id="bar">
+    <a class="home" href="../#/" title="Back to GunnerVerse"><img src="../img/favicon.png" alt="GunnerVerse" width="30" height="30"></a>
+    <button class="tb menu-btn" id="btnGames" type="button" title="Your games">☰ <span>My games</span></button>
+    <input class="game-name" id="gameName" maxlength="40" aria-label="Game name" spellcheck="false">
+    <span class="saved" id="savedNote"></span>
+    <div class="tools" role="toolbar" aria-label="Tools">
+      <button class="tb tool on" data-tool="select" title="Select (1)"><b>⬚</b><span>Select</span></button>
+      <button class="tb tool" data-tool="translate" title="Move (2)"><b>✥</b><span>Move</span></button>
+      <button class="tb tool" data-tool="rotate" title="Rotate (3)"><b>⟳</b><span>Rotate</span></button>
+      <button class="tb tool" data-tool="scale" title="Scale (4)"><b>⤢</b><span>Scale</span></button>
+      <span class="sep"></span>
+      <button class="tb" id="btnSnap" title="Snap to grid (G)"><b>#</b><span>Snap 1</span></button>
+      <button class="tb" id="btnUndo" title="Undo (Ctrl+Z)"><b>↶</b><span>Undo</span></button>
+      <button class="tb" id="btnRedo" title="Redo (Ctrl+Y)"><b>↷</b><span>Redo</span></button>
+      <button class="tb" id="btnDup" title="Duplicate (Ctrl+D)"><b>⧉</b><span>Copy</span></button>
+      <button class="tb" id="btnDel" title="Delete (Del)"><b>✕</b><span>Delete</span></button>
+    </div>
+    <button class="play" id="btnPlay" type="button" title="Play test (F5)">▶ Play</button>
+  </header>
+
+  <!-- left: free assets -->
+  <aside class="panel toolbox" id="toolbox">
+    <div class="panel-title">Toolbox <small>free assets</small></div>
+    <div class="cats" id="cats"></div>
+    <input class="asset-search" id="assetSearch" placeholder="Search assets" aria-label="Search assets">
+    <div class="assets" id="assets"></div>
+    <p class="hint">Click an asset to add it, or drag it into the world.</p>
+  </aside>
+
+  <!-- middle: the 3D world -->
+  <main class="view" id="view">
+    <canvas id="canvas" tabindex="0"></canvas>
+    <div class="view-help" id="viewHelp">Right-drag: look · Middle-drag: pan · Wheel: zoom · W A S D Q E: fly · F: focus</div>
+  </main>
+
+  <!-- right: Explorer + Properties -->
+  <aside class="panel side-right">
+    <section class="explorer">
+      <div class="panel-title">Explorer <small id="objCount"></small></div>
+      <div class="tree" id="tree"></div>
+    </section>
+    <section class="props">
+      <div class="panel-title">Properties <small id="propsFor"></small></div>
+      <div class="prop-list" id="props"></div>
+    </section>
+  </aside>
+
+  <!-- play test overlay -->
+  <div class="hud hidden" id="hud">
+    <div class="hud-top">
+      <span class="hud-chip" id="hudCoins">🪙 0</span>
+      <span class="hud-chip" id="hudTime">⏱ 0:00</span>
+      <button class="hud-stop" id="btnStop" type="button">■ Stop</button>
+    </div>
+    <div class="hud-msg" id="hudMsg"></div>
+    <div class="hud-help" id="hudHelp">W A S D move · Space jump · drag or arrows to look · E: car · Esc: stop</div>
+    <div class="bubbles" id="bubbles"></div>
+  </div>
+
+  <div class="modal hidden" id="modal" role="dialog" aria-modal="true"><div class="modal-box" id="modalBox"></div></div>
+  <div class="small-screen" id="smallScreen">
+    <img src="../img/favicon.png" alt="" width="64" height="64">
+    <h1>GunnerVerse Studio</h1>
+    <p>The studio needs a bigger screen. Open game.gamergunner.com/create on a computer, or an iPad with a keyboard and mouse.</p>
+    <a class="play" href="../#/">← Back to games</a>
+  </div>
+
+  <script type="module" src="js/editor.js?v=3"></script>
+</body>
+</html>
