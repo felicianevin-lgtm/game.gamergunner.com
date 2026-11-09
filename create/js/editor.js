@@ -22,7 +22,7 @@ import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPict
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
 import { api, account, RELAY } from "./net.js";
 import { describe, buildMonster, monsterSize, sanitizeMonster, SURPRISE } from "./monster.js";
-import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount } from "./motion.js";
+import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount, LIMBS } from "./motion.js";
 import { TEXTURES, texturePicture } from "./textures.js";
 import { CHASE_SOUNDS, SCARE_FX, FLASHES, SCARE_SOUNDS, SCARE_WHEN, DEFAULT_CHASE, DEFAULT_SCARE, sanitizeChase, sanitizeScare, playScare } from "./scare.js";
 
@@ -1275,7 +1275,8 @@ function monsterProps(o) {
   if (c) html += '<div class="mon-box">' +
     slide("c.sp", "Speed", 1, 40, 0.5, c.sp, (v) => v + (v < 6 ? " (slow)" : v < 15 ? "" : " (fast!)")) +
     slide("c.dmg", "Damage per hit", 0, 100, 5, c.dmg, (v) => (v ? v + " of 100 health" : "none (it just chases)")) +
-    slide("c.r", "Starts chasing when you're closer than", 0, 150, 5, c.r, (v) => (v ? v + " studs" : "always chasing")) +
+    '<label class="tick"><input type="checkbox" data-tick="c.see"' + (c.see ? " checked" : "") + "> 👀 Only chases when it can see you (walls hide you; it wanders, then searches where it last saw you)</label>" +
+    slide("c.r", c.see ? "It can see you from" : "Starts chasing when you're closer than", 0, 150, 5, c.r, (v) => (v ? v + " studs" : c.see ? "90 studs" : "always chasing")) +
     '<div class="lbl">Sound when it hits</div>' + chips("c.snd", CHASE_SOUNDS, c.snd) +
     '<label class="tick"><input type="checkbox" data-tick="c.face"' + (c.face ? " checked" : "") + "> Turns to face you</label>" +
     '<p class="note">Walls stop it (see Animation above). Pick a walk in 🎬 Animation, its legs and arms move by themselves.</p></div>';
@@ -1307,7 +1308,7 @@ function wireMonsterProps(o) {
   $("pScare").onchange = (e) => save(() => { if (e.target.checked) o.scare = { ...DEFAULT_SCARE }; else delete o.scare; }) || (rebuild(o), drawProps());
   box.querySelectorAll("[data-sl]").forEach((inp) => {
     const [w, k] = inp.dataset.sl.split("."), show = box.querySelector('[data-show="' + inp.dataset.sl + '"]');
-    inp.oninput = () => { const v = Number(inp.value); target(w)[k] = v; show.textContent = { "c.sp": v + (v < 6 ? " (slow)" : v < 15 ? "" : " (fast!)"), "c.dmg": v ? v + " of 100 health" : "none (it just chases)", "c.r": v ? v + " studs" : "always chasing", "s.r": v + " studs", "s.secs": v + " s" }[inp.dataset.sl]; };
+    inp.oninput = () => { const v = Number(inp.value); target(w)[k] = v; show.textContent = { "c.sp": v + (v < 6 ? " (slow)" : v < 15 ? "" : " (fast!)"), "c.dmg": v ? v + " of 100 health" : "none (it just chases)", "c.r": v ? v + " studs" : o.chase && o.chase.see ? "90 studs" : "always chasing", "s.r": v + " studs", "s.secs": v + " s" }[inp.dataset.sl]; };
     inp.onchange = () => save(() => {});
   });
   box.querySelectorAll("[data-chip]").forEach((b) => (b.onclick = () => { const [w, k] = b.dataset.chip.split("."); save(() => { target(w)[k] = b.dataset.v; }); drawProps(); if (w === "s" && k === "fx") tryScare(o); }));
@@ -1332,6 +1333,7 @@ function openAnimator(o) {
     '<div class="anim-label">Walk style</div>' + chips("anWalk", GAITS) +
     '<div class="anim-label">When it stands still</div>' + chips("anIdle", IDLES) +
     '<label class="field"><span>Plays</span><select id="anWhen">' + Object.entries(WHEN).map(([k, v]) => '<option value="' + k + '">' + esc(v) + "</option>").join("") + "</select></label>" +
+    '<label class="field"><span>What moves</span><select id="anLimbs">' + Object.entries(LIMBS).map(([k, v]) => '<option value="' + k + '">' + esc(v) + "</option>").join("") + "</select></label>" +
     '<label class="field"><span>Speed <b id="anSpN"></b></span><input type="range" id="anSp" min="0.3" max="3" step="0.1"></label>' +
     '</div><div><div class="mon-stage"><canvas id="anCanvas"></canvas></div>' +
     '<div class="thumb-btns"><button class="btn" type="button" id="anPrevWalk">🚶 Walking</button><button class="btn" type="button" id="anPrevStand">🧍 Standing</button></div>' +
@@ -1352,12 +1354,13 @@ function openAnimator(o) {
   const paint = () => {
     $("anWalk").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === mo.g));
     $("anIdle").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === mo.i));
-    $("anWhen").value = mo.w; $("anSp").value = mo.sp; $("anSpN").textContent = mo.sp + "×";
+    $("anWhen").value = mo.w; $("anLimbs").value = mo.l || "all"; $("anSp").value = mo.sp; $("anSpN").textContent = mo.sp + "×";
     $("anPrevWalk").classList.toggle("on", walking); $("anPrevStand").classList.toggle("on", !walking);
   };
   $("anWalk").querySelectorAll("button").forEach((b) => (b.onclick = () => { mo.g = b.dataset.k; walking = true; paint(); }));
   $("anIdle").querySelectorAll("button").forEach((b) => (b.onclick = () => { mo.i = b.dataset.k; walking = false; paint(); }));
   $("anWhen").onchange = (e) => { mo.w = e.target.value; paint(); };
+  $("anLimbs").onchange = (e) => { if (e.target.value === "all") delete mo.l; else mo.l = e.target.value; paint(); };
   $("anSp").oninput = (e) => { mo.sp = +e.target.value; paint(); };
   $("anPrevWalk").onclick = () => { walking = true; paint(); };
   $("anPrevStand").onclick = () => { walking = false; paint(); };

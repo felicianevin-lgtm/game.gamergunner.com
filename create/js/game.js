@@ -160,7 +160,7 @@ function backrooms() {
     newObj("spawn", [0, 0, 0]),
     newObj("sign", [4, 0, -4], { text: "Press Play: the script builds the Backrooms (a new maze every time)" }),
     newObj("monster", [20, 0, 20], { name: "Entity", mon, text: "The Entity", size: monsterSize(mon),
-      mo: { g: "sneak", i: "look", w: "move", sp: 0.8 }, chase: { sp: 8, dmg: 34, r: 50, face: 1, snd: "glitch" } }),
+      mo: { g: "stalk", i: "look", w: "move", sp: 1 }, chase: { sp: 8, dmg: 34, r: 0, face: 1, snd: "glitch", see: 1 } }),
   ];
 }
 

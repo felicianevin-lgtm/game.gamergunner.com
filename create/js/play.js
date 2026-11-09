@@ -527,26 +527,195 @@ export function startPlay(world, game, opts) {
   // 👾 CHASERS (Properties > Monster, obj.chase): anything can hunt the player. It walks at them (walls stop it unless
   // "Walls stop it" is off), turns to face them, and each hit hurts and knocks them back. With a "starts chasing" distance
   // it waits until you come close, and gives up once you get far enough away.
+  // ---- 👀 EYES: can it see the player? (in front of it, close enough, and no wall in between; right next to it, it feels you)
+  const _sa = new THREE.Vector3(), _sb = new THREE.Vector3(), _siq = new THREE.Quaternion(), _eye = new THREE.Vector3(), _you = new THREE.Vector3();
+  function segHitsBox(a, b, box) { // does the line a-b go through the (turned) box?
+    _siq.copy(box.q).invert();
+    _sa.copy(a).sub(box.c).applyQuaternion(_siq); _sb.copy(b).sub(box.c).applyQuaternion(_siq);
+    let t0 = 0, t1 = 1;
+    for (const k of ["x", "y", "z"]) {
+      const s = _sa[k], dd = _sb[k] - s, h = box.h[k];
+      if (Math.abs(dd) < 1e-9) { if (s < -h || s > h) return false; continue; }
+      let ta = (-h - s) / dd, tb = (h - s) / dd; if (ta > tb) { const x = ta; ta = tb; tb = x; }
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb); if (t0 > t1) return false;
+    }
+    return true;
+  }
+  function canSee(e) {
+    const c = e.o.chase, p = e.g.position, h = e.o.size[1];
+    const dx = pos.x - p.x, dz = pos.z - p.z, d = Math.hypot(dx, dz);
+    if (d > (c.r || 90)) return false;
+    if (d < Math.max(4, Math.max(e.o.size[0], e.o.size[2]))) return true;
+    const yaw = e.yawNow != null ? e.yawNow : e.o.rot[1] * D2R;
+    if ((-Math.sin(yaw) * dx - Math.cos(yaw) * dz) / d < 0.42) return false; // (about 130° in front of it)
+    _eye.set(p.x, p.y + Math.max(0.5, h * 0.85), p.z); _you.set(pos.x, pos.y + 2.2, pos.z);
+    for (const o of solids()) {
+      if (o === e || !o.o.visible || o.o.transp >= 50 || o.o.mat === "glass" || o.k === "coin") continue;
+      for (const b of o.boxes) if (segHitsBox(_eye, _you, b)) return false;
+    }
+    return true;
+  }
+
+  // ---- 🗺️ THE WALKING MAP: a grid of where a walker fits, made from the walls around it (again when scripts change them)
+  let navDirty = 1;
+  const _rm = new THREE.Matrix4();
+  function buildNav(e) {
+    const p = e.g.position, sz = e.o.size;
+    const r = Math.max(0.25, Math.min(6, Math.min(sz[0], sz[2]) * 0.45)) * 0.85, stepH = Math.max(0.5, sz[1] * 0.3);
+    const lo = p.y + stepH, hi = p.y + Math.max(stepH + 0.5, Math.min(sz[1], 4)); // (only walls at its height count: floors and high ceilings don't)
+    const obs = [];
+    let x0 = Math.min(p.x, pos.x), x1 = Math.max(p.x, pos.x), z0 = Math.min(p.z, pos.z), z1 = Math.max(p.z, pos.z);
+    for (const o of solids()) {
+      if (o === e || o.moving || o.walker || o.k === "car" || o.k === "coin") continue;
+      for (const b of o.boxes) {
+        _rm.makeRotationFromQuaternion(b.q); const m = _rm.elements;
+        const hx = Math.abs(m[0]) * b.h.x + Math.abs(m[4]) * b.h.y + Math.abs(m[8]) * b.h.z;
+        const hy = Math.abs(m[1]) * b.h.x + Math.abs(m[5]) * b.h.y + Math.abs(m[9]) * b.h.z;
+        const hz = Math.abs(m[2]) * b.h.x + Math.abs(m[6]) * b.h.y + Math.abs(m[10]) * b.h.z;
+        if (b.c.y + hy <= lo || b.c.y - hy >= hi) continue;
+        if (hx > 400 || hz > 400) continue; // (giant blocks: the ground, not a wall)
+        obs.push([b.c.x - hx - r, b.c.x + hx + r, b.c.z - hz - r, b.c.z + hz + r]);
+        x0 = Math.min(x0, b.c.x - hx); x1 = Math.max(x1, b.c.x + hx); z0 = Math.min(z0, b.c.z - hz); z1 = Math.max(z1, b.c.z + hz);
+      }
+    }
+    x0 -= 6; z0 -= 6; x1 += 6; z1 += 6;
+    let cs = Math.max(0.75, Math.min(2, r));
+    while (((x1 - x0) / cs) * ((z1 - z0) / cs) > 90000) cs *= 1.25;
+    const W = Math.ceil((x1 - x0) / cs), H = Math.ceil((z1 - z0) / cs), g = new Uint8Array(W * H);
+    for (const [a, b, c2, d] of obs) {
+      const i0 = Math.max(0, Math.ceil((a - x0) / cs - 0.5)), i1 = Math.min(W - 1, Math.floor((b - x0) / cs - 0.5));
+      const j0 = Math.max(0, Math.ceil((c2 - z0) / cs - 0.5)), j1 = Math.min(H - 1, Math.floor((d - z0) / cs - 0.5));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) g[j * W + i] = 1;
+    }
+    return { x0, z0, cs, W, H, g, ver: navDirty, at: time };
+  }
+  function navFor(e) {
+    if (!e.nav || (e.nav.ver !== navDirty && time - e.nav.at > 0.8)) e.nav = buildNav(e);
+    return e.nav;
+  }
+  const cellOf = (N, x, z) => [Math.max(0, Math.min(N.W - 1, Math.floor((x - N.x0) / N.cs))), Math.max(0, Math.min(N.H - 1, Math.floor((z - N.z0) / N.cs)))];
+  const cellPos = (N, i, j) => [N.x0 + (i + 0.5) * N.cs, N.z0 + (j + 0.5) * N.cs];
+  function nearestFree(N, i, j) { // (the closest open cell, if it's standing in a wall's edge)
+    if (!N.g[j * N.W + i]) return [i, j];
+    for (let rad = 1; rad < 8; rad++) for (let dj = -rad; dj <= rad; dj++) for (let di = -rad; di <= rad; di++) {
+      if (Math.max(Math.abs(di), Math.abs(dj)) !== rad) continue;
+      const a = i + di, b = j + dj;
+      if (a >= 0 && b >= 0 && a < N.W && b < N.H && !N.g[b * N.W + a]) return [a, b];
+    }
+    return null;
+  }
+  function clearLine(N, ax, az, bx, bz) { // (can it walk straight from a to b?)
+    const n = Math.ceil(Math.hypot(bx - ax, bz - az) / (N.cs * 0.5));
+    for (let k = 1; k <= n; k++) { const [i, j] = cellOf(N, ax + (bx - ax) * k / n, az + (bz - az) * k / n); if (N.g[j * N.W + i]) return false; }
+    return true;
+  }
+  // A* on the grid: the way from here to there around the walls, smoothed into a few straight walks
+  function findPath(N, fx, fz, tx, tz) {
+    const s = nearestFree(N, ...cellOf(N, fx, fz)), t = nearestFree(N, ...cellOf(N, tx, tz));
+    if (!s || !t) return null;
+    const W = N.W, S = s[1] * W + s[0], T = t[1] * W + t[0];
+    const gs = new Float32Array(W * N.H).fill(Infinity), from = new Int32Array(W * N.H).fill(-1), shut = new Uint8Array(W * N.H);
+    const heap = [], push = (f, k) => { heap.push([f, k]); let i = heap.length - 1; while (i > 0) { const pi = (i - 1) >> 1; if (heap[pi][0] <= heap[i][0]) break; [heap[pi], heap[i]] = [heap[i], heap[pi]]; i = pi; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+    const hh = (k) => { const dx = Math.abs((k % W) - t[0]), dz = Math.abs(((k / W) | 0) - t[1]); return Math.max(dx, dz) + 0.414 * Math.min(dx, dz); };
+    gs[S] = 0; push(hh(S), S);
+    let n = 0;
+    while (heap.length && n++ < 60000) {
+      const [, k] = pop(); if (k === T) break; if (shut[k]) continue; shut[k] = 1;
+      const i = k % W, j = (k / W) | 0;
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= W || b >= N.H) continue;
+        const q = b * W + a; if (N.g[q] || shut[q]) continue;
+        if (di && dj && (N.g[j * W + a] || N.g[b * W + i])) continue; // (no cutting corners)
+        const ng = gs[k] + (di && dj ? 1.414 : 1);
+        if (ng < gs[q]) { gs[q] = ng; from[q] = k; push(ng + hh(q), q); }
+      }
+    }
+    if (from[T] < 0 && T !== S) return null;
+    const cells = []; for (let k = T; k >= 0 && k !== S; k = from[k]) cells.push(k); cells.reverse();
+    const pts = cells.map((k) => cellPos(N, k % W, (k / W) | 0));
+    const out = []; let ax = fx, az = fz, i = 0;
+    while (i < pts.length) { let j = pts.length - 1; while (j > i && !clearLine(N, ax, az, pts[j][0], pts[j][1])) j--; out.push(pts[j]); [ax, az] = pts[j]; i = j + 1; }
+    return out;
+  }
+  // walk toward (tx, tz) along a path (made again now and then, or when the goal moves), at speed sp
+  function walkTo(e, tx, tz, sp, dt, stopAt) {
+    const p = e.g.position, d = Math.hypot(tx - p.x, tz - p.z);
+    if (d <= (stopAt || 0.6)) return true;
+    let gx = tx, gz = tz;
+    if (e.walker) {
+      const N = navFor(e);
+      if (!clearLine(N, p.x, p.z, tx, tz)) {
+        if (!e.path || time > e.pathAt + 0.5 || Math.hypot(e.pathGoal[0] - tx, e.pathGoal[1] - tz) > 3) { e.path = findPath(N, p.x, p.z, tx, tz); e.pathAt = time; e.pathGoal = [tx, tz]; }
+        while (e.path && e.path.length > 1 && Math.hypot(e.path[0][0] - p.x, e.path[0][1] - p.z) < N.cs * 0.8) e.path.shift();
+        if (e.path && e.path.length) [gx, gz] = e.path[0];
+        else if (!e.path) e.noPath = (e.noPath || 0) + dt; // (no way there: it just leans toward you, the old way)
+      } else e.path = null;
+    }
+    const gd = Math.hypot(gx - p.x, gz - p.z) || 1, step = Math.min(sp * dt, Math.max(0, d - (stopAt || 0)));
+    const nx = p.x + ((gx - p.x) / gd) * step, nz = p.z + ((gz - p.z) / gd) * step;
+    e.moveDir = Math.atan2(-(gx - p.x), -(gz - p.z));
+    if (e.walker) e.want = new THREE.Vector3(nx, flies(e) ? pos.y : p.y, nz);
+    else { p.x = nx; p.z = nz; e.o.pos = [p.x, p.y, p.z]; refreshBoxes(e); }
+    return false;
+  }
+  function faceTo(e, yaw, dt, k) { // (its front, -z, turns; any tilt it was placed with stays)
+    if (e.yawNow == null) { e.baseYaw = e.o.rot[1] * D2R; e.yawNow = e.baseYaw; e.tiltQ = new THREE.Quaternion().setFromAxisAngle(Y, -e.baseYaw).multiply(e.baseQ); }
+    e.yawNow += angleDiff(e.yawNow, yaw) * Math.min(1, dt * (k || 6));
+    e.g.quaternion.setFromAxisAngle(Y, e.yawNow).multiply(e.tiltQ);
+    e.o.rot = [e.o.rot[0], e.yawNow / D2R, e.o.rot[2]];
+    refreshBoxes(e);
+  }
+  function wanderSpot(e) { // (somewhere open nearby it can walk to)
+    const N = navFor(e), p = e.g.position;
+    for (let k = 0; k < 12; k++) {
+      const a = Math.random() * Math.PI * 2, r = 12 + Math.random() * 30, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+      const [i, j] = cellOf(N, x, z);
+      if (!N.g[j * N.W + i] && findPath(N, p.x, p.z, x, z)) return [x, z];
+    }
+    return null;
+  }
+
+  // 👾 CHASERS (Properties > Monster, obj.chase): anything can hunt the player. Walkers find their way around walls (the
+  // walking map above), turn to face where they go, and each hit hurts and knocks you back.
+  //  - "Only chases when it can see you" (c.see): it wanders around; when it sees you it chases; when you get out of sight
+  //    it goes to where it last saw you and looks around, then wanders again. c.r = how far it can see.
+  //  - otherwise: with a "starts chasing" distance it waits until you come close, and gives up once you get far away.
   function chaseStep(e, dt) {
     const c = e.o.chase, p = e.g.position;
     e.hitCool = Math.max(0, (e.hitCool || 0) - dt);
     if (won || lost) return;
     const dx = pos.x - p.x, dz = pos.z - p.z, d = Math.hypot(dx, dz);
-    e.hunting = !c.r || d < (e.hunting ? c.r * 1.5 : c.r);
-    if (!e.hunting || d < 1e-3) return;
     const reach = Math.max(e.o.size[0], e.o.size[2]) / 2 + 0.4;
-    if (d > reach) {
-      const step = Math.min(c.sp * dt, d - reach), nx = p.x + (dx / d) * step, nz = p.z + (dz / d) * step;
-      if (e.walker) e.want = new THREE.Vector3(nx, flies(e) ? pos.y : p.y, nz);
-      else { p.x = nx; p.z = nz; e.o.pos = [p.x, p.y, p.z]; refreshBoxes(e); }
+    if (c.see) {
+      e.lookT = (e.lookT || 0) - dt;
+      if (e.lookT <= 0) { e.lookT = 0.15; const saw = canSee(e); if (saw) e.lastSeen = [pos.x, pos.z]; e.sees = saw; }
+      if (e.sees) { // chase!
+        e.searchT = 0; e.wander = null;
+        walkTo(e, pos.x, pos.z, c.sp, dt, reach);
+        faceTo(e, Math.atan2(-dx, -dz), dt, 6);
+      } else if (e.lastSeen) { // go to where it last saw you, then look around
+        if (walkTo(e, e.lastSeen[0], e.lastSeen[1], c.sp, dt, 1.2)) {
+          e.searchT = (e.searchT || 0) + dt;
+          faceTo(e, (e.yawNow || 0) + Math.sin(e.searchT * 2.2) * 1.4, dt, 2);
+          if (e.searchT > 3) { e.lastSeen = null; e.searchT = 0; }
+        } else faceTo(e, e.moveDir, dt, 5);
+      } else { // wander: walk somewhere, stop, look around, walk again
+        e.waitT = (e.waitT || 0) - dt;
+        if (!e.wander && e.waitT <= 0) { e.wander = e.walker ? wanderSpot(e) : [p.x + (Math.random() - 0.5) * 40, p.z + (Math.random() - 0.5) * 40]; if (!e.wander) e.waitT = 1; }
+        if (e.wander) {
+          if (walkTo(e, e.wander[0], e.wander[1], Math.max(1, c.sp * 0.45), dt, 1) || (e.wanderT = (e.wanderT || 0) + dt) > 20) { e.wander = null; e.wanderT = 0; e.waitT = 1 + Math.random() * 2.5; }
+          else faceTo(e, e.moveDir, dt, 4);
+        } else faceTo(e, (e.yawNow || 0) + Math.sin(time * 1.3) * 0.8, dt, 1.5);
+      }
+    } else {
+      e.hunting = !c.r || d < (e.hunting ? c.r * 1.5 : c.r);
+      if (!e.hunting || d < 1e-3) return;
+      walkTo(e, pos.x, pos.z, c.sp, dt, reach);
+      if (c.face) faceTo(e, Math.atan2(-dx, -dz), dt, 6);
     }
-    if (c.face) { // (its front, -z, turns toward you; any tilt it was placed with stays)
-      if (e.yawNow == null) { e.baseYaw = e.o.rot[1] * D2R; e.yawNow = e.baseYaw; e.tiltQ = new THREE.Quaternion().setFromAxisAngle(Y, -e.baseYaw).multiply(e.baseQ); }
-      e.yawNow += angleDiff(e.yawNow, Math.atan2(-dx, -dz)) * Math.min(1, dt * 6);
-      e.g.quaternion.setFromAxisAngle(Y, e.yawNow).multiply(e.tiltQ);
-      e.o.rot = [e.o.rot[0], e.yawNow / D2R, e.o.rot[2]];
-      refreshBoxes(e);
-    }
+
     if (c.dmg > 0 && e.hitCool <= 0 && !mods.god && !driving && touches(e.bounds, 0.3)) {
       e.hitCool = 1;
       scareSound(c.snd);
@@ -708,6 +877,7 @@ export function startPlay(world, game, opts) {
   function applyScripts() {
     if (!pending.length) return;
     const list = pending; pending = [];
+    if (list.some((c) => Array.isArray(c) && /^(build|destroy|solid|vis|size|clone)$/.test(c[0]))) navDirty++;
     for (const c of list) {
       if (!Array.isArray(c)) continue;
       const [k, a, b, cc, d] = c;
@@ -719,7 +889,7 @@ export function startPlay(world, game, opts) {
           if (x == null || y == null || z == null) continue;
           const p = e.g.position;
           if (e.walker && Math.hypot(x - p.x, z - p.z) < Math.max(4, Math.min(e.o.size[0], e.o.size[2]) * 2)) { e.want = new THREE.Vector3(x, y, z); e.scripted = true; continue; } // (walks: stepWalker)
-          p.set(x, y, z); e.o.pos = [x, y, z]; e.base.copy(p); e.scripted = true; if (e.walker) e.vy = 0; refreshBoxes(e);
+          p.set(x, y, z); e.o.pos = [x, y, z]; e.base.copy(p); e.scripted = true; if (e.walker) { e.vy = 0; e.home = p.clone(); } e.lastSeen = null; e.sees = false; e.path = null; e.wander = null; refreshBoxes(e); // (teleported: a chaser forgets where it saw you)
         }
       } else if (k === "rot" && e && e !== driving) {
         const ry = NUM(b, -1e6, 1e6); if (ry == null) continue;

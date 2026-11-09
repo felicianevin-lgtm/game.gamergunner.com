@@ -1,6 +1,6 @@
 // MONSTERS + JUMP SCARES for anything in GunnerVerse Studio (a Block, a Character, an imported model...).
 //   obj.chase = {sp: speed, dmg: damage per hit, r: starts chasing when you're this close (0 = always), face: 1 = turns
-//                to face you, snd: sound when it hits}                                       (play.js chasers)
+//                to face you, snd: sound when it hits, see: 1 = only chases when it can see you (r = how far it sees)}                                       (play.js chasers)
 //   obj.scare = {when: "near" / "touch", r: how close, fx: SCARE_FX, flash: FLASHES, snd: SCARE_SOUNDS, secs,
 //                again: 1 = every time (else once), hide: 1 = invisible until it jumps out, pic: a picture file instead}
 // playScare() shows the scare on top of everything: the thing itself (or a picture) flies at your face, the screen
@@ -23,10 +23,10 @@ export const SCARE_WHEN = { near: "When a player gets close", touch: "When a pla
 
 const word = (v, list, d) => (list[v] ? v : d);
 const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v * 10) / 10)) : d; };
-export const DEFAULT_CHASE = { sp: 8, dmg: 20, r: 0, face: 1, snd: "scream" };
+export const DEFAULT_CHASE = { sp: 8, dmg: 20, r: 0, face: 1, snd: "scream", see: 1 };
 export function sanitizeChase(c) {
   if (!c || typeof c !== "object") return null;
-  return { sp: num(c.sp, 1, 40, 8), dmg: num(c.dmg, 0, 100, 20), r: num(c.r, 0, 300, 0), face: c.face === 0 || c.face === false ? 0 : 1, snd: word(c.snd, CHASE_SOUNDS, "scream") };
+  return { sp: num(c.sp, 1, 40, 8), dmg: num(c.dmg, 0, 100, 20), r: num(c.r, 0, 300, 0), face: c.face === 0 || c.face === false ? 0 : 1, snd: word(c.snd, CHASE_SOUNDS, "scream"), see: c.see ? 1 : 0 };
 }
 export const DEFAULT_SCARE = { when: "near", r: 8, fx: "lunge", flash: "red", snd: "scream", secs: 1.5, again: 0, hide: 0, pic: "" };
 export function sanitizeScare(s) {

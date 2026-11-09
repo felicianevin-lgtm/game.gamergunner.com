@@ -1,5 +1,6 @@
 // ANIMATIONS FOR ANYTHING in GunnerVerse Studio: monsters, Characters, imported models, even a plain Block.
-// Every thing can have obj.mo = {g: walk style (GAITS), i: standing-still move (IDLES), w: when (WHEN), sp: speed 0.3..3}.
+// Every thing can have obj.mo = {g: walk style (GAITS), i: standing-still move (IDLES), w: when (WHEN), sp: speed 0.3..3,
+// l: what moves (LIMBS: legs and arms / legs only / just the body; for models whose "arms" are really hair or strands)}.
 // When it plays, the thing's legs and arms are found by themselves (findLimbs):
 //   - Monster Maker monsters already have jointed legs / arms / tentacles / wings / tail (monster.js rig)
 //   - imported models with a skeleton: bones named like thigh / upper leg / leg and upper arm / arm (Mixamo, Blender...)
@@ -21,6 +22,7 @@ export const GAITS = { // f = steps (radians / s), leg / arm = swing, bob / hop 
   skip: { label: "Skip", icon: "💃", f: 7, leg: 0.7, arm: 0.7, hop: 0.22 },
   strut: { label: "Strut", icon: "😎", f: 6, leg: 0.55, arm: 0.35, bob: 0.06, yaw: 0.18 },
   crawl: { label: "Crawl / slither", icon: "🐍", f: 9, leg: 0.3, arm: 0.6, crouch: 0.22, yaw: 0.25 },
+  stalk: { label: "Stalk (creepy)", icon: "🕷️", f: 3, leg: 0.42, arm: 0.04, bob: 0.03, lean: 0.12, roll: 0.07, yaw: 0.05 },
   fly: { label: "Fly", icon: "🦅", f: 7, leg: 0, legPose: 0.35, arm: 0, flap: 1, hover: 0.3, lean: 0.15 },
 };
 export const IDLES = {
@@ -29,12 +31,15 @@ export const IDLES = {
   spin: { label: "Spin", icon: "🌀" }, bob: { label: "Bob", icon: "🎈" }, wobble: { label: "Wobble", icon: "🍮" },
   sway: { label: "Sway", icon: "🌴" }, none: { label: "Stand still", icon: "🧍" },
 };
+export const LIMBS = { all: "Legs and arms", legs: "Legs only (arms hang still)", none: "Just the body (nothing swings)" };
 export const WHEN = { move: "Walk when it moves", always: "Always walk", idle: "Never walk (just the standing move)" };
 
 // Clean a saved {g, i, w, sp}.
 export function sanitizeMotion(m) {
   if (!m || typeof m !== "object") return null;
-  return { g: GAITS[m.g] ? m.g : "walk", i: IDLES[m.i] ? m.i : "breathe", w: WHEN[m.w] ? m.w : "move", sp: Math.max(0.3, Math.min(3, Math.round((+m.sp || 1) * 10) / 10)) };
+  const out = { g: GAITS[m.g] ? m.g : "walk", i: IDLES[m.i] ? m.i : "breathe", w: WHEN[m.w] ? m.w : "move", sp: Math.max(0.3, Math.min(3, Math.round((+m.sp || 1) * 10) / 10)) };
+  if (LIMBS[m.l] && m.l !== "all") out.l = m.l;
+  return out;
 }
 // What a thing plays: its own settings, or (monsters made before these settings) its old Animation choice.
 export function motionOf(o) {
@@ -318,6 +323,7 @@ export function animateThing(inner, h, t, walk, mo) {
   const limbs = inner.userData.mixing ? null : findLimbs(inner); // (a playing model animation moves the bones itself)
   if (!limbs) return;
   for (const L of limbs) {
+    if (mo.l === "none" || (mo.l === "legs" && L.kind === "arm")) { turn(L, 0, 0); continue; } // (those stay still)
     if (L.kind === "leg") { const a = b.leg(L.phase, L.side), k = Math.max(0, -a.x) * 0.9; turn(L, a.x, 0); if (L.knee) turn(L.knee, -k, 0); if (L.foot) turn(L.foot, (k - a.x) * 0.8, 0); } // (+ = swings forward, so a knee bends with -)
     else if (L.kind === "arm") { const a = b.arm(L.phase, L.side); turn(L, a.x, a.z); }
   }
