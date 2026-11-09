@@ -2,11 +2,12 @@
 // every Studio game (play.js). Everything is built from simple shapes in code (original designs, nothing to download).
 // Saved in this browser (localStorage "gv_avatar") and on your account (relay social.js /social/avatar), so friends see it.
 //   {skin, shirt, pants, shoes, accent (pattern color), top (TOPS), face (FACES), hair (HAIR), hairColor,
-//    hat (HATS), hatColor, eyes (EYES), back (BACK), hand (HAND), build (BUILDS)}
+//    hat (HATS), hatColor, eyes (EYES), back (BACK), hand (HAND), build (BUILDS),
+//    art / pantsArt (your own shirt / pants drawing, ART x ART pixels), made (up to MAX_WORN cosmetics you built)}
 // The body is about 3.3 studs tall, feet at y = 0, facing -z (like cars), with limbs for the walk animation.
 import * as THREE from "../vendor/three.module.js";
 
-export const TOPS = { plain: "Plain", belt: "Runner suit", stripes: "Stripes", bolt: "Lightning", star: "Star", heart: "Heart", gv: "GV logo", seven: "Jersey #7", hoodie: "Hoodie", tux: "Tuxedo", overalls: "Overalls" };
+export const TOPS = { plain: "Plain", belt: "Runner suit", stripes: "Stripes", bolt: "Lightning", star: "Star", heart: "Heart", gv: "GV logo", seven: "Jersey #7", hoodie: "Hoodie", tux: "Tuxedo", overalls: "Overalls", draw: "🎨 My drawing" };
 export const FACES = { smile: "Smile", grin: "Big grin", happy: "Happy", wink: "Wink", cool: "Cool", surprised: "Surprised", angry: "Grumpy", sleepy: "Sleepy", tongue: "Silly", robot: "Robot", none: "No face" };
 export const HAIR = { none: "None", short: "Short", spiky: "Spiky", long: "Long", ponytail: "Ponytail", curly: "Curly", mohawk: "Mohawk", bun: "Bun", side: "Side swoop" };
 export const HATS = { none: "None", helmet: "Runner helmet", cap: "Cap", backcap: "Backwards cap", beanie: "Beanie", crown: "Crown", tophat: "Top hat", cowboy: "Cowboy hat",
@@ -23,11 +24,42 @@ const COLORS = ["skin", "shirt", "pants", "shoes", "accent", "hairColor", "hatCo
 export const DEFAULT_AVATAR = { skin: "#e0a878", shirt: "#1b2420", pants: "#1b2420", shoes: "#111111", accent: "#1fae45", top: "belt", face: "smile", hair: "none", hairColor: "#5a3a26",
   hat: "helmet", hatColor: "#1fae45", eyes: "visor", back: "none", hand: "none", build: "normal" };
 
+// Drawings (🎨 Draw on the Avatar page): ART x ART pixels, one hex digit each: 0 = no paint, 1-f = DRAW_COLORS.
+export const ART = 32;
+export const DRAW_COLORS = [null, "#111111", "#ffffff", "#a3a8b0", "#e8261c", "#ff7a1a", "#ffc531", "#7be03a", "#1fae45", "#13c4c4", "#2f7df6", "#1d2a52", "#a64bf4", "#ff4fa3", "#8b5a2b", "#f6d7b8"];
+// Cosmetics you build (🛠️ Build): {i (id), a (ATTACH), b: [pieces]}; a piece is
+//   {s (SHAPES), c "#rrggbb", p [x,y,z] from where it's attached, k [w,h,d] size, r [x,y,z] degrees, g 1 = glows, m 1 = shiny}
+export const SHAPES = { box: "Block", ball: "Ball", cyl: "Tube", cone: "Cone", dome: "Dome", ring: "Ring", wedge: "Ramp", star: "Star", heart: "Heart" };
+export const ATTACH = { head: "Head", body: "Body", hand: "Right hand", handL: "Left hand" };
+export const MAX_WORN = 3, MAX_PIECES = 16;
+
+const num = (v, lo, hi, d, step) => { v = Number(v); if (!Number.isFinite(v)) return d; v = Math.min(hi, Math.max(lo, v)); return Math.round(v / step) * step; };
+const r2 = (v) => Math.round(v * 100) / 100;
+export function sanitizeMade(m) {
+  if (!m || typeof m !== "object" || !ATTACH[m.a] || !Array.isArray(m.b)) return null;
+  const b = m.b.slice(0, MAX_PIECES).filter((p) => p && SHAPES[p.s]).map((p) => {
+    const v = (arr, i, lo, hi, d, step) => r2(num(Array.isArray(arr) ? arr[i] : d, lo, hi, d, step));
+    const out = { s: p.s, c: /^#[0-9a-fA-F]{6}$/.test(p.c || "") ? p.c.toLowerCase() : "#ffc531",
+      p: [0, 1, 2].map((i) => v(p.p, i, -2.5, 2.5, 0, 0.01)), k: [0, 1, 2].map((i) => v(p.k, i, 0.05, 3, 0.4, 0.01)), r: [0, 1, 2].map((i) => v(p.r, i, -180, 180, 0, 1)) };
+    if (p.g) out.g = 1;
+    if (p.m) out.m = 1;
+    return out;
+  });
+  if (!b.length) return null;
+  return { i: /^[a-z0-9]{1,10}$/.test(m.i || "") ? m.i : "x", a: m.a, b };
+}
+const okArt = (s) => typeof s === "string" && s.length === ART * ART && /^[0-9a-f]+$/.test(s) && /[1-9a-f]/.test(s);
+
 export function sanitizeAvatar(a) {
   const out = { ...DEFAULT_AVATAR };
   if (!a || typeof a !== "object") return out;
   for (const k of COLORS) if (/^#[0-9a-fA-F]{6}$/.test(a[k] || "")) out[k] = a[k].toLowerCase();
   for (const [k, list] of Object.entries(PARTS)) if (list[a[k]]) out[k] = a[k];
+  if (okArt(a.art)) out.art = a.art;
+  else if (out.top === "draw") out.top = "plain";
+  if (okArt(a.pantsArt)) out.pantsArt = a.pantsArt;
+  const made = Array.isArray(a.made) ? a.made.map(sanitizeMade).filter(Boolean).slice(0, MAX_WORN) : [];
+  if (made.length) out.made = made;
   return out;
 }
 export function loadAvatar() { try { return sanitizeAvatar(JSON.parse(localStorage.getItem("gv_avatar") || "null")); } catch { return { ...DEFAULT_AVATAR }; } }
@@ -52,8 +84,29 @@ function canvasTex(key, w, h, draw) {
   const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
   draw(cv.getContext("2d"), w, h);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  if (texCache.size > 150) { const [k0, t0] = texCache.entries().next().value; texCache.delete(k0); t0.dispose(); } // (drawings make a new one per change)
   texCache.set(key, t);
   return t;
+}
+// a drawing on top of a base color, sharp pixels (part = [repeat x, offset x] shows only part of it, for one pants leg)
+function artTex(art, base, part) {
+  const t = canvasTex("art:" + base + art, 128, 128, (g, w) => {
+    const s = w / ART;
+    g.fillStyle = base; g.fillRect(0, 0, w, w);
+    for (let i = 0; i < ART * ART; i++) { const c = DRAW_COLORS[parseInt(art[i], 16)]; if (c) { g.fillStyle = c; g.fillRect((i % ART) * s, Math.floor(i / ART) * s, s, s); } }
+  });
+  t.magFilter = THREE.NearestFilter;
+  if (!part) return t;
+  return canvasTexPart(t, part);
+}
+const partCache = new Map();
+function canvasTexPart(t, [rx, ox]) {
+  const key = t.uuid + rx + ":" + ox;
+  if (partCache.has(key)) return partCache.get(key);
+  const c = t.clone(); c.repeat.set(rx, 1); c.offset.set(ox, 0); c.needsUpdate = true;
+  if (partCache.size > 120) { const [k0, c0] = partCache.entries().next().value; partCache.delete(k0); c0.dispose(); }
+  partCache.set(key, c);
+  return c;
 }
 function faceTex(face) {
   return canvasTex("face:" + face, 128, 128, (g) => {
@@ -112,15 +165,22 @@ export function buildAvatar(cfg) {
   const body = new THREE.Group(); g.add(body);
   const skin = M(a.skin), shirt = M(a.shirt), pants = M(a.pants), shoes = M(a.shoes), acc = M(a.accent), hairM = M(a.hairColor, { roughness: 0.85 }), hatM = M(a.hatColor);
   const glow = (c) => M(c, { emissive: new THREE.Color(c), emissiveIntensity: 0.8 });
-  const front = new THREE.MeshStandardMaterial({ map: topTex(a.top, a.shirt, a.accent), roughness: 0.6 });
+  const drawn = a.top === "draw" && a.art;
+  const front = new THREE.MeshStandardMaterial({ map: drawn ? artTex(a.art, a.shirt) : topTex(a.top, a.shirt, a.accent), roughness: 0.6 });
   // limbs hang from pivots so they can swing
   const legL = new THREE.Group(), legR = new THREE.Group(), armL = new THREE.Group(), armR = new THREE.Group();
   legL.position.set(-0.32, 1.2, 0); legR.position.set(0.32, 1.2, 0); armL.position.set(-0.95, 2.25, 0); armR.position.set(0.95, 2.25, 0);
-  for (const L of [legL, legR]) { part(L, B(0.55, 1.0, 0.6), pants, 0, -0.5, 0); part(L, B(0.6, 0.22, 0.72), shoes, 0, -1.09, -0.05); }
+  // a pants drawing: the left half of the picture on the leg you see on the left (from the front, and from behind)
+  const legMats = (L) => {
+    if (!a.pantsArt) return pants;
+    const half = (ox) => new THREE.MeshStandardMaterial({ map: artTex(a.pantsArt, a.pants, [0.5, ox]), roughness: 0.6 });
+    return [pants, pants, pants, pants, half(L === legL ? 0 : 0.5), half(L === legL ? 0.5 : 0)];
+  };
+  for (const L of [legL, legR]) { part(L, B(0.55, 1.0, 0.6), legMats(L), 0, -0.5, 0); part(L, B(0.6, 0.22, 0.72), shoes, 0, -1.09, -0.05); }
   for (const A of [armL, armR]) { part(A, B(0.45, 0.8, 0.5), shirt, 0, -0.4, 0); part(A, B(0.42, 0.3, 0.47), skin, 0, -0.95, 0); }
   body.add(legL, legR, armL, armR);
-  // torso: the front shows the shirt pattern
-  const torsoMats = [shirt, shirt, shirt, shirt, shirt, front]; // (box faces: +x, -x, +y, -y, +z, -z; the front is -z)
+  // torso: the front shows the shirt pattern (a drawing shows on the back too)
+  const torsoMats = [shirt, shirt, shirt, shirt, drawn ? front : shirt, front]; // (box faces: +x, -x, +y, -y, +z, -z; the front is -z)
   const torso = new THREE.Mesh(B(1.4, 1.15, 0.75), torsoMats); torso.position.set(0, 1.78, 0); torso.castShadow = true; body.add(torso);
   if (a.top === "hoodie") part(body, B(1.1, 0.5, 0.4), shirt, 0, 2.3, 0.5);
   // head
@@ -133,7 +193,12 @@ export function buildAvatar(cfg) {
   buildEyes(head, a.eyes, glow);
   buildBack(body, a.back, acc, M);
   buildHand(armR, a.hand, M, glow);
-  const k = { normal: [1, 1, 1], small: [0.85, 0.82, 0.85], tall: [0.95, 1.15, 0.95], wide: [1.18, 1.02, 1.12] }[a.build];
+  const at = { head, body: new THREE.Group(), hand: new THREE.Group(), handL: new THREE.Group() };
+  at.body.position.set(0, 1.78, 0); body.add(at.body);
+  at.hand.position.set(0, -1.05, -0.15); armR.add(at.hand);
+  at.handL.position.set(0, -1.05, -0.15); armL.add(at.handL);
+  for (const m of a.made || []) at[m.a].add(buildMade(m));
+  const k ={ normal: [1, 1, 1], small: [0.85, 0.82, 0.85], tall: [0.95, 1.15, 0.95], wide: [1.18, 1.02, 1.12] }[a.build];
   body.scale.set(k[0], k[1], k[2]);
   g.userData.limbs = { legL, legR, armL, armR };
   g.userData.t = 0;
@@ -223,6 +288,36 @@ function buildHand(arm, hand, M, glow) {
   if (hand === "trophy") { const gold = M("#ffc531", { metalness: 0.7, roughness: 0.3 }); part(h, C(0.22, 0.1, 0.3, 14), gold, 0, 0.3, -0.1); part(h, B(0.2, 0.08, 0.2), gold, 0, 0.1, -0.1); return; }
   if (hand === "balloon") { part(h, C(0.01, 0.01, 2.2, 4), M("#ffffff"), 0, 1.1, 0); part(h, S(0.4), M("#e8261c", { roughness: 0.3 }), 0, 2.4, 0); }
 }
+// ---------------------------------------------------------------- cosmetics you built (🛠️ Build): pieces of simple shapes
+const shapeGeo = new Map();
+function flat(sh) { const g = new THREE.ExtrudeGeometry(sh, { depth: 1, bevelEnabled: false, curveSegments: 10 }); g.center(); const b = new THREE.Box3().setFromBufferAttribute(g.attributes.position), s = b.getSize(new THREE.Vector3()); g.scale(1 / s.x, 1 / s.y, 1); return g; }
+function geoOf(s) {
+  if (shapeGeo.has(s)) return shapeGeo.get(s);
+  let g;
+  if (s === "ball") g = new THREE.SphereGeometry(0.5, 20, 14);
+  else if (s === "cyl") g = new THREE.CylinderGeometry(0.5, 0.5, 1, 20);
+  else if (s === "cone") g = new THREE.ConeGeometry(0.5, 1, 20);
+  else if (s === "dome") { g = new THREE.SphereGeometry(0.5, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2); g.translate(0, -0.25, 0); g.scale(1, 2, 1); }
+  else if (s === "ring") { g = new THREE.TorusGeometry(0.4, 0.1, 10, 28); g.rotateX(Math.PI / 2); }
+  else if (s === "wedge") { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(1, 0); sh.lineTo(0, 1); sh.closePath(); g = flat(sh); g.rotateY(Math.PI / 2); }
+  else if (s === "star") { const sh = new THREE.Shape(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 0.2 : 0.5, an = Math.PI / 2 + (i * Math.PI) / 5; i ? sh.lineTo(Math.cos(an) * r, Math.sin(an) * r) : sh.moveTo(Math.cos(an) * r, Math.sin(an) * r); } g = flat(sh); }
+  else if (s === "heart") { const sh = new THREE.Shape(); sh.moveTo(0, -0.5); sh.bezierCurveTo(-0.9, 0.05, -0.45, 0.75, 0, 0.3); sh.bezierCurveTo(0.45, 0.75, 0.9, 0.05, 0, -0.5); g = flat(sh); }
+  else g = new THREE.BoxGeometry(1, 1, 1);
+  shapeGeo.set(s, g);
+  return g;
+}
+const D2R = Math.PI / 180;
+export function buildMade(m) {
+  const root = new THREE.Group();
+  for (const p of m.b) {
+    const mat = M(p.c, { ...(p.m ? { metalness: 0.75, roughness: 0.25 } : {}), ...(p.g ? { emissive: new THREE.Color(p.c), emissiveIntensity: 0.8 } : {}), side: THREE.DoubleSide });
+    const mesh = part(root, geoOf(p.s), mat, p.p[0], p.p[1], p.p[2]);
+    mesh.scale.set(p.k[0], p.k[1], p.k[2]);
+    mesh.rotation.set(p.r[0] * D2R, p.r[1] * D2R, p.r[2] * D2R);
+  }
+  return root;
+}
+
 export function animateAvatar(g, dt, grounded, speed) {
   const L = g.userData.limbs;
   g.userData.t += dt * Math.min(1, speed / 6) * 10;

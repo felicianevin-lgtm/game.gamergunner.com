@@ -235,7 +235,41 @@ h2.row-title small { font: 400 14px "Inter", sans-serif; color: var(--dim); }
 .av-colors button.on { outline: 3px solid #fff; outline-offset: 2px; }
 .av-more { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; border: 2px dashed var(--edge); cursor: pointer; position: relative; overflow: hidden; }
 .av-more input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-@media (max-width: 760px) { .av-wrap { grid-template-columns: 1fr; } .av-stage { position: static; max-width: 340px; margin: 0 auto; } }
+.av-hint { color: var(--dim); font-size: 13px; margin: 12px 0 0; }
+.linkish { background: none; border: 0; padding: 0; color: var(--green-hi); font: inherit; font-weight: 700; cursor: pointer; }
+.av-items .chip { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--edge); background: var(--panel); color: inherit; cursor: pointer; font-weight: 600; font-size: 13px; }
+.av-items .chip.on { border-color: var(--green-hi); background: rgba(31, 174, 69, .18); }
+.av-items .chip:hover { border-color: #3a5a4a; }
+/* 🎨 Draw */
+.dr-top, .dr-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.dr-wrap { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.dr-pad { width: min(384px, 100%); aspect-ratio: 1; image-rendering: pixelated; border-radius: 10px; border: 2px solid var(--edge); cursor: crosshair; touch-action: none; background: #fff; }
+.dr-side { flex: 1; min-width: 220px; }
+.dr-inks { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.dr-inks button { width: 30px; height: 30px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, .15); cursor: pointer; }
+.dr-inks button.on { outline: 3px solid #fff; outline-offset: 2px; }
+/* 🛠️ Build */
+.mk-grid .mk-new, .mk-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; border: 2px solid var(--edge); background: var(--panel); color: inherit; font-weight: 600; font-size: 13px; }
+.mk-grid .mk-new { cursor: pointer; justify-content: center; min-height: 150px; border-style: dashed; }
+.mk-plus { font-size: 34px; color: var(--green-hi); }
+.mk-item img { width: 72px; height: 72px; border-radius: 10px; background: #0b1210; }
+.mk-item > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-item.on { border-color: var(--green-hi); background: rgba(31, 174, 69, .16); }
+.mk-acts { display: flex; gap: 4px; }
+.mk-acts .chip { height: 28px; padding: 0 8px; }
+.mk-head { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.mk-head input { flex: 1; min-width: 160px; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--edge); background: var(--panel); color: inherit; font: inherit; font-weight: 700; }
+.mk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.mk-row > b { width: 100%; font-size: 13px; }
+.mk-row .piece i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .4); }
+.mk-piece { margin-top: 6px; padding: 12px; border-radius: 12px; border: 1px solid var(--edge); background: var(--panel-2); }
+.mk-piece .av-colors { margin-top: 0; }
+.mk-sliders { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; margin-top: 12px; }
+.mk-sliders label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--dim); }
+.mk-sliders input { width: 100%; accent-color: var(--green-hi); }
+.tick { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; margin-right: 10px; }
+@media (max-width: 760px) { .av-wrap { grid-template-columns: 1fr; } .av-stage { position: static; max-width: 340px; margin: 0 auto; }
+  .av-wrap.building .av-stage { position: sticky; top: 64px; z-index: 5; width: 170px; padding: 4px; } .av-wrap.building .av-btns, .av-wrap.building .av-note { display: none; } }
 
 /* ---------- passwords ---------- */
 .account { display: flex; gap: 8px; align-items: center; }

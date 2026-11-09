@@ -371,9 +371,12 @@ function drawAssets() {
   if (category === "My imports") return drawImports(q);
   if (category === SHARED) return drawShared(q);
   const list = ASSETS.filter((a) => !a.hidden && (category === "All" || a.cat === category) && (!q || (a.label + " " + a.cat).toLowerCase().includes(q)));
-  $("assets").innerHTML = list.map((a) => '<div class="asset" draggable="true" data-type="' + a.type + '" title="' + esc(a.label) + '"><span class="ico">' + a.icon + '</span><span class="nm">' + esc(a.label) + "</span></div>").join("") ||
-    '<p class="note">No assets match.</p>';
-  $("assets").querySelectorAll(".asset").forEach((el) => {
+  // (the Monster Maker gets its own tile, so nobody has to dig for it in the ＋ Add menu)
+  const mon = (category === "All" || category === "Gameplay") && (!q || "make a monster".includes(q) || q.includes("monster"));
+  $("assets").innerHTML = (mon ? '<div class="asset import-tile" id="monTile" title="Describe a monster and watch it appear"><span class="ico">👾</span><span class="nm">Make a Monster…</span></div>' : "") + list.map((a) => '<div class="asset" draggable="true" data-type="' + a.type + '" title="' + esc(a.label) + '"><span class="ico">' + a.icon + '</span><span class="nm">' + esc(a.label) + "</span></div>").join("") ||
+    (mon ? "" : '<p class="note">No assets match.</p>');
+  if (mon) $("monTile").onclick = () => openMonsterMaker();
+  $("assets").querySelectorAll(".asset[data-type]").forEach((el) => {
     el.onclick = () => addAsset(el.dataset.type);
     el.ondragstart = (e) => { e.dataTransfer.setData("text/gv-asset", el.dataset.type); e.dataTransfer.effectAllowed = "copy"; };
   });
@@ -1061,6 +1064,7 @@ function drawAddMenu() {
     else { category = "All"; drawCats(); $("assetSearch").value = ""; drawAssets(); $("assetSearch").focus(); }
   }));
 }
+$("btnMonster").onclick = () => openMonsterMaker();
 function closeAddMenu() { $("addMenu").classList.add("hidden"); $("btnAdd").classList.remove("on"); }
 $("btnAdd").onclick = (e) => { e.stopPropagation(); const open = $("addMenu").classList.toggle("hidden"); $("btnAdd").classList.toggle("on", !open); };
 document.addEventListener("click", (e) => { if (!$("addMenu").contains(e.target)) closeAddMenu(); });
