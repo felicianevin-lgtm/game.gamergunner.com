@@ -148,7 +148,8 @@ export const TEMPLATES = {
       return o;
     } },
 };
-TEMPLATES.backrooms = { label: "Backrooms", icon: "🟨", desc: "Endless yellow rooms, buzzing lights and something lurking. Find the EXIT! (A new maze every time.)",
+// (not on the starter list: Gunner's own Backrooms game is made from the link create/?new=backrooms - editor.js)
+const BACKROOMS = { label: "Backrooms", icon: "🟨", desc: "Endless yellow rooms, buzzing lights and something lurking. Find the EXIT! (A new maze every time.)",
   sky: "backrooms", scripts: () => [{ id: uid(), name: "Backrooms", on: "", code: BACKROOMS_CODE }], make: backrooms };
 
 // THE BACKROOMS: a random maze of yellow rooms (a new one every time). The maze is carved like a real maze (every room
@@ -210,6 +211,6 @@ function backrooms() {
 }
 
 export function makeGame(templateKey, name) {
-  const t = TEMPLATES[templateKey] || TEMPLATES.baseplate;
-  return { v: 1, id: uid(), name: name || "My " + t.label + " Game", created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS, ...(t.sky ? { sky: t.sky } : {}) }, objects: t.make(), gui: [], files: {}, scripts: t.scripts ? t.scripts() : [] };
+  const t = TEMPLATES[templateKey] || (templateKey === "backrooms" ? BACKROOMS : TEMPLATES.baseplate);
+  return { v: 1, id: uid(), name: name || (t === BACKROOMS ? "The Backrooms" : "My " + t.label + " Game"), created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS, ...(t.sky ? { sky: t.sky } : {}) }, objects: t.make(), gui: [], files: {}, scripts: t.scripts ? t.scripts() : [] };
 }

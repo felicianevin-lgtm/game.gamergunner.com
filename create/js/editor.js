@@ -1613,7 +1613,8 @@ refreshFiles().catch(() => {});
 let last = null;
 try { last = localStorage.getItem("gv_studio_last"); } catch {}
 const g0 = last && loadGame(last);
-if (g0) openGame(g0);
+if (/[?&]new=backrooms\b/.test(location.search)) { openGame(makeGame("backrooms")); dirty = true; saveNow(); history.replaceState(null, "", location.pathname + location.search.replace(/[?&]new=backrooms\b/, "").replace(/^&/, "?")); } // (the link that makes a Backrooms game - game.js BACKROOMS)
+else if (g0) openGame(g0);
 else { openGame(makeGame("baseplate")); dirty = false; openGames(true); }
 frame();
 // (handy for testing in the console: GVStudio.tick(60) runs 60 frames even when the tab is in the background)
