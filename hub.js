@@ -639,7 +639,9 @@
       var rows = (r.reports || []).map(function (x) {
         return '<div class="person"><span class="person-main"><span><b>' + esc(x.title) + "</b><small>by @" + esc(x.maker) + " · reported by @" + esc(x.by) + " · " + new Date(x.at).toLocaleString() + "</small>" +
           '<span class="st">' + esc(x.why || "(no reason)") + "</span></span></span>" +
-          '<div class="person-btns"><a class="btn small ghost" href="#/game/' + esc(x.g) + '">View</a><button class="btn small danger" data-rm="' + esc(x.g) + '">Remove game</button>' +
+          '<div class="person-btns">' + (x.g.indexOf("s:") === 0 // (a Shared Toolbox thing: its picture)
+            ? '<a class="btn small ghost" target="_blank" rel="noopener" href="' + esc(RELAY + "/hub/sthumb/" + x.g.slice(2)) + '">Picture</a><button class="btn small danger" data-rm="' + esc(x.g) + '">Remove it</button>'
+            : '<a class="btn small ghost" href="#/game/' + esc(x.g) + '">View</a><button class="btn small danger" data-rm="' + esc(x.g) + '">Remove game</button>') +
           '<button class="btn small danger" data-ban="' + esc(x.maker) + '">Ban @' + esc(x.maker) + '</button><button class="btn small ghost" data-done="' + esc(x.id) + '">Dismiss</button></div></div>';
       }).join("");
       main.innerHTML = '<h1 class="page-title">Admin</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +

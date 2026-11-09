@@ -8,6 +8,7 @@
 // ANIMATIONS: every leg, arm, tentacle, wing and the tail hangs from its own joint (rig), so animateMonster() can make
 // it walk, stand and breathe, dance or fly. obj.anim picks one (MON_ANIMS); "auto" walks when it moves (play.js).
 import * as THREE from "../vendor/three.module.js";
+import { animateRig, motionOf } from "./motion.js";
 
 export const MON_KEYS = { // recipe: key -> [kind, ...]  (game.js + the relay keep only these)
   body: ["pick", "round", "tall", "long", "box", "blob", "spider", "ghost"], color: ["color"], color2: ["color"], eyeColor: ["color"],
@@ -466,33 +467,9 @@ export function buildMonster(mon) {
   return g;
 }
 
-// Move a monster's rig. t = seconds, walk = 0 (standing) .. 1 (walking fast), style = MON_ANIMS key.
-export function animateMonster(rig, t, walk, style) {
-  if (!rig || !rig.body || style === "none") return;
-  const ph = t * 7, w = style === "walk" ? 1 : style === "auto" ? Math.min(1, walk) : 0, dance = style === "dance", fly = style === "fly" || (rig.float && style !== "dance");
-  let bob = Math.sin(t * 2) * 0.03 + Math.abs(Math.sin(ph)) * 0.09 * w; // (breathing + a little hop each step)
-  if (fly) bob += Math.sin(t * 3) * 0.12;
-  if (dance) bob = Math.abs(Math.sin(t * 6)) * 0.25;
-  rig.body.position.y = rig.bodyY + bob;
-  rig.body.rotation.y = dance ? Math.sin(t * 3) * 0.45 : 0;
-  rig.body.rotation.z = dance ? Math.sin(t * 6) * 0.08 : w * Math.sin(ph) * 0.04;
-  if (rig.blob) rig.body.scale.set(1 + Math.sin(t * 3) * 0.04 + w * Math.sin(ph * 2) * 0.05, 1 - Math.sin(t * 3) * 0.04 - w * Math.sin(ph * 2) * 0.05, 1);
-  for (const o of rig.moveWithBody) o.position.y = o.userData.y0 + bob;
-  for (const L of rig.legs) {
-    const s = Math.sin(ph + L.phase);
-    if (fly) { L.j.rotation.set(0.35 + Math.sin(t * 3 + L.phase) * 0.1, 0, 0); continue; }
-    if (dance) { L.j.rotation.set(Math.max(0, Math.sin(t * 6 + L.phase)) * -0.5, 0, 0); continue; }
-    if (L.spidery) L.j.rotation.set(0, s * 0.35 * w * L.side, Math.max(0, Math.cos(ph + L.phase)) * 0.3 * w * L.side);
-    else L.j.rotation.set(s * 0.6 * w, 0, 0);
-  }
-  for (const A of rig.arms) {
-    if (dance) A.j.rotation.set(-2.3 + Math.sin(t * 6 + A.phase) * 0.4, 0, A.side * Math.sin(t * 6) * 0.3);
-    else A.j.rotation.set(-Math.sin(ph + A.phase) * 0.55 * w + Math.sin(t * 1.6 + A.phase) * 0.05, 0, A.side * 0.05 * Math.sin(t * 2));
-  }
-  for (const T of rig.tents) T.j.rotation.set(Math.sin(t * 2.5 + T.i) * 0.18, 0, Math.cos(t * 2.2 + T.i * 1.3) * 0.18 + w * Math.sin(ph + T.i) * 0.15);
-  for (const W of rig.wings) W.j.rotation.z = W.side * (-0.15 + (fly ? Math.sin(t * 12) * 0.6 : dance ? Math.sin(t * 6) * 0.3 : Math.sin(t * 1.5) * 0.06 + w * Math.sin(ph) * 0.15));
-  if (rig.tail) rig.tail.rotation.y = Math.sin(t * (dance ? 6 : 2) + 1) * (dance ? 0.5 : 0.18 + w * 0.15);
-}
+// Move a monster's rig. t = seconds, walk = 0 (standing) .. 1 (walking fast), style = MON_ANIMS key (motion.js does the work;
+// things with their own Animation settings call motion.js animateThing instead).
+export function animateMonster(rig, t, walk, style) { animateRig(rig, t, walk, motionOf({ type: "monster", anim: style })); }
 // The monster scaled to fit a 1 x 1 x 1 box (bottom at 0, centered), like imported models: the object's Size sets its real size.
 export function monsterInner(mon) {
   const raw = buildMonster(mon);

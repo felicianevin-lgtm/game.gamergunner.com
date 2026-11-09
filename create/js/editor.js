@@ -16,12 +16,13 @@ import { ASSETS, BY_TYPE, BEHAVIORS, CATEGORIES, MATERIALS, SWITCH_HOW } from ".
 import { createWorld, buildObject, placeObject, boundsBox } from "./world.js";
 import { SKIES, TEMPLATES, newObj, fillBehavior, sanitize, listGames, loadGame, saveGame, deleteGame, makeGame, r2, uid, MAX_SCRIPTS } from "./game.js";
 import { startPlay } from "./play.js";
-import { openPublish } from "./publish.js";
+import { openPublish, uploadFiles } from "./publish.js";
 import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI, newGui, renderGui } from "./gui.js";
 import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
-import { api, account } from "./net.js";
-import { describe, buildMonster, monsterSize, sanitizeMonster, animateMonster, MON_ANIMS, SURPRISE } from "./monster.js";
+import { api, account, RELAY } from "./net.js";
+import { describe, buildMonster, monsterSize, sanitizeMonster, SURPRISE } from "./monster.js";
+import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount } from "./motion.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -38,6 +39,8 @@ let snapIndex = 0;
 let undoStack = [], redoStack = [];
 let dirty = false, saveTimer = 0, playing = null;
 let category = "All";
+const SHARED = "🌍 Shared"; // (Toolbox tab: things players shared, drawShared)
+let shared = null, sharedAt = 0;
 let myFiles = [];              // imported files in this browser (files.js listFiles)
 let selScript = null;          // the script open in the script editor
 const lastErr = new Map();     // script id -> the line its error was on in the last Play
@@ -208,7 +211,7 @@ function addAsset(type, at, extra) {
   const o = newObj(type, [snap(p.x), r2(Math.max(p.y, -1000)), snap(p.z)], extra);
   // face the camera (vehicles and characters look toward you)
   const yaw = Math.atan2(camera.position.x - p.x, camera.position.z - p.z) / D2R;
-  if (["car", "truck", "kart", "npc", "sign", "door", "finish", "model", "picture", "switch", "camera"].includes(type)) o.rot[1] = r2(Math.round((yaw + 180) / 15) * 15 % 360);
+  if (["car", "truck", "kart", "dirtbike", "npc", "sign", "door", "finish", "model", "picture", "switch", "camera"].includes(type)) o.rot[1] = r2(Math.round((yaw + 180) / 15) * 15 % 360);
   o.name = uniqueName(o.name);
   game.objects.push(o);
   rebuild(o);
@@ -333,7 +336,8 @@ function thingMenu(id, x, y) {
     { icon: "✏️", label: "Rename", fn: () => { select(id); const n = $(g ? "gName" : "pObjName"); if (n) { n.focus(); n.select(); } } },
     { icon: "⧉", label: "Duplicate", fn: () => { select(id); duplicate(); } },
   ];
-  if (o) items.push({ icon: "🎯", label: "Zoom to it", fn: () => { select(id); focusSelected(); } });
+  if (o) items.push({ icon: "🎯", label: "Zoom to it", fn: () => { select(id); focusSelected(); } }, { icon: "🎬", label: "Animation…", fn: () => { select(id); openAnimator(o); } },
+    { icon: "🌍", label: "Share to the Toolbox…", fn: () => { select(id); openShare(o); } });
   if (g) items.push({ icon: g.visible ? "🙈" : "👁️", label: g.visible ? "Hide at start" : "Show at start", fn: () => { pushUndo(); g.visible = !g.visible; changed(); drawGui(); drawProps(); } });
   items.push("-", { icon: "🗑️", label: "Delete", danger: true, fn: () => { select(id); remove(); } });
   showMenu(x, y, items);
@@ -359,12 +363,13 @@ function focusSelected() {
 
 // ---------------------------------------------------------------- Toolbox
 function drawCats() {
-  $("cats").innerHTML = CATEGORIES.concat("My imports").map((c) => '<button type="button" data-cat="' + c + '" class="' + (c === category ? "on" : "") + '">' + c + "</button>").join("");
+  $("cats").innerHTML = CATEGORIES.concat("My imports", SHARED).map((c) => '<button type="button" data-cat="' + c + '" class="' + (c === category ? "on" : "") + '">' + c + "</button>").join("");
   $("cats").querySelectorAll("button").forEach((b) => (b.onclick = () => { category = b.dataset.cat; drawCats(); drawAssets(); }));
 }
 function drawAssets() {
   const q = $("assetSearch").value.trim().toLowerCase();
   if (category === "My imports") return drawImports(q);
+  if (category === SHARED) return drawShared(q);
   const list = ASSETS.filter((a) => !a.hidden && (category === "All" || a.cat === category) && (!q || (a.label + " " + a.cat).toLowerCase().includes(q)));
   $("assets").innerHTML = list.map((a) => '<div class="asset" draggable="true" data-type="' + a.type + '" title="' + esc(a.label) + '"><span class="ico">' + a.icon + '</span><span class="nm">' + esc(a.label) + "</span></div>").join("") ||
     '<p class="note">No assets match.</p>';
@@ -386,6 +391,103 @@ function drawImports(q) {
     el.oncontextmenu = (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, [{ icon: "➕", label: "Add to my game", fn: () => placeFile(f) },
       "-", { icon: "🗑️", label: "Delete from My imports", danger: true, fn: async () => { if (!confirm('Delete "' + f.name + '" from My imports? Games already using it will show a red box.')) return; await deleteFile(f.id); await refreshFiles(); } }]); };
   });
+}
+// 🌍 Shared: things players shared with everyone (relay share.js). Click one to add it (its scripts, Animation settings
+// and imported model come along); right-click to report it, or delete your own.
+async function drawShared(q, fresh) {
+  const box = $("assets");
+  if (fresh || !shared || Date.now() - sharedAt > 60000) {
+    box.innerHTML = '<p class="note">Loading things players shared…</p>';
+    const r = await api("/hub/shared", {}).catch(() => ({ ok: false }));
+    if (category !== SHARED) return;
+    if (!r.ok) { box.innerHTML = '<p class="note">Couldn\'t reach GunnerVerse. Check your internet and try again.</p>'; return; }
+    shared = r.items || []; sharedAt = Date.now();
+  }
+  const me = account(), mine = (it) => me && it.by.toLowerCase() === me.u.toLowerCase();
+  const list = shared.filter((it) => !q || (it.name + " " + it.by + " " + ((BY_TYPE[it.type] || {}).label || "")).toLowerCase().includes(q));
+  box.innerHTML = '<p class="note shared-note">Made by players, for everyone! Share yours: right-click a thing in your game › 🌍 Share to the Toolbox.</p>' +
+    list.map((it) => '<div class="asset shared-tile" data-sid="' + esc(it.id) + '" title="' + esc(it.name) + " by " + esc(it.by) + " · added " + (it.uses || 0) + ' times · right-click for more"><span class="ico"><img alt="" loading="lazy" src="' + esc(RELAY + "/hub/sthumb/" + it.id) + '"></span><span class="nm">' + esc(it.name) + '</span><span class="by">' + (mine(it) ? "by you" : "by " + esc(it.by)) + "</span></div>").join("") +
+    (list.length ? "" : '<p class="note">' + (q ? "Nothing shared matches." : "Nothing shared yet. Be the first!") + "</p>");
+  box.querySelectorAll("[data-sid]").forEach((el) => {
+    const it = shared.find((x) => x.id === el.dataset.sid);
+    el.onclick = () => addShared(it);
+    el.oncontextmenu = (e) => {
+      e.preventDefault();
+      const items = [{ icon: "➕", label: "Add to my game", fn: () => addShared(it) }, "-"];
+      if (mine(it)) items.push({ icon: "🗑️", label: "Stop sharing it", danger: true, fn: async () => { if (!confirm('Stop sharing "' + it.name + '"? Games that already use it keep their copy.')) return; const r = await api("/hub/unshare", { t: me.t, id: it.id }).catch(() => ({ ok: false })); if (r.ok) drawShared(q, true); else alert("Couldn't remove it. Try again."); } });
+      else items.push({ icon: "🚩", label: "Report it", fn: async () => { if (!me) { alert("Sign in on the home page first."); return; } const why = prompt('What\'s wrong with "' + it.name + '"?', ""); if (why == null) return; const r = await api("/hub/share-report", { t: me.t, id: it.id, why }).catch(() => ({ ok: false })); alert(r.ok ? "Thanks! The developer will look at it." : "Couldn't send the report. Try again."); } });
+      showMenu(e.clientX, e.clientY, items);
+    };
+  });
+}
+async function addShared(it, at) {
+  if (!game || !it) return;
+  toast("🌍 Getting " + it.name + "…");
+  const r = await api("/hub/shared-get", { id: it.id }).catch(() => ({ ok: false }));
+  if (!r.ok || !r.thing || !r.thing.objects || !r.thing.objects[0]) { toast(""); alert(r.e === "nothing" ? "That one isn't shared anymore." : "Couldn't get it. Check your internet."); return; }
+  const t = r.thing;
+  game.files = game.files || {};
+  for (const [fid, f] of Object.entries(t.files || {})) if (!game.files[fid] && f && f.sid) game.files[fid] = { name: f.name, type: f.type, sid: f.sid };
+  useFiles(game.files);
+  const src = sanitize({ objects: t.objects.slice(0, 1) }).objects[0];
+  if (!src) { toast(""); return; }
+  const { id: _id, pos: _pos, ...extra } = src;
+  const o = addAsset(src.type, at, { ...extra, name: String(it.name || src.name).slice(0, 40) });
+  if (o && Array.isArray(t.scripts)) {
+    for (const sc of t.scripts) if (game.scripts.length < MAX_SCRIPTS && typeof sc.code === "string") game.scripts.push({ id: uid(), name: String(sc.name || "Script").slice(0, 40), on: o.id, code: sc.code.slice(0, 20000) });
+    changed(); drawTree(); drawProps();
+  }
+  toast("✓ " + it.name + " added!", 2);
+}
+// A little picture of one thing, for its Shared Toolbox tile.
+async function thingPicture(o) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 256;
+  const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
+  const sc = new THREE.Scene(); sc.background = new THREE.Color("#1a1530");
+  sc.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.5)); const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(-3, 6, -6); sc.add(sun);
+  const copy = buildObject({ ...JSON.parse(JSON.stringify(o)), pos: [0, 0, 0], rot: [0, 0, 0] }); sc.add(copy);
+  for (let i = 0; i < 30 && copy.userData.inner.userData.model && !copy.userData.inner.userData.copy; i++) await new Promise((ok) => setTimeout(ok, 100)); // (imported models load first)
+  const R = Math.max(...o.size), cam = new THREE.PerspectiveCamera(35, 1, 0.01, 5000);
+  cam.position.set(R * 1.3, o.size[1] * 0.7 + R * 0.5, -R * 1.9); cam.lookAt(0, o.size[1] * 0.45, 0);
+  r.render(sc, cam);
+  const url = cv.toDataURL("image/jpeg", 0.8);
+  r.dispose(); r.forceContextLoss();
+  return url;
+}
+const SHARE_ERR = { signin: "Sign in on the home page first (it's free).", banned: "This account can't share things.", name: "Give it a name first!", thing: "That thing can't be shared.",
+  toobig: "It's too big to share (its scripts are very long).", thumb: "The picture didn't work. Try again.", toomany: "You've shared 40 things already. Stop sharing one first (right-click it in 🌍 Shared).",
+  slowdown: "That's a lot of sharing! Try again in a little while.", net: "Couldn't reach GunnerVerse. Check your internet." };
+async function openShare(o) {
+  if (!game || !o) return;
+  const me = account(), scs = scriptsOf(o.id);
+  openModal('<h2>🌍 Share to the Toolbox</h2><p>Everyone on GunnerVerse will see it in Toolbox › 🌍 Shared and can add it to their games. Keep it nice, and don\'t put your real name or where you live in it.</p>' +
+    '<div class="share-row"><img id="shPic" alt="" class="share-pic"><div>' +
+    '<label class="field"><span>Name</span><input type="text" id="shName" maxlength="30" value="' + esc(o.name) + '"></label>' +
+    (scs.length ? '<label class="mon-check"><input type="checkbox" id="shScripts" checked> Share its ' + scs.length + " script" + (scs.length === 1 ? "" : "s") + " too</label>" : "") +
+    (o.file ? '<p class="note">Its imported file goes along so others can use it.</p>' : "") +
+    "</div></div><p class=\"err\" id=\"shErr\">" + (me ? "" : esc(SHARE_ERR.signin)) + "</p>" +
+    '<div class="modal-actions"><button class="btn" id="shCancel" type="button">Cancel</button><button class="btn go" id="shGo" type="button"' + (me ? "" : " disabled") + ">🌍 Share it</button></div>");
+  $("shCancel").onclick = closeModal;
+  let pic = "";
+  thingPicture(o).then((u) => { pic = u; if ($("shPic")) $("shPic").src = u; }).catch(() => {});
+  $("shGo").onclick = async () => {
+    const name = $("shName").value.trim(), go = $("shGo");
+    if (name.length < 2) { $("shErr").textContent = SHARE_ERR.name; return; }
+    go.disabled = true; $("shErr").textContent = "";
+    try {
+      if (!pic) pic = await thingPicture(o);
+      const ids = o.file && game.files && game.files[o.file] ? [o.file] : [];
+      if (ids.length) { await uploadFiles(game, me, ids, (t) => { go.textContent = t; }); saveNow(true); }
+      go.textContent = "Sharing…";
+      const files = Object.fromEntries(ids.map((id) => [id, game.files[id]]));
+      const scripts = $("shScripts") && $("shScripts").checked ? scs.map((s) => ({ id: s.id, name: s.name, on: o.id, code: s.code })) : [];
+      const r = await api("/hub/share", { t: me.t, name, thumb: pic, thing: { objects: [o], scripts, files } }).catch(() => ({ ok: false, e: "net" }));
+      if (!r.ok) throw new Error(SHARE_ERR[r.e] || "Couldn't share it. Try again.");
+      closeModal();
+      shared = null; category = SHARED; drawCats(); drawAssets();
+      toast("✓ Shared! Everyone can find it in Toolbox › 🌍 Shared.", 4);
+    } catch (err) { $("shErr").textContent = err.message; go.disabled = false; go.textContent = "🌍 Share it"; }
+  };
 }
 async function refreshFiles() { myFiles = await listFiles(); await loadPictures(Object.fromEntries(myFiles.map((f) => [f.id, f]))); if (category === "My imports") drawAssets(); }
 
@@ -535,9 +637,11 @@ function drawProps(numbersOnly) {
   if (o.type === "model") html += '<div class="group-title">Imported model</div>' + row("Animation", '<select id="pAnim"><option value="">(none)</option>' + (o.anim ? '<option value="' + esc(o.anim) + '" selected>' + esc(o.anim === "*" ? "First animation" : o.anim) + "</option>" : "") + "</select>") +
     '<p class="note">' + esc((game.files[o.file] || {}).name || "Missing file") + ". Scripts can play animations too: me.play(\"Walk\")</p>";
   if (o.type === "picture") html += '<div class="group-title">Picture</div>' + row("Picture", pictureSelect("pPic", o.file));
-  if (o.type === "monster") html += '<div class="group-title">Monster</div><p class="note">' + esc(o.text || "A monster") + '</p><button type="button" class="btn add-script" id="pMonster">👾 Change my monster</button>' +
-    row("Animation", '<select id="pMonAnim">' + Object.entries(MON_ANIMS).map(([k, v]) => '<option value="' + k + '"' + (k === (o.anim || "auto") ? " selected" : "") + ">" + esc(v) + "</option>").join("") + "</select>") +
-    '<p class="note">Scripts can change it too: me.play("dance"), me.play("walk"), me.play("stop")</p>';
+  if (o.type === "monster") html += '<div class="group-title">Monster</div><p class="note">' + esc(o.text || "A monster") + '</p><button type="button" class="btn add-script" id="pMonster">👾 Change my monster</button>';
+  const mo = motionOf(o);
+  html += '<div class="group-title">Animation</div><p class="note">' + (mo ? (GAITS[mo.g].icon + " " + esc(GAITS[mo.g].label) + " · " + IDLES[mo.i].icon + " " + esc(IDLES[mo.i].label) + " · " + esc(WHEN[mo.w])) : "No animation yet. Any thing can walk, dance, wave, hop…") + "</p>" +
+    '<button type="button" class="btn add-script" id="pAnimate">🎬 Animation…</button>' +
+    row("Walls stop it", '<input type="checkbox" id="pBump"' + (bumps(o) ? " checked" : "") + ' title="When a script moves it, it bumps into walls and stands on floors instead of going through">');
   html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>" + scriptBox(o.id);
   box.innerHTML = html;
   wireScriptBox(o.id);
@@ -551,7 +655,8 @@ function drawProps(numbersOnly) {
     $("pAnim").onchange = (e) => edit(() => { if (e.target.value) o.anim = e.target.value; else delete o.anim; }, true);
   }
   if ($("pMonster")) $("pMonster").onclick = () => openMonsterMaker(o);
-  if ($("pMonAnim")) $("pMonAnim").onchange = (e) => { pushUndo(); o.anim = e.target.value; changed(); };
+  $("pAnimate").onclick = () => openAnimator(o);
+  $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster")) delete o.bump; else o.bump = e.target.checked; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
 
   const edit = (fn, look) => { pushUndo(); fn(); if (look) rebuild(o); else placeObject(groups.get(o.id), o); changed(); };
@@ -756,15 +861,24 @@ function addGui(kind) {
 // Describe it, see it spin, press Make it! (o = a monster already in the game: change it instead)
 // The preview follows the words it knows as you type (free). 🤖 Make it with AI asks Claude on the relay
 // (relay monster-ai.js: signed-in players, 3 a day) to understand ANY description; its recipe then stays until you type again.
+function monSlider(id, label, min, max, step, unit) {
+  return '<label class="mon-stat"><span>' + label + '</span><input type="range" id="' + id + '" min="' + min + '" max="' + max + '" step="' + step + '"><b id="' + id + 'N"></b></label>';
+}
 function openMonsterMaker(o) {
   if (!game) return;
-  let reroll = 0, out = null, ai = null; // ai = {out, note, left}
+  let reroll = 0, out = null, ai = null, gait = (o && motionOf(o) || {}).g || "walk"; // ai = {out, note, left}
+  // Height / Width (the recipe's, once you move them they stay when you type) and Speed / Damage (its Chase script)
+  const chaseOld = o ? game.scripts.find((s) => s.on === o.id && s.name === "Chase") : null;
+  let hSet = o ? o.mon.height : null, wSet = o ? o.mon.width : null;
+  let speed = chaseOld ? +((/follow\(player,\s*([\d.]+)/.exec(chaseOld.code) || [])[1] || 6) : 6, dmg = chaseOld ? +((/damage\(([\d.]+)/.exec(chaseOld.code) || [])[1] || 25) : 25;
   openModal('<h2>👾 Make a Monster</h2><p>Describe your monster and watch it appear! Try colors, sizes, kinds (spider, dragon, ghost, robot, slime, alien, skeleton…) and parts (horns, wings, tail, teeth, tentacles, "three eyes", "six legs").</p>' +
     '<div class="mon-grid"><div><label class="field"><span>My monster is…</span><textarea id="monText" rows="4" maxlength="200" placeholder="a giant purple spider with glowing red eyes and horns"></textarea></label>' +
     '<div class="mon-words" id="monWords"></div>' +
     '<div class="mon-ai"><button class="btn mon-ai-btn" type="button" id="monAI">🤖 Make it with AI</button><span id="monAILeft">Understands anything you type</span></div>' +
     '<div class="thumb-btns"><button class="btn" type="button" id="monSurprise">🎲 Surprise me</button><button class="btn" type="button" id="monReroll" title="Same words, a different look for the parts you didn\'t say">🔀 New look</button></div>' +
-    (o ? "" : '<label class="mon-check"><input type="checkbox" id="monChase"> It chases the player (adds a script)</label>') +
+    '<div class="mon-gait"><span>Walk style</span><div class="chips" id="monGait">' + Object.entries(GAITS).map(([k, v]) => '<button type="button" data-g="' + k + '">' + v.icon + " " + esc(v.label) + "</button>").join("") + "</div></div>" +
+    '<div class="mon-stats">' + monSlider("monH", "📏 Height", 0.5, 30, 0.5, "studs") + monSlider("monW", "↔️ Width", 0.6, 1.8, 0.1, "×") + monSlider("monSp", "💨 Speed", 1, 30, 1, "") + monSlider("monDmg", "💥 Damage", 0, 100, 5, "per hit") + "</div>" +
+    '<label class="mon-check"><input type="checkbox" id="monChase"' + (chaseOld ? " checked" : "") + "> It chases the player and hurts them (uses Speed + Damage)</label>" +
     '</div><div class="mon-stage"><canvas id="monCanvas"></canvas></div></div>' +
     '<div class="modal-actions"><button class="btn" id="monCancel" type="button">Cancel</button><button class="btn go" id="monGo" type="button">' + (o ? "✓ Change it" : "👾 Make it!") + "</button></div>");
   const cv = $("monCanvas");
@@ -776,6 +890,8 @@ function openMonsterMaker(o) {
   function show() {
     const text = $("monText").value;
     out = ai ? ai.out : describe(text || "monster", reroll);
+    out = { ...out, mon: sanitizeMonster({ ...out.mon, height: hSet ?? out.mon.height, width: wSet ?? out.mon.width }) };
+    stats();
     if (model) sc.remove(model);
     model = buildMonster(out.mon);
     const box = new THREE.Box3().setFromObject(model), d = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
@@ -791,10 +907,21 @@ function openMonsterMaker(o) {
     requestAnimationFrame(loop);
     const w = cv.clientWidth, h = cv.clientHeight;
     if (w && h && cv.width !== Math.floor(w * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
-    yaw += 0.01; if (model) { model.rotation.y = yaw; const rig = model.children[0] && model.children[0].userData.rig; if (rig) animateMonster(rig, performance.now() / 1000, 0.7, "walk"); }
+    yaw += 0.01; if (model) { model.rotation.y = yaw; const rig = model.children[0] && model.children[0].userData.rig; if (rig) animateRig(rig, performance.now() / 1000, 0.8, { g: gait, i: "breathe", w: "always", sp: 1 }); }
     r.render(sc, cam);
   }
   let t = 0;
+  function stats() {
+    const set = (id, v, txt) => { $(id).value = v; $(id + "N").textContent = txt; };
+    set("monH", out.mon.height, out.mon.height + " studs"); set("monW", out.mon.width, out.mon.width + "×");
+    set("monSp", speed, speed + (speed <= 4 ? " (slow)" : speed >= 16 ? " (super fast!)" : "")); set("monDmg", dmg, dmg ? dmg + " per hit" : "harmless");
+  }
+  $("monH").oninput = (e) => { hSet = +e.target.value; show(); };
+  $("monW").oninput = (e) => { wSet = +e.target.value; show(); };
+  $("monSp").oninput = (e) => { speed = +e.target.value; $("monChase").checked = true; stats(); };
+  $("monDmg").oninput = (e) => { dmg = +e.target.value; $("monChase").checked = true; stats(); };
+  const gaitChips = () => $("monGait").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.g === gait); b.onclick = () => { gait = b.dataset.g; gaitChips(); }; });
+  gaitChips();
   $("monText").value = o ? o.text || "" : "";
   $("monText").oninput = () => { ai = null; clearTimeout(t); t = setTimeout(show, 150); };
   const me = account();
@@ -830,15 +957,85 @@ function openMonsterMaker(o) {
     const name = out.kind || "monster"; // (named after the creature it understood, or the AI's name for it)
     const chase = $("monChase") && $("monChase").checked;
     alive = false; closeModal();
-    if (o) { pushUndo(); o.mon = out.mon; o.text = desc; o.size = monsterSize(out.mon); rebuild(o); changed(); drawProps(); return; }
-    const n = addAsset("monster", null, { anim: "auto", mon: out.mon, text: desc, size: monsterSize(out.mon), name: ai ? name : name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() });
+    const chaseCode = (nm) => "// " + nm + " chases the player!\nme.follow(player, " + speed + ")   // " + speed + " = how fast\n\nme.onTouch(function () {\n  sound(\"scream\")\n  player.damage(" + dmg + ")\n})\n";
+    if (o) {
+      pushUndo(); o.mon = out.mon; o.text = desc; o.size = monsterSize(out.mon); o.mo = sanitizeMotion({ ...(motionOf(o) || {}), g: gait });
+      if (chase && chaseOld) chaseOld.code = chaseOld.code.replace(/follow\(player,\s*[\d.]+\)/, "follow(player, " + speed + ")").replace(/\/\/ [\d.]+ = how fast/, "// " + speed + " = how fast").replace(/damage\([\d.]+\)/, "damage(" + dmg + ")");
+      else if (chase && game.scripts.length < MAX_SCRIPTS) game.scripts.push({ id: uid(), name: "Chase", on: o.id, code: chaseCode(o.name) });
+      else if (!chase && chaseOld) game.scripts.splice(game.scripts.indexOf(chaseOld), 1);
+      rebuild(o); changed(); drawTree(); drawProps(); return;
+    }
+    const n = addAsset("monster", null, { anim: "auto", mo: { g: gait, i: out.mon.float || out.mon.ghost ? "fly" : "breathe", w: "move", sp: 1 }, mon: out.mon, text: desc, size: monsterSize(out.mon), name: ai ? name : name.charAt(0).toUpperCase() + name.slice(1).toLowerCase() });
     if (n && chase && game.scripts.length < MAX_SCRIPTS) {
-      game.scripts.push({ id: uid(), name: "Chase", on: n.id, code: "// " + n.name + " chases the player!\nme.follow(player, 6)   // 6 = how fast\n\nme.onTouch(function () {\n  sound(\"scream\")\n  player.damage(25)\n})\n" });
+      game.scripts.push({ id: uid(), name: "Chase", on: n.id, code: chaseCode(n.name) });
       changed(); drawTree(); drawProps();
     }
   };
   show(); loop();
   $("monText").focus();
+}
+
+// ---------------------------------------------------------------- 🎬 Animation (motion.js) for ANY thing
+// Pick a walk style and a standing-still move from the presets; the legs and arms are found by themselves and the
+// preview shows it walking or standing. "Walls stop it" (obj.bump) is next to it in Properties.
+function bumps(o) { return typeof o.bump === "boolean" ? o.bump : o.type === "monster"; }
+function openAnimator(o) {
+  if (!game || !o) return;
+  const had = motionOf(o);
+  let mo = { ...(had || { g: "walk", i: "breathe", w: "move", sp: 1 }) }, walking = true;
+  const chips = (id, table, key) => '<div class="chips anim-chips" id="' + id + '">' + Object.entries(table).map(([k, v]) => '<button type="button" data-k="' + k + '">' + v.icon + " " + esc(v.label) + "</button>").join("") + "</div>";
+  openModal('<h2>🎬 Animation · ' + esc(o.name) + '</h2><p>Pick how it walks and what it does when it stands still. Its legs and arms are found by themselves.</p>' +
+    '<div class="mon-grid"><div>' +
+    '<div class="anim-label">Walk style</div>' + chips("anWalk", GAITS) +
+    '<div class="anim-label">When it stands still</div>' + chips("anIdle", IDLES) +
+    '<label class="field"><span>Plays</span><select id="anWhen">' + Object.entries(WHEN).map(([k, v]) => '<option value="' + k + '">' + esc(v) + "</option>").join("") + "</select></label>" +
+    '<label class="field"><span>Speed <b id="anSpN"></b></span><input type="range" id="anSp" min="0.3" max="3" step="0.1"></label>' +
+    '</div><div><div class="mon-stage"><canvas id="anCanvas"></canvas></div>' +
+    '<div class="thumb-btns"><button class="btn" type="button" id="anPrevWalk">🚶 Walking</button><button class="btn" type="button" id="anPrevStand">🧍 Standing</button></div>' +
+    '<p class="note" id="anFound">Looking for legs and arms…</p></div></div>' +
+    '<p class="note">Scripts can change it while you play: me.play("run"), me.play("dance"), me.play("wave"), me.play("stop")</p>' +
+    '<div class="modal-actions">' + (had ? '<button class="btn" id="anOff" type="button">No animation</button>' : "") + '<button class="btn" id="anCancel" type="button">Cancel</button><button class="btn go" id="anGo" type="button">✓ Use it</button></div>');
+  const cv = $("anCanvas");
+  const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+  r.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.5)); const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(-3, 6, -6); sc.add(sun);
+  const cam = new THREE.PerspectiveCamera(35, 1, 0.1, 4000);
+  const copy = buildObject({ ...JSON.parse(JSON.stringify(o)), pos: [0, 0, 0], rot: [0, 0, 0] }), inner = copy.userData.inner;
+  sc.add(copy);
+  const R = Math.max(...o.size), floor = new THREE.Mesh(new THREE.CircleGeometry(R * 0.9, 40), new THREE.MeshStandardMaterial({ color: 0x2a2440, roughness: 1 }));
+  floor.rotation.x = -Math.PI / 2; sc.add(floor);
+  cam.position.set(R * 1.1, o.size[1] * 0.75 + R * 0.35, -R * 1.9); cam.lookAt(0, o.size[1] * 0.45, 0);
+  let alive = true, found = "";
+  const paint = () => {
+    $("anWalk").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === mo.g));
+    $("anIdle").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.k === mo.i));
+    $("anWhen").value = mo.w; $("anSp").value = mo.sp; $("anSpN").textContent = mo.sp + "×";
+    $("anPrevWalk").classList.toggle("on", walking); $("anPrevStand").classList.toggle("on", !walking);
+  };
+  $("anWalk").querySelectorAll("button").forEach((b) => (b.onclick = () => { mo.g = b.dataset.k; walking = true; paint(); }));
+  $("anIdle").querySelectorAll("button").forEach((b) => (b.onclick = () => { mo.i = b.dataset.k; walking = false; paint(); }));
+  $("anWhen").onchange = (e) => { mo.w = e.target.value; paint(); };
+  $("anSp").oninput = (e) => { mo.sp = +e.target.value; paint(); };
+  $("anPrevWalk").onclick = () => { walking = true; paint(); };
+  $("anPrevStand").onclick = () => { walking = false; paint(); };
+  function loop() {
+    if (!alive || !cv.isConnected) { alive = false; r.dispose(); return; }
+    requestAnimationFrame(loop);
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (w && h && cv.width !== Math.floor(w * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+    const t = performance.now() / 1000;
+    copy.rotation.y = Math.sin(t * 0.4) * 0.7;
+    animateThing(inner, o.size[1], t, walking ? 1 : 0, { ...mo, w: walking ? "always" : "idle" });
+    const c = limbCount(inner), text = (c.legs || c.arms ? "✓ Found " + c.legs + " leg" + (c.legs === 1 ? "" : "s") + " and " + c.arms + " arm" + (c.arms === 1 ? "" : "s") + (c.rig ? " (monster joints)" : "") + ". They move with the walk."
+      : inner.userData.model && !inner.userData.copy ? "Loading the model…" : "No legs or arms found, so the whole thing bobs, leans and sways. Imported characters with a skeleton get their legs and arms moved too.");
+    if (text !== found) $("anFound").textContent = found = text;
+    r.render(sc, cam);
+  }
+  paint(); loop();
+  const done = () => { alive = false; closeModal(); };
+  $("anCancel").onclick = done;
+  if ($("anOff")) $("anOff").onclick = () => { done(); pushUndo(); delete o.mo; if (o.type === "monster") o.anim = "none"; rebuild(o); changed(); drawProps(); };
+  $("anGo").onclick = () => { done(); pushUndo(); o.mo = sanitizeMotion(mo); if (o.type === "monster") o.anim = "auto"; rebuild(o); changed(); drawProps(); };
 }
 
 // ---------------------------------------------------------------- the ＋ Add menu (top bar)
@@ -1022,10 +1219,9 @@ function frame() {
   if (playing) { playing.update(dt); renderer.render(scene, camera); return; }
   updateMixers(dt);
   const now = clock.elapsedTime;
-  for (const o of game ? game.objects : []) {
-    if (o.type !== "monster") continue;
-    const gr = groups.get(o.id), rig = gr && gr.userData.inner && gr.userData.inner.userData.rig;
-    if (rig && !(transform.dragging && selected === o.id)) animateMonster(rig, now + (o.pos[0] % 7), 0, o.anim === "auto" || !o.anim ? "idle" : o.anim);
+  for (const o of game ? game.objects : []) { // (things with animations do their standing-still move while you build)
+    const mo = motionOf(o), gr = mo && groups.get(o.id);
+    if (gr && gr.userData.inner && !(transform.dragging && selected === o.id)) animateThing(gr.userData.inner, o.size[1], now + (o.pos[0] % 7), 0, mo);
   }
   if (keys.size && !typing()) { // fly the camera
     camera.getWorldDirection(fwd); right.crossVectors(fwd, camera.up).normalize();

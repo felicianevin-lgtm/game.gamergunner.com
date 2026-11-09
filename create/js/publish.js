@@ -14,7 +14,7 @@ function usedFiles(game) {
 }
 const UP_ERR = { toobig: "is too big to upload", full: "can't upload: you've uploaded lots of files already", notfile: "doesn't look like a real model or picture",
   signin: "needs you to sign in again", slowdown: "has to wait: that's a lot of uploading! Try again in a little while", banned: "can't be uploaded from this account" };
-async function uploadFiles(game, me, ids, say) {
+export async function uploadFiles(game, me, ids, say) {
   let i = 0;
   for (const id of ids) {
     i++;

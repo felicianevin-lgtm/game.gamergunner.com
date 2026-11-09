@@ -98,12 +98,14 @@ async function shrinkPicture(file, type) {
 // ---------------------------------------------------------------- using files
 // The game's files (so parts know each file's type). remote = true: a published game, files come from the relay.
 const known = new Map();
+const sids = new Map(); // id -> relay sid, for files this computer doesn't have (things from Toolbox > Shared)
 export function useFiles(files, fromRelay) {
-  remote.clear(); known.clear();
+  remote.clear(); known.clear(); sids.clear();
   for (const [id, f] of Object.entries(files || {})) {
     if (!f) continue;
     known.set(id, f.type);
     if (fromRelay && f.sid) remote.set(id, f.sid);
+    if (f.sid) sids.set(id, f.sid);
   }
 }
 export function noteFile(id, type) { known.set(id, type); }
@@ -116,11 +118,12 @@ async function bytesOf(id) {
     return r.arrayBuffer();
   }
   const rec = await getFile(id);
+  if (!rec && sids.has(id)) { const r = await fetch(RELAY + "/hub/file/" + sids.get(id)); if (!r.ok) throw new Error("missing"); return r.arrayBuffer(); }
   if (!rec) throw new Error("missing");
   return rec.bytes;
 }
 // A picture's address (sync: "" until preloaded with loadPictures).
-export function fileUrl(id) { return remote.has(id) ? RELAY + "/hub/file/" + remote.get(id) : urls.get(id) || ""; }
+export function fileUrl(id) { return remote.has(id) ? RELAY + "/hub/file/" + remote.get(id) : urls.get(id) || (sids.has(id) ? RELAY + "/hub/file/" + sids.get(id) : ""); }
 export async function loadPictures(files) {
   for (const [id, f] of Object.entries(files || {})) {
     if (isModel(f.type) || remote.has(id) || urls.has(id)) continue;
@@ -182,6 +185,7 @@ export function modelCopy(info, anim) {
       mixer.stopAllAction();
       if (clip) mixer.clipAction(clip).play();
     };
+    copy.userData.has = (name) => info.animations.some((a) => a.name === name);
     if (anim) copy.userData.play(anim === "*" ? true : anim);
     mixers.add(mixer);
   }

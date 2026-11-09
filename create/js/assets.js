@@ -62,6 +62,43 @@ function wheel(g, x, y, z, r, w) {
   const t = cyl(g, r, r, w, M("#1b1d20"), x, y, z, 18); t.rotation.z = Math.PI / 2;
   const h = cyl(g, r * 0.55, r * 0.55, w + 0.04, M("#c9ced6", "metal"), x, y, z, 14); h.rotation.z = Math.PI / 2;
 }
+// A vehicle part from its side outline: pts = [z, y] corners going around (front is -z), or {arch: [z, y, r]} for a
+// wheel arch cut up into the bottom edge. Pushed out to `width` (centered on x = xo) with soft rounded edges.
+function sideBody(g, pts, width, mat, bevel, xo) {
+  const sh = new THREE.Shape(), out = [];
+  for (const p of pts) {
+    if (Array.isArray(p)) { out.push([-p[0], p[1]]); continue; }
+    const [cz, cy, r] = p.arch;
+    for (let i = 0; i <= 14; i++) { const a = Math.PI + 0.4 - (Math.PI + 0.8) * i / 14; out.push([-(cz + r * Math.cos(a)), cy + r * Math.sin(a)]); }
+  }
+  out.forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y)));
+  sh.closePath();
+  const b = bevel || 0, depth = Math.max(0.01, width - 2 * b);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelSegments: 2, curveSegments: 6 });
+  geo.rotateY(Math.PI / 2); geo.translate(-depth / 2 + (xo || 0), 0, 0);
+  return mesh(g, geo, mat);
+}
+// A real-looking wheel: tire, metal rim with spokes and a hub (chunky = big tread blocks, knobby = dirt bike knobs + thin spokes).
+function carWheel(g, x, y, z, r, w, chunky, knobby) {
+  const w0 = new THREE.Group(); w0.position.set(x, y, z); g.add(w0);
+  const tire = M("#15171a"), rimM = M(knobby ? "#2b2d31" : "#c9ced6", "metal");
+  cyl(w0, r * 0.97, r * 0.97, w, tire, 0, 0, 0, 28).rotation.z = Math.PI / 2;
+  const edge = new THREE.TorusGeometry(r * 0.8, Math.min(r * 0.18, w * 0.35), 8, 28);
+  for (const s of [-1, 1]) { const t = mesh(w0, edge, tire, s * w * 0.32, 0, 0); t.rotation.y = Math.PI / 2; }
+  if (chunky || knobby) { const n = knobby ? 22 : 18, kb = new THREE.BoxGeometry(knobby ? w * 0.9 : w * 1.02, r * 0.1, r * (knobby ? 0.12 : 0.22));
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, k = mesh(w0, kb, tire, 0, Math.cos(a) * r, Math.sin(a) * r); k.rotation.x = -a; } }
+  cyl(w0, r * 0.6, r * 0.6, w + 0.02, rimM, 0, 0, 0, 20).rotation.z = Math.PI / 2;
+  const n = knobby ? 12 : 5, sg = new THREE.BoxGeometry(w + 0.05, r * 0.55, r * (knobby ? 0.03 : 0.12));
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, s = mesh(w0, sg, M(knobby ? "#c9ced6" : "#8d939b", "metal"), 0, Math.cos(a) * r * 0.28, Math.sin(a) * r * 0.28); s.rotation.x = -a; }
+  cyl(w0, r * 0.17, r * 0.17, w + 0.08, M("#e8e8e8", "metal"), 0, 0, 0, 12).rotation.z = Math.PI / 2;
+  return w0;
+}
+// A black fender flare over a wheel (half a ring on the side of the body).
+function archFlare(g, cz, cy, r, x, mat) {
+  const f = mesh(g, new THREE.TorusGeometry(r * 1.08, r * 0.11, 6, 18, Math.PI), mat, x, cy, cz);
+  f.rotation.y = Math.PI / 2; f.scale.z = 1.6;
+  return f;
+}
 function wedgeGeo(w, h, d) { // ramp: low at +z, high at -z
   const s = new THREE.Shape();
   s.moveTo(-d / 2, 0); s.lineTo(d / 2, 0); s.lineTo(-d / 2, h); s.lineTo(-d / 2, 0);
@@ -113,41 +150,83 @@ export const ASSETS = [
   { type: "plate", label: "Platform", icon: "▭", cat: "Parts", base: [10, 1, 10], color: "#1fae45",
     build: (o) => { const g = new THREE.Group(); box(g, 10, 1, 10, M(o.color, o.mat), 0, 0.5, 0); return g; } },
 
-  // ----- vehicles (drive with E in Play)
+  // ----- vehicles (drive with E in Play). Bodies are side outlines (sideBody) pushed out to the car's width, with
+  // real wheel arches, glass cabins, lights, bumpers and mirrors.
   { type: "car", label: "Sports Car", icon: "🏎️", cat: "Vehicles", base: [4.4, 2, 8], color: "#e8261c", b: { k: "car", speed: 40 },
     build: (o) => {
-      const g = new THREE.Group(), paint = M(o.color, "smooth");
-      box(g, 4.2, 0.9, 7.6, paint, 0, 0.85, 0);
-      box(g, 3.6, 0.8, 3.6, paint, 0, 1.6, -0.4);
-      box(g, 3.4, 0.62, 3.3, M("#9fd3ff", "glass"), 0, 1.62, -0.4);
-      box(g, 3.9, 0.12, 0.5, M("#111"), 0, 1.45, 3.55);          // spoiler
-      box(g, 0.9, 0.3, 0.1, M("#fff6c4", "neon"), -1.4, 0.95, -3.81);
-      box(g, 0.9, 0.3, 0.1, M("#fff6c4", "neon"), 1.4, 0.95, -3.81);
-      box(g, 0.9, 0.25, 0.1, M("#ff2a2a", "neon"), -1.4, 0.95, 3.81);
-      box(g, 0.9, 0.25, 0.1, M("#ff2a2a", "neon"), 1.4, 0.95, 3.81);
-      for (const [x, z] of [[-2, -2.6], [2, -2.6], [-2, 2.5], [2, 2.5]]) wheel(g, x, 0.6, z, 0.6, 0.5);
+      const g = new THREE.Group(), paint = M(o.color, "smooth"), glass = M("#1b2430", "smooth"), black = M("#141518"), chrome = M("#c9ced6", "metal");
+      sideBody(g, [[-4.0, 0.32], [-3.3, 0.24], { arch: [-2.55, 0.52, 0.62] }, { arch: [2.45, 0.52, 0.62] }, [3.95, 0.3], [4.05, 0.72], [3.95, 1.08], [2.8, 1.18], [-0.9, 1.2], [-3.7, 1.04], [-4.1, 0.66]], 4.2, paint, 0.06);
+      sideBody(g, [[-1.0, 1.12], [0.2, 1.8], [1.65, 1.8], [2.95, 1.12]], 3.5, glass, 0.04);              // windows
+      sideBody(g, [[0.1, 1.78], [0.25, 1.88], [1.55, 1.88], [1.72, 1.78]], 3.56, paint, 0.02);         // roof
+      box(g, 3.56, 0.6, 0.12, paint, 0, 1.47, 0.95);                                                     // middle pillar
+      box(g, 3.0, 0.22, 0.1, black, 0, 0.55, -4.06); box(g, 2.0, 0.12, 0.08, M("#2a2d33", "metal"), 0, 0.78, -4.08); // grille
+      for (const s of [-1, 1]) {
+        box(g, 0.85, 0.2, 0.1, M("#fff6c4", "neon"), s * 1.45, 0.86, -4.02);                             // headlights
+        box(g, 0.9, 0.18, 0.1, M("#ff2a2a", "neon"), s * 1.4, 0.92, 4.02);                               // tail lights
+        box(g, 0.28, 0.16, 0.3, paint, s * 1.95, 1.3, -0.6); box(g, 0.05, 0.12, 0.22, M("#9fb6c8", "metal"), s * 2.1, 1.3, -0.6); // mirrors
+        cyl(g, 0.09, 0.09, 0.3, chrome, s * 0.7, 0.35, 4.02, 10).rotation.x = Math.PI / 2;            // exhausts
+        box(g, 0.1, 0.42, 0.12, black, s * 1.5, 1.32, 3.6);                                              // spoiler posts
+      }
+      box(g, 3.9, 0.08, 0.55, black, 0, 1.55, 3.65);                                                     // spoiler
+      box(g, 0.9, 0.3, 0.04, M("#f2f2f2"), 0, 0.62, 4.0);                                                // number plate
+      for (const [x, z] of [[-1.8, -2.55], [1.8, -2.55], [-1.8, 2.45], [1.8, 2.45]]) carWheel(g, x, 0.52, z, 0.52, 0.5);
       return g;
     } },
   { type: "truck", label: "Monster Truck", icon: "🛻", cat: "Vehicles", base: [5, 3.4, 9], color: "#1f8f3a", b: { k: "car", speed: 32 },
     build: (o) => {
-      const g = new THREE.Group(), paint = M(o.color, "smooth");
-      box(g, 4.2, 1.1, 8.4, paint, 0, 1.95, 0);
-      box(g, 3.8, 1.2, 3, paint, 0, 3.0, -1.6);
-      box(g, 3.6, 0.9, 2.8, M("#9fd3ff", "glass"), 0, 3.05, -1.6);
-      box(g, 3.2, 0.2, 3.6, M("#222"), 0, 2.6, 2.2);
-      for (const [x, z] of [[-2.1, -2.8], [2.1, -2.8], [-2.1, 2.8], [2.1, 2.8]]) wheel(g, x, 1.15, z, 1.15, 0.9);
-      box(g, 0.8, 0.3, 0.1, M("#fff6c4", "neon"), -1.4, 2.1, -4.21);
-      box(g, 0.8, 0.3, 0.1, M("#fff6c4", "neon"), 1.4, 2.1, -4.21);
+      const g = new THREE.Group(), paint = M(o.color, "smooth"), glass = M("#1b2430", "smooth"), black = M("#141518"), chrome = M("#c9ced6", "metal");
+      box(g, 2.2, 0.35, 7.6, black, 0, 1.25, 0);                                                         // frame
+      for (const z of [-2.8, 2.8]) { cyl(g, 0.16, 0.16, 4.2, chrome, 0, 1.2, z, 10).rotation.z = Math.PI / 2; box(g, 0.3, 0.6, 0.3, M("#e8c331", "metal"), 0, 1.55, z); } // axles + springs
+      sideBody(g, [[-4.2, 1.55], { arch: [-2.8, 1.45, 1.15] }, { arch: [2.8, 1.45, 1.15] }, [4.25, 1.55], [4.25, 2.55], [-0.2, 2.55], [-2.3, 2.62], [-4.15, 2.45], [-4.3, 2.0]], 4.3, paint, 0.08);
+      sideBody(g, [[-2.25, 2.58], [-1.45, 3.5], [0.45, 3.5], [0.6, 2.58]], 3.9, glass, 0.04);         // cab windows
+      sideBody(g, [[-1.55, 3.45], [-1.42, 3.58], [0.42, 3.58], [0.56, 3.45]], 3.96, paint, 0.03);     // cab roof
+      box(g, 3.96, 0.9, 0.14, paint, 0, 3.0, -0.35);                                                     // middle pillar
+      box(g, 3.6, 0.12, 3.4, M("#26282d"), 0, 2.5, 2.4);                                                 // truck bed floor
+      for (const s of [-1, 1]) {
+        box(g, 0.12, 0.5, 3.5, paint, s * 2.08, 2.8, 2.4);                                               // bed sides
+        box(g, 0.9, 0.32, 0.1, M("#fff6c4", "neon"), s * 1.45, 2.15, -4.32);                             // headlights
+        box(g, 0.5, 0.4, 0.1, M("#ff2a2a", "neon"), s * 1.75, 2.25, 4.3);                                // tail lights
+        box(g, 0.25, 0.3, 0.35, black, s * 2.15, 2.95, -2.0);                                            // mirrors
+        for (const z of [-2.8, 2.8]) archFlare(g, z, 1.45, 1.15, s * 2.12, black);                       // fender flares
+      }
+      box(g, 3.6, 0.12, 0.12, chrome, 0, 3.75, -0.9); for (const x of [-1.2, -0.4, 0.4, 1.2]) box(g, 0.35, 0.22, 0.18, M("#fff6c4", "neon"), x, 3.88, -0.9); // light bar
+      box(g, 3.7, 0.5, 0.12, paint, 0, 2.8, 4.18);                                                       // tailgate
+      box(g, 3.4, 0.45, 0.3, chrome, 0, 1.75, -4.4); box(g, 2.2, 0.4, 0.08, M("#2a2d33", "metal"), 0, 2.15, -4.32); // bumper + grille
+      for (const [x, z] of [[-2.1, -2.8], [2.1, -2.8], [-2.1, 2.8], [2.1, 2.8]]) carWheel(g, x, 1.15, z, 1.15, 0.95, true);
       return g;
     } },
   { type: "kart", label: "Go-Kart", icon: "🛞", cat: "Vehicles", base: [3, 1.4, 4.4], color: "#ffc531", b: { k: "car", speed: 46 },
     build: (o) => {
-      const g = new THREE.Group(), paint = M(o.color, "smooth");
-      box(g, 2.2, 0.35, 4.2, paint, 0, 0.45, 0);
-      box(g, 1.2, 0.8, 1.2, M("#222"), 0, 0.9, 0.6);           // seat
-      cyl(g, 0.35, 0.35, 0.1, M("#222"), 0, 1.15, -0.5, 16).rotation.x = -1.1; // wheel
-      box(g, 2.6, 0.2, 0.4, paint, 0, 0.5, -2.05);
-      for (const [x, z] of [[-1.3, -1.4], [1.3, -1.4], [-1.3, 1.5], [1.3, 1.5]]) wheel(g, x, 0.42, z, 0.42, 0.45);
+      const g = new THREE.Group(), paint = M(o.color, "smooth"), black = M("#141518"), chrome = M("#c9ced6", "metal");
+      box(g, 1.3, 0.12, 3.9, M("#2a2d33", "metal"), 0, 0.25, 0);                                         // chassis
+      sideBody(g, [[-2.15, 0.28], [-0.4, 0.28], [-0.2, 0.5], [-1.9, 0.62]], 1.1, paint, 0.05);          // nose
+      for (const s of [-1, 1]) sideBody(g, [[-0.6, 0.25], [1.2, 0.25], [1.1, 0.55], [-0.4, 0.55]], 0.35, paint, 0.04, s * 0.85); // side pods
+      box(g, 0.9, 0.12, 0.8, black, 0, 0.45, 0.55); box(g, 0.9, 0.75, 0.14, black, 0, 0.82, 0.98);      // seat
+      cyl(g, 0.05, 0.05, 0.55, chrome, 0, 0.62, -0.45, 8).rotation.x = -0.9;                              // steering column
+      const sw = mesh(g, new THREE.TorusGeometry(0.24, 0.045, 8, 20), black, 0, 0.83, -0.62); sw.rotation.x = -0.6; // steering wheel
+      box(g, 0.75, 0.45, 0.55, M("#3a3d42", "metal"), 0.35, 0.5, 1.55); cyl(g, 0.07, 0.07, 0.5, chrome, 0.7, 0.55, 1.95, 8).rotation.x = Math.PI / 2; // engine + exhaust
+      box(g, 2.6, 0.18, 0.25, black, 0, 0.32, -2.05); box(g, 2.6, 0.18, 0.25, black, 0, 0.32, 2.1);       // bumpers
+      box(g, 0.6, 0.35, 0.04, M("#f2f2f2"), 0, 0.5, -2.2);                                                 // number plate
+      for (const [x, z, r] of [[-1.22, -1.4, 0.34], [1.22, -1.4, 0.34], [-1.25, 1.5, 0.42], [1.25, 1.5, 0.42]]) carWheel(g, x, r, z, r, r > 0.4 ? 0.5 : 0.36);
+      return g;
+    } },
+  { type: "dirtbike", label: "Dirt Bike", icon: "🏍️", cat: "Vehicles", base: [1.1, 2.2, 3.6], color: "#ff7a1a", b: { k: "car", speed: 52 },
+    build: (o) => {
+      const g = new THREE.Group(), paint = M(o.color, "smooth"), black = M("#141518"), chrome = M("#c9ced6", "metal"), white = M("#f2f2f2", "smooth");
+      for (const z of [-1.25, 1.25]) carWheel(g, 0, 0.58, z, 0.58, 0.24, true, true);                    // knobby wheels
+      for (const s of [-1, 1]) cyl(g, 0.045, 0.045, 1.35, chrome, s * 0.16, 1.15, -1.0, 10).rotation.x = -0.45; // front forks
+      sideBody(g, [[-1.62, 1.18], [-1.15, 1.32], [-0.75, 1.2], [-1.2, 1.12]], 0.36, white, 0.03);       // front fender
+      cyl(g, 0.05, 0.05, 0.95, black, 0, 1.75, -0.78, 10).rotation.z = Math.PI / 2;                       // handlebar
+      for (const s of [-1, 1]) cyl(g, 0.06, 0.06, 0.18, M("#2b2b2b"), s * 0.44, 1.75, -0.78, 10).rotation.z = Math.PI / 2; // grips
+      sideBody(g, [[-0.95, 1.65], [-0.75, 1.82], [-0.15, 1.6], [-0.6, 1.3]], 0.12, white, 0.02);        // number board
+      sideBody(g, [[-0.7, 1.25], [-0.65, 1.62], [0.2, 1.55], [0.35, 1.25]], 0.55, paint, 0.06);         // tank + shrouds
+      sideBody(g, [[0.0, 1.5], [0.15, 1.6], [1.55, 1.42], [1.5, 1.32]], 0.42, black, 0.05);              // seat
+      sideBody(g, [[1.0, 1.32], [1.55, 1.42], [1.95, 1.35], [1.5, 1.18]], 0.34, paint, 0.03);           // rear fender
+      box(g, 0.42, 0.5, 0.6, M("#3a3d42", "metal"), 0, 0.85, -0.05); box(g, 0.5, 0.25, 0.4, M("#55585e", "metal"), 0, 0.62, -0.1); // engine
+      cyl(g, 0.05, 0.05, 1.1, M("#2a2d33", "metal"), 0, 1.05, -0.55, 8).rotation.x = 0.7;                 // frame
+      for (const s of [-1, 1]) box(g, 0.06, 0.08, 1.25, M("#2a2d33", "metal"), s * 0.15, 0.72, 0.65).rotation.x = -0.06; // swingarm
+      cyl(g, 0.07, 0.07, 1.5, chrome, 0.24, 1.0, 0.75, 10).rotation.x = Math.PI / 2 - 0.25;              // exhaust
+      box(g, 0.08, 0.32, 0.04, M("#ff2a2a", "neon"), 0, 1.38, 1.92); box(g, 0.16, 0.1, 0.06, M("#fff6c4", "neon"), 0, 1.55, -1.02); // lights
       return g;
     } },
 

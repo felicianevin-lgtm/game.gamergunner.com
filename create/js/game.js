@@ -9,6 +9,7 @@
 import { BY_TYPE, BEHAVIORS } from "./assets.js";
 import { sanitizeGui } from "./gui.js";
 import { sanitizeMonster } from "./monster.js";
+import { sanitizeMotion } from "./motion.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space" };
 export const DEFAULT_SETTINGS = { sky: "day", gravity: 70, walk: 14, jump: 26 };
@@ -80,6 +81,8 @@ export function sanitize(g) {
     if (Number(o.transp) > 0) c.transp = Math.min(100, Math.round(Number(o.transp))); // (see-through %, 100 = invisible)
     if (/^[a-z0-9]{6,40}$/i.test(o.file || "")) c.file = o.file;
     if (typeof o.anim === "string" && o.anim) c.anim = o.anim.slice(0, 60);
+    if (o.mo) c.mo = sanitizeMotion(o.mo); // (Animation settings: walk style, standing move, when, speed - motion.js)
+    if (typeof o.bump === "boolean") c.bump = o.bump; // (walls stop it when it moves; monsters do unless this is false)
     if (typeof o.text === "string" || BY_TYPE[o.type].text) c.text = String(o.text == null ? BY_TYPE[o.type].text || "" : o.text).slice(0, 120);
     out.objects.push(c);
   }
@@ -127,7 +130,7 @@ export const TEMPLATES = {
   racing: { label: "Racing", icon: "🏁", desc: "Cars, ramps and coins. Press E to drive.",
     make: () => {
       const o = [baseplate(), newObj("spawn", [0, 0, 0])];
-      o.push(newObj("car", [-6, 0, -6])); o.push(newObj("kart", [6, 0, -6]));
+      o.push(newObj("car", [-6, 0, -6])); o.push(newObj("kart", [6, 0, -6])); o.push(newObj("dirtbike", [12, 0, -6]));
       o.push(newObj("block", [0, -0.9, -70], { name: "Road", size: [16, 1, 130], color: "#3a3d42" }));
       o.push(newObj("wedge", [0, 0, -45], { size: [10, 3, 10] }));
       o.push(newObj("wedge", [0, 0, -95], { size: [10, 4, 12] }));

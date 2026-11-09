@@ -15,7 +15,7 @@ import { startScripts } from "./scripts.js";
 import { filterText } from "./filter.js";
 import { buildAvatar, animateAvatar, loadAvatar } from "./avatar.js";
 import { fileUrl, updateMixers, clearMixers } from "./files.js";
-import { animateMonster, MON_ANIMS } from "./monster.js";
+import { animateThing, motionOf, withPlay } from "./motion.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -40,6 +40,9 @@ export function startPlay(world, game, opts) {
     e.moving = ["spin", "move", "door", "car"].includes(e.k);
     e.boxes = o.solid ? worldBoxes(o) : [];
     e.bounds = boundsBox(o);
+    e.walker = typeof o.bump === "boolean" ? o.bump : o.type === "monster"; // (walls stop it when a script moves it)
+    if (e.walker) { e.vy = 0; e.home = g.position.clone(); }
+    e.clip = !!(o.anim && o.type === "model"); // (an imported model playing its own animation)
     return e;
   }
   const ents = game.objects.map(makeEnt);
@@ -282,7 +285,7 @@ export function startPlay(world, game, opts) {
   }
 
   // ---------------------------------------------------------------- collision
-  const _p = new THREE.Vector3(), _local = new THREE.Vector3(), _iq = new THREE.Quaternion(), _n = new THREE.Vector3();
+  const _p = new THREE.Vector3(), _p2 = new THREE.Vector3(), _local = new THREE.Vector3(), _iq = new THREE.Quaternion(), _n = new THREE.Vector3();
   // Push a sphere out of a box. Returns the push (world) or null.
   function pushOut(center, r, b) {
     _iq.copy(b.q).invert();
@@ -312,7 +315,7 @@ export function startPlay(world, game, opts) {
     for (const h of SPHERES) if (pushOut(_p.set(pos.x, pos.y + h, pos.z), RADIUS + (extra || 0), b)) return true;
     return false;
   }
-  function carRadius(e) { return Math.min(e.o.size[0], e.o.size[1] * 1.4) * 0.42; }
+  function carRadius(e) { return e.o.type === "dirtbike" ? e.o.size[1] * 0.32 : Math.min(e.o.size[0], e.o.size[1] * 1.4) * 0.42; } // (thin bikes get balls as big as their wheels, so they climb curbs)
   function collidePlayer() {
     grounded = false; groundEnt = null;
     for (let pass = 0; pass < 3; pass++) {
@@ -344,6 +347,7 @@ export function startPlay(world, game, opts) {
     // moving things first (so riders move with them); things scripts move count too
     for (const e of ents) if (e.moving || e.scripted) { e.prevPos.copy(e.g.position); e.prevQ.copy(e.g.quaternion); }
     applyScripts();
+    for (const e of ents) if (e.walker && !e.off && e !== driving) stepWalker(e, dt);
     for (const e of ents) {
       if (!e.moving || e === driving) continue;
       const b = e.o.b;
@@ -392,15 +396,16 @@ export function startPlay(world, game, opts) {
       else if (e.k === "checkpoint") { const cp = new THREE.Vector3(e.o.pos[0], e.o.pos[1] + e.o.size[1] + 0.2, e.o.pos[2]); if (cp.distanceTo(checkpoint) > 0.5) { checkpoint.copy(cp); showMsg("Checkpoint!"); beep(660, 0.2, "triangle", 990); } }
       else if (e.k === "finish" && !won && !lost) { won = true; showMsg((b.message || "You win!") + "\n" + fmt(time) + (totalCoins ? "  ·  🪙 " + coins + " / " + totalCoins : ""), 999); beep(523, 0.15, "square"); setTimeout(() => beep(784, 0.3, "square"), 150); }
     }
-    // monsters move their legs, arms, tentacles, wings and tail (monster.js animateMonster). "Walk when it moves" (auto)
-    // watches how fast the monster really goes (a script moving it, a moving platform...) and walks faster when it's faster.
+    // Animations (motion.js): monsters and anything with Animation settings move their legs and arms. "Walk when it moves"
+    // watches how fast the thing really goes (a script moving it, a moving platform...) and walks faster when it's faster.
     for (const e of ents) {
-      const rig = e.o.type === "monster" && e.g.userData.inner && e.g.userData.inner.userData.rig;
-      if (!rig) continue;
+      const mo = withPlay(motionOf(e.o), e.play), inner = e.g.userData.inner;
+      if (!mo || !inner) continue;
       if (!e.lastP) e.lastP = e.g.position.clone();
-      const v = e.g.position.distanceTo(e.lastP) / Math.max(dt, 1e-3); e.lastP.copy(e.g.position);
+      const v = Math.hypot(e.g.position.x - e.lastP.x, e.g.position.z - e.lastP.z) / Math.max(dt, 1e-3); e.lastP.copy(e.g.position);
       e.walkAmt = (e.walkAmt || 0) + (Math.min(1, v / Math.max(1, e.o.size[1] * 0.5)) - (e.walkAmt || 0)) * Math.min(1, dt * 6);
-      animateMonster(rig, time + (e.base.x % 7), e.walkAmt, e.monAnim || e.o.anim || "auto");
+      inner.userData.mixing = e.clip; // (the model's own animation moves its bones)
+      animateThing(inner, e.o.size[1], time + (e.base.x % 7), e.walkAmt, mo);
     }
     // spinning coins
     for (const e of ents) if (e.k === "coin" && !e.done && !e.scripted) e.g.quaternion.copy(e.baseQ).premultiply(q.setFromAxisAngle(Y, time * 2.5));
@@ -503,9 +508,87 @@ export function startPlay(world, game, opts) {
     }
     if (onGround && Math.abs(e.speed) > 1) e.vy = Math.min(e.vy, 0);
     e.g.rotation.set(0, e.yaw, 0);
+    if (e.o.type === "dirtbike") { // (bikes lean into turns)
+      e.lean = (e.lean || 0) + (s * 0.4 * Math.min(1, Math.abs(e.speed) / 15) - (e.lean || 0)) * Math.min(1, dt * 6);
+      e.g.rotation.z = -e.lean;
+    }
     e.o.rot = [0, e.yaw / D2R, 0];
     refreshBoxes(e);
     pos.copy(p);
+  }
+  // WALKERS: monsters (and things with "Walls stop it" on) don't go through walls. A script's small moves (follow,
+  // moveToward, forward...) become walking: the thing slides along walls, steps up low steps, falls with gravity and
+  // stands on whatever is under it. Big jumps (moveTo far away) still teleport. Flying things skip gravity.
+  function flies(e) {
+    const mo = withPlay(motionOf(e.o), e.play);
+    return !!(mo && (mo.w === "idle" ? mo.i === "fly" : mo.g === "fly" || (mo.w === "move" && mo.i === "fly"))) || !!(e.o.mon && (e.o.mon.float || e.o.mon.ghost));
+  }
+  function stepWalker(e, dt) {
+    const p = e.g.position, sz = e.o.size, fly = flies(e);
+    const r = Math.max(0.25, Math.min(6, Math.min(sz[0], sz[2]) * 0.45)), stepH = Math.max(0.5, sz[1] * 0.3);
+    if (e.want) {
+      let dx = e.want.x - p.x, dz = e.want.z - p.z;
+      const len = Math.hypot(dx, dz);
+      if (e.detour > 0 && len > 1e-4) { // (going around a wall: sideways until the way forward is open, 8 s at most)
+        const ux = dx / len, uz = dz / len;
+        e.detour -= dt; e.detourT = (e.detourT || 0) + dt;
+        if (e.detourT < 8 && walkerBlocked(e, ux, uz, r, stepH)) e.detour = Math.max(e.detour, 0.25);
+        if (walkerBlocked(e, -uz * e.side - ux * 0.3, ux * e.side - uz * 0.3, r, stepH, 0.6)) { e.side = -e.side; e.detour = Math.max(e.detour, 1); } // (that side is blocked too)
+        dx = (ux * 0.2 - uz * e.side) * len; dz = (uz * 0.2 + ux * e.side) * len;
+        if (e.detour <= 0) e.detourT = 0;
+      }
+      const x0 = p.x, z0 = p.z, n = Math.min(20, Math.max(1, Math.ceil(Math.hypot(dx, dz) / (r * 0.5))));
+      for (let i = 0; i < n; i++) { p.x += dx / n; p.z += dz / n; walkerSides(e, r, stepH); }
+      // stuck against a wall for a moment? walk sideways along it for a while (the other way if that side is blocked too)
+      if (len > 1e-3 && Math.hypot(p.x - x0, p.z - z0) < len * 0.25) {
+        e.stuck = (e.stuck || 0) + dt;
+        if (e.stuck > 0.3) { e.side = !e.side ? (Math.random() < 0.5 ? -1 : 1) : e.detour > 0 ? -e.side : e.side; e.detour = 2.2; e.stuck = 0; }
+      } else e.stuck = 0;
+      if (fly) p.y = e.want.y;
+      e.want = null;
+    } else if (fly) walkerSides(e, r, stepH);
+    if (!fly) {
+      e.vy = Math.max(-120, e.vy - S.gravity * dt);
+      p.y += e.vy * dt;
+      walkerGround(e, r, stepH);
+    }
+    if (p.y < lowest - 60) { p.copy(e.home); e.vy = 0; }
+    e.o.pos = [p.x, p.y, p.z];
+    refreshBoxes(e);
+  }
+  function walkerSides(e, r, stepH) { // push the body (balls from just above step height to the top) out of walls
+    const p = e.g.position, tall = e.o.size[1], rr = Math.min(r, tall / 2);
+    const lo = Math.min(stepH + rr, tall - rr), hi = Math.max(lo, tall - rr), n = Math.min(5, Math.max(1, Math.ceil((hi - lo) / (rr * 1.5)) + 1));
+    for (const o of solids()) {
+      if (o === e || o === driving || o.bounds.c.distanceToSquared(p) > (o.bounds.h.length() + tall + r + 2) ** 2) continue;
+      for (const b of o.boxes) for (let i = 0; i < n; i++) {
+        const push = pushOut(_p.set(p.x, p.y + lo + (n > 1 ? (hi - lo) * i / (n - 1) : 0), p.z), rr, b);
+        if (!push || Math.abs(push.y) > push.length() * 0.7) continue; // (floors and ceilings aren't walls)
+        p.x += push.x; p.z += push.z;
+      }
+    }
+  }
+  function walkerBlocked(e, ux, uz, r, stepH, k) { // is there a wall just ahead in direction (ux, uz)?
+    const p = e.g.position, tall = e.o.size[1], rr = Math.min(r, tall / 2), y = p.y + Math.min(stepH + rr, tall - rr), d = r + Math.max(0.6, r * 0.5);
+    _p2.set(p.x + ux * d, y, p.z + uz * d);
+    for (const o of solids()) {
+      if (o === e || o === driving || o.bounds.c.distanceToSquared(_p2) > (o.bounds.h.length() + rr + 2) ** 2) continue;
+      for (const b of o.boxes) { const push = pushOut(_p2, rr * (k || 0.9), b); if (push && Math.abs(push.y) <= push.length() * 0.7) return true; }
+    }
+    return false;
+  }
+  function walkerGround(e, r, stepH) { // stand on floors, step up onto low steps
+    const p = e.g.position, rf = Math.min(r, 0.6);
+    for (const o of solids()) {
+      if (o === e || o === driving || o.bounds.c.distanceToSquared(p) > (o.bounds.h.length() + r + 2) ** 2) continue;
+      for (const b of o.boxes) {
+        const push = pushOut(_p.set(p.x, p.y + rf, p.z), rf, b);
+        if (!push) continue;
+        const ny = push.y / (push.length() || 1), top = b.c.y + Math.abs(b.h.y);
+        if (ny > 0.5) { p.y += push.y; if (e.vy < 0) e.vy = 0; }
+        else if (top <= p.y + stepH && top > p.y) { p.y = top; if (e.vy < 0) e.vy = 0; }
+      }
+    }
   }
   function refreshBoxes(e) {
     if (e.o.solid) e.boxes = worldBoxes(e.o, e.g.position, e.g.quaternion);
@@ -554,7 +637,7 @@ export function startPlay(world, game, opts) {
   const _eu = new THREE.Euler();
   function movedList() {
     const m = [];
-    for (const e of ents) if (e.moving && !e.done) m.push([e.o.id, r3(e.g.position.x), r3(e.g.position.y), r3(e.g.position.z), r3(_eu.setFromQuaternion(e.g.quaternion, "YXZ").y / D2R)]);
+    for (const e of ents) if ((e.moving || e.walker) && !e.done) m.push([e.o.id, r3(e.g.position.x), r3(e.g.position.y), r3(e.g.position.z), r3(_eu.setFromQuaternion(e.g.quaternion, "YXZ").y / D2R)]);
     return m;
   }
   const NUM = (v, lo, hi) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : null);
@@ -578,7 +661,9 @@ export function startPlay(world, game, opts) {
         else if (e && e !== driving) {
           const x = NUM(b, -5000, 5000), y = NUM(cc, -5000, 5000), z = NUM(d, -5000, 5000);
           if (x == null || y == null || z == null) continue;
-          e.g.position.set(x, y, z); e.o.pos = [x, y, z]; e.base.copy(e.g.position); e.scripted = true; refreshBoxes(e);
+          const p = e.g.position;
+          if (e.walker && Math.hypot(x - p.x, z - p.z) < Math.max(4, Math.min(e.o.size[0], e.o.size[2]) * 2)) { e.want = new THREE.Vector3(x, y, z); e.scripted = true; continue; } // (walks: stepWalker)
+          p.set(x, y, z); e.o.pos = [x, y, z]; e.base.copy(p); e.scripted = true; if (e.walker) e.vy = 0; refreshBoxes(e);
         }
       } else if (k === "rot" && e && e !== driving) {
         const ry = NUM(b, -1e6, 1e6); if (ry == null) continue;
@@ -592,8 +677,9 @@ export function startPlay(world, game, opts) {
       else if (k === "text") { const t = filterText(b, g ? 60 : 120); if (g) { g.text = t; guiDirty = true; } else if (e) { e.o.text = t; if (e.k !== "npc") rebuildEnt(e); } }
       else if (k === "anim" && e) {
         const inner = e.g.userData.inner, m = inner && inner.userData.copy, name = String(b || "").toLowerCase();
-        if (m && m.userData.play) m.userData.play(String(b) || true);
-        else if (inner && inner.userData.rig) e.monAnim = name === "stop" ? "none" : MON_ANIMS[name] ? name : "walk"; // (monsters: walk, idle, dance, fly, stop)
+        const motionName = name === "auto" || name === "idle" || withPlay(null, name).w !== "move";
+        if (m && m.userData.play && (m.userData.has(String(b)) || !motionName)) { m.userData.play(String(b) || true); e.clip = true; e.play = null; } // (the model's own animation)
+        else if (motionName) { if (m && m.userData.play && e.clip) { m.userData.play(null); e.clip = false; } e.play = name === "auto" || !name ? null : name === "idle" ? "breathe" : name; } // (walk, run, stomp, dance, wave, fly, stop... motion.js withPlay)
       }
       else if (k === "want") { if (a === "click") wantClick.add(String(b)); else if (a === "touch") wantTouch.add(String(b)); else if (a === "keys") wantKeys = true; }
       else if (k === "clone" && e && typeof b === "string" && /^k\d{1,6}$/.test(b) && !entById.has(b) && clones < 300) {
