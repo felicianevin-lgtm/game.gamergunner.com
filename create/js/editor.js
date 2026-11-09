@@ -80,6 +80,10 @@ function rebuild(o) {
   const old = groups.get(o.id);
   if (old) { world.root.remove(old); disposeGroup(old); }
   const g = buildObject(o);
+  if (o.xray) { // ("See through while building": a ceiling or roof you can look and click through in the studio; normal in Play)
+    g.userData.xray = true;
+    g.traverse((m) => { if (!m.isMesh || !m.material) return; m.material = (Array.isArray(m.material) ? m.material : [m.material]).map((x) => { const c = x.clone(); c.transparent = true; c.opacity = 0.12; c.depthWrite = false; return c; }); if (m.material.length === 1) m.material = m.material[0]; m.castShadow = false; });
+  }
   world.root.add(g);
   groups.set(o.id, g);
   if (selected === o.id && tool !== "select" && !many()) transform.attach(g);
@@ -106,7 +110,7 @@ function restore(snap) {
   const now = new Map((game.scripts || []).map((x) => [x.id, x]));
   game.scripts = (d.sc || []).map((x) => now.get(x.id) || x);
   if (scriptOpen() && !game.scripts.some((x) => x.id === scriptOpen())) closeScript();
-  world.setSky(game.settings.sky); rebuildAll(); drawTree(); drawProps(); changed(true);
+  world.setSky(game.settings.sky, true); rebuildAll(); drawTree(); drawProps(); changed(true);
 }
 function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); updateButtons(); }
 function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); updateButtons(); }
@@ -233,7 +237,7 @@ function hitAt(clientX, clientY) {
   mouse.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(mouse, camera);
   const hits = ray.intersectObjects(world.root.children, true);
-  for (const h of hits) { let p = h.object; while (p && !p.userData.id) p = p.parent; if (p) return { id: p.userData.id, point: h.point }; }
+  for (const h of hits) { let p = h.object; while (p && !p.userData.id) p = p.parent; if (p && !p.userData.xray) return { id: p.userData.id, point: h.point }; } // (see-through-while-building things: pick them in the Explorer)
   const ground = new THREE.Vector3();
   return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ground) ? { id: null, point: ground } : null;
 }
@@ -623,7 +627,8 @@ function setTexture(ids, tex) {
   pushUndo();
   for (const o of list) {
     if (tex && !o.tex && o.type !== "baseplate") o.color = "#ffffff"; // (so you see the texture's own colors; change the color after to tint it)
-    if (tex) o.tex = tex; else { delete o.tex; delete o.texS; }
+    if (tex && tex.startsWith("f:") && o.tex !== tex) o.texFit = "stretch"; // (your own picture: one copy per side, like a poster; switch to Repeat in Properties)
+    if (tex) o.tex = tex; else { delete o.tex; delete o.texS; delete o.texFit; }
     rebuild(o);
   }
   changed(); drawProps();
@@ -869,7 +874,7 @@ function drawProps(numbersOnly) {
       scriptBox("");
     const set = (key, v) => { pushUndo(); game.settings[key] = v; changed(true); };
     $("pName").onchange = (e) => { game.name = e.target.value.trim() || "My Game"; $("gameName").value = game.name; changed(true); };
-    $("pSky").onchange = (e) => { set("sky", e.target.value); world.setSky(e.target.value); };
+    $("pSky").onchange = (e) => { set("sky", e.target.value); world.setSky(e.target.value, true); };
     $("pWalk").onchange = (e) => set("walk", clamp(e.target.value, 4, 60, 14));
     $("pJump").onchange = (e) => set("jump", clamp(e.target.value, 5, 80, 26));
     $("pGrav").onchange = (e) => set("gravity", clamp(e.target.value, 10, 200, 70));
@@ -886,10 +891,12 @@ function drawProps(numbersOnly) {
     row("Color", '<input type="color" id="pColor" value="' + o.color + '">') +
     '<div class="row"><span></span><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div></div>" +
     row("Material", '<select id="pMat">' + MATERIALS.map(([k, v]) => '<option value="' + k + '"' + (k === o.mat ? " selected" : "") + ">" + v + "</option>").join("") + "</select>") +
-    (texturable(o) ? row("Texture", texSelect(o)) + (o.tex ? row("Texture size", '<input type="number" id="pTexS" min="0.25" max="64" step="0.5" value="' + (o.texS || 4) + '" title="How many studs one copy of the texture covers (smaller = more, tinier bricks)">') : "") : "") +
+    (texturable(o) ? row("Texture", texSelect(o)) + (o.tex ? row("Texture fit", '<select id="pTexFit"><option value="">🔁 Repeat (tiles)</option><option value="stretch"' + (o.texFit === "stretch" ? " selected" : "") + ">↔️ Stretch (one per side)</option></select>") +
+      (o.texFit === "stretch" ? "" : row("Texture size", '<input type="number" id="pTexS" min="0.25" max="64" step="0.5" value="' + (o.texS || 4) + '" title="How many studs one copy of the texture covers (smaller = more, tinier bricks)">')) : "") : "") +
     row("Solid", '<input type="checkbox" id="pSolid"' + (o.solid ? " checked" : "") + ' title="Players bump into it">') +
     row("See-through", seeRow("pTransp", o.transp)) +
-    row("Visible", '<input type="checkbox" id="pVisible"' + (o.visible ? " checked" : "") + ' title="Shown in Play (invisible walls are handy!)">');
+    row("Visible", '<input type="checkbox" id="pVisible"' + (o.visible ? " checked" : "") + ' title="Shown in Play (invisible walls are handy!)">') +
+    row("Clear while building", '<input type="checkbox" id="pXray"' + (o.xray ? " checked" : "") + ' title="See and click through it in the studio (great for ceilings and roofs). It looks normal when you Play.">');
   if (a.text || o.b.k === "npc") html += row("Text", '<textarea id="pText" maxlength="120">' + esc(o.text || "") + "</textarea>");
   html += '<div class="group-title">Behavior</div>' +
     row("Does", '<select id="pBeh">' + Object.entries(BEHAVIORS).map(([k, v]) => '<option value="' + k + '"' + (k === o.b.k ? " selected" : "") + ">" + v.label + "</option>").join("") + "</select>");
@@ -932,6 +939,7 @@ function drawProps(numbersOnly) {
     setTexture([o.id], v);
   };
   if ($("pTexS")) $("pTexS").onchange = (e) => { pushUndo(); o.texS = clamp(e.target.value, 0.25, 64, 4); rebuild(o); changed(); };
+  if ($("pTexFit")) $("pTexFit").onchange = (e) => { pushUndo(); for (const x of (many() ? selIds().map(obj) : [o]).filter((x) => x && x.tex)) { if (e.target.value) x.texFit = "stretch"; else delete x.texFit; rebuild(x); } changed(); drawProps(); };
   $("pAnimate").onclick = () => openAnimator(o);
   $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster" || !!o.chase)) delete o.bump; else o.bump = e.target.checked; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
@@ -953,6 +961,7 @@ function drawProps(numbersOnly) {
   $("pMat").onchange = (e) => edit(() => { o.mat = e.target.value; }, true);
   $("pSolid").onchange = (e) => { pushUndo(); o.solid = e.target.checked; changed(); };
   $("pVisible").onchange = (e) => { pushUndo(); o.visible = e.target.checked; changed(); };
+  $("pXray").onchange = (e) => { pushUndo(); if (e.target.checked) o.xray = true; else delete o.xray; rebuild(o); changed(); };
   wireSee("pTransp", (v) => edit(() => { if (v > 0) o.transp = v; else delete o.transp; }, true));
   if ($("pText")) $("pText").onchange = (e) => edit(() => { o.text = e.target.value.slice(0, 120); }, true);
   $("pBeh").onchange = (e) => { pushUndo(); o.b = { k: e.target.value }; fillBehavior(o); if (o.b.k === "npc" && o.text == null) o.text = "Hi!"; rebuild(o); changed(); drawProps(); };
@@ -1449,7 +1458,7 @@ function openGame(g) {
   undoStack = []; redoStack = [];
   selected = null;
   $("gameName").value = game.name;
-  world.setSky(game.settings.sky);
+  world.setSky(game.settings.sky, true);
   rebuildAll();
   const sp = game.objects.find((o) => o.b.k === "spawn");
   orbit.target.set(sp ? sp.pos[0] : 0, 0, sp ? sp.pos[2] : 0);
@@ -1476,7 +1485,7 @@ function play() {
       document.body.classList.remove("playing");
       orbit.enabled = true;
       camera.position.copy(camSave.p); orbit.target.copy(camSave.t);
-      world.setSky(game.settings.sky);
+      world.setSky(game.settings.sky, true);
       rebuildAll();
       canvas.focus();
       if (again) play();

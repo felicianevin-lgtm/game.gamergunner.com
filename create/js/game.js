@@ -8,12 +8,13 @@
 // Storage: "gv_studio_list" = [{id, name, updated}] newest first, "gv_studio_game_<id>" = the game.
 import { BY_TYPE, BEHAVIORS } from "./assets.js";
 import { sanitizeGui } from "./gui.js";
-import { sanitizeMonster } from "./monster.js";
+import { sanitizeMonster, describe, monsterSize } from "./monster.js";
+import { BACKROOMS_CODE } from "./scripts.js";
 import { sanitizeMotion } from "./motion.js";
 import { sanitizeChase, sanitizeScare } from "./scare.js";
 import { okTex } from "./textures.js";
 
-export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space" };
+export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space", backrooms: "Backrooms (yellow fog)" };
 export const DEFAULT_SETTINGS = { sky: "day", gravity: 70, walk: 14, jump: 26 };
 export const MAX_SCRIPTS = 40, MAX_SCRIPT_CHARS = 20000;
 const LIST_KEY = "gv_studio_list", GAME_KEY = "gv_studio_game_";
@@ -82,9 +83,10 @@ export function sanitize(g) {
     if (o.type === "monster") c.mon = sanitizeMonster(o.mon); // (the monster's recipe, monster.js)
     if (Number(o.transp) > 0) c.transp = Math.min(100, Math.round(Number(o.transp))); // (see-through %, 100 = invisible)
     if (/^[a-z0-9]{6,40}$/i.test(o.file || "")) c.file = o.file;
-    if (okTex(o.tex)) { c.tex = o.tex; if (Number(o.texS) > 0) c.texS = Math.min(64, Math.max(0.25, Number(o.texS))); } // (🧱 a texture - textures.js)
+    if (okTex(o.tex)) { c.tex = o.tex; if (Number(o.texS) > 0) c.texS = Math.min(64, Math.max(0.25, Number(o.texS))); if (o.texFit === "stretch") c.texFit = "stretch"; } // (🧱 a texture - textures.js)
     if (typeof o.anim === "string" && o.anim) c.anim = o.anim.slice(0, 60);
     if (o.mo) c.mo = sanitizeMotion(o.mo); // (Animation settings: walk style, standing move, when, speed - motion.js)
+    if (o.xray) c.xray = true; // (see through it while building - editor.js)
     if (typeof o.bump === "boolean") c.bump = o.bump; // (walls stop it when it moves; monsters do unless this is false)
     if (o.chase) c.chase = sanitizeChase(o.chase); // (👾 it chases players - scare.js)
     if (o.scare) c.scare = sanitizeScare(o.scare); // (😱 jump scare - scare.js)
@@ -146,7 +148,68 @@ export const TEMPLATES = {
       return o;
     } },
 };
+TEMPLATES.backrooms = { label: "Backrooms", icon: "🟨", desc: "Endless yellow rooms, buzzing lights and something lurking. Find the EXIT! (A new maze every time.)",
+  sky: "backrooms", scripts: () => [{ id: uid(), name: "Backrooms", on: "", code: BACKROOMS_CODE }], make: backrooms };
+
+// THE BACKROOMS: a random maze of yellow rooms (a new one every time). The maze is carved like a real maze (every room
+// can be reached), then about a third of the leftover walls are knocked out so it feels like big, confusing open rooms.
+// The EXIT goes in the room that's farthest to walk to; the Entity waits halfway. Walls in a row are one long block.
+function backrooms() {
+  const N = 9, C = 14, H = 11, T = 1, half = (N * C) / 2, R = Math.random;
+  const o = [];
+  const at = (i) => -half + C / 2 + i * C; // (the middle of room i)
+  // walls: east[i][j] = wall on the east side of room (i, j); south[i][j] = on its south side
+  const east = [...Array(N)].map(() => Array(N).fill(true)), south = [...Array(N)].map(() => Array(N).fill(true));
+  const seen = [...Array(N)].map(() => Array(N).fill(false)), stack = [[0, 0]]; seen[0][0] = true;
+  while (stack.length) {
+    const [i, j] = stack[stack.length - 1];
+    const next = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => [i + a, j + b]).filter(([a, b]) => a >= 0 && b >= 0 && a < N && b < N && !seen[a][b]);
+    if (!next.length) { stack.pop(); continue; }
+    const [a, b] = next[Math.floor(R() * next.length)];
+    if (a > i) east[i][j] = false; else if (a < i) east[a][b] = false; else if (b > j) south[i][j] = false; else south[a][b] = false;
+    seen[a][b] = true; stack.push([a, b]);
+  }
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { if (R() < 0.33) east[i][j] = false; if (R() < 0.33) south[i][j] = false; }
+  // the room farthest from the start (walking)
+  const dist = [...Array(N)].map(() => Array(N).fill(-1)), q = [[0, 0]]; dist[0][0] = 0;
+  while (q.length) {
+    const [i, j] = q.shift(), d = dist[i][j];
+    const go = [[i + 1, j, i < N - 1 && !east[i][j]], [i - 1, j, i > 0 && !east[i - 1][j]], [i, j + 1, j < N - 1 && !south[i][j]], [i, j - 1, j > 0 && !south[i][j - 1]]];
+    for (const [a, b, ok] of go) if (ok && dist[a][b] < 0) { dist[a][b] = d + 1; q.push([a, b]); }
+  }
+  let far = [0, 0], max = 0;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (dist[i][j] > max) { max = dist[i][j]; far = [i, j]; }
+  let mid = far;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (Math.abs(dist[i][j] - max / 2) < Math.abs(dist[mid[0]][mid[1]] - max / 2)) mid = [i, j];
+
+  const wall = (x, z, w, d) => o.push(newObj("block", [x, 0, z], { name: "Wall", size: [w, H, d], color: "#ffffff", tex: "wallpaper", texS: 6 }));
+  o.push(newObj("block", [0, -1, 0], { name: "Carpet", size: [N * C + 2, 1, N * C + 2], color: "#ffffff", tex: "oldcarpet", texS: 6 }));
+  o.push(newObj("block", [0, H, 0], { name: "Ceiling", size: [N * C + 2, 1, N * C + 2], color: "#ffffff", tex: "ceiling", texS: 4, xray: true }));
+  wall(0, -half, N * C + 2, T); wall(0, half, N * C + 2, T); wall(-half, 0, T, N * C); wall(half, 0, T, N * C); // (the outside)
+  for (let i = 0; i < N - 1; i++) { // east walls (running along z), joined when they touch
+    for (let j = 0; j < N;) { if (!east[i][j]) { j++; continue; } let k = j; while (k + 1 < N && east[i][k + 1]) k++; wall(at(i) + C / 2, (at(j) + at(k)) / 2, T, (k - j + 1) * C + T); j = k + 1; }
+  }
+  for (let j = 0; j < N - 1; j++) { // south walls (running along x)
+    for (let i = 0; i < N;) { if (!south[i][j]) { i++; continue; } let k = i; while (k + 1 < N && south[k + 1][j]) k++; wall((at(i) + at(k)) / 2, at(j) + C / 2, (k - i + 1) * C + T, T); i = k + 1; }
+  }
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    if (R() < 0.12 && (i || j) && (i !== far[0] || j !== far[1])) o.push(newObj("block", [at(i), 0, at(j)], { name: "Pillar", size: [2, H, 2], color: "#ffffff", tex: "wallpaper", texS: 6 }));
+    if (R() < 0.65) o.push(newObj("block", [at(i) + (R() < 0.5 ? -3 : 3), H - 0.15, at(j)], { name: "Ceiling Light", size: [3, 0.2, 6], color: "#fff8dc", mat: "neon", solid: false, xray: true }));
+  }
+  o.push(newObj("spawn", [at(0), 0, at(0)]));
+  o.push(newObj("sign", [at(0) + 4, 0, at(0) - 4], { text: "You noclipped out of reality. Find the EXIT!" }));
+  o.push(newObj("finish", [at(far[0]), 0, at(far[1])], { name: "EXIT", size: [8, 8, 1.5], color: "#2fe06a" }));
+  o.push(newObj("block", [at(far[0]), 8.3, at(far[1])], { name: "EXIT sign", size: [4, 1.2, 0.4], color: "#2fe06a", mat: "neon", solid: false }));
+  const mon = describe("a tall skinny black shadow creature with long arms and glowing white eyes").mon;
+  mon.eyeColor = "#ffffff"; mon.glow = true; mon.color = "#141414"; mon.color2 = "#2a2a2a";
+  o.push(newObj("monster", [at(mid[0]), 0, at(mid[1])], { name: "Entity", mon, text: "The Entity", size: monsterSize(mon),
+    mo: { g: "zombie", i: "look", w: "move", sp: 1 }, chase: { sp: 7, dmg: 34, r: 45, face: 1, snd: "glitch" } }));
+  let n = 0;
+  for (let i = 0; i < N && n < 8; i++) for (let j = 0; j < N && n < 8; j++) if ((i * 7 + j * 3) % 9 === 4 && R() < 0.8) { o.push(newObj("coin", [at(i), 1.5, at(j)], { name: "Almond Water" })); n++; }
+  return o;
+}
+
 export function makeGame(templateKey, name) {
   const t = TEMPLATES[templateKey] || TEMPLATES.baseplate;
-  return { v: 1, id: uid(), name: name || "My " + t.label + " Game", created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS }, objects: t.make(), gui: [], files: {}, scripts: [] };
+  return { v: 1, id: uid(), name: name || "My " + t.label + " Game", created: Date.now(), updated: Date.now(), settings: { ...DEFAULT_SETTINGS, ...(t.sky ? { sky: t.sky } : {}) }, objects: t.make(), gui: [], files: {}, scripts: t.scripts ? t.scripts() : [] };
 }

@@ -761,7 +761,7 @@ export function startPlay(world, game, opts) {
       else if (k === "sound") sound(String(a));
       else if (k === "win" && !won && !lost) { won = true; showMsg(filterText(a, 120) || "You win!", 999); sound("win"); }
       else if (k === "lose" && !won && !lost) { lost = true; $("hudMsg").classList.remove("show"); endScreen(filterText(a, 120) || "Game over!"); sound("lose"); }
-      else if (k === "sky" && ["day", "sunset", "night", "space"].includes(a)) world.setSky(a);
+      else if (k === "sky" && ["day", "sunset", "night", "space", "backrooms"].includes(a)) world.setSky(a);
       else if (k === "cam") lookThrough(a ? entById.get(a) || null : null);
     }
   }

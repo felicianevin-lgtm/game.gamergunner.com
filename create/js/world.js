@@ -47,6 +47,7 @@ const SKY = {
   sunset: { top: "#5b3f8a", fog: "#ffb27a", sun: "#ffb070", sunI: 2.0, hemi: 0.8, ground: "#5a4030" },
   night: { top: "#060b1f", fog: "#1a2340", sun: "#9db4ff", sunI: 0.8, hemi: 0.45, ground: "#151a26" },
   space: { top: "#000000", fog: "#0b0618", sun: "#ffffff", sunI: 2.0, hemi: 0.5, ground: "#120a20" },
+  backrooms: { top: "#b8a75a", fog: "#a89850", sun: "#fff3c0", sunI: 0.35, hemi: 2.1, ground: "#7a6c3a", near: 25, far: 150, light: "#fff0b8" }, // (indoors: soft yellow light everywhere, fog hides how far it goes)
 };
 
 export function createWorld(canvas) {
@@ -71,11 +72,11 @@ export function createWorld(canvas) {
   const world = {
     THREE, renderer, scene, camera, sun,
     root: new THREE.Group(),
-    setSky(name) {
+    setSky(name, building) { // (building = the studio: fog much farther away, so you can see the whole map)
       const s = SKY[name] || SKY.day;
       scene.background = skyTexture(s.top, s.fog);
-      scene.fog = new THREE.Fog(s.fog, 180, 900);
-      hemi.color.set(s.top === "#000000" ? "#8888aa" : s.fog); hemi.groundColor.set(s.ground); hemi.intensity = s.hemi;
+      scene.fog = new THREE.Fog(s.fog, (s.near || 180) * (building && s.near ? 6 : 1), (s.far || 900) * (building && s.far ? 4 : 1));
+      hemi.color.set(s.light || (s.top === "#000000" ? "#8888aa" : s.fog)); hemi.groundColor.set(s.ground); hemi.intensity = s.hemi;
       sun.color.set(s.sun); sun.intensity = s.sunI;
       if (stars) { scene.remove(stars); stars = null; }
       if (name === "night" || name === "space") scene.add(stars = makeStars(name === "space" ? 1600 : 700));

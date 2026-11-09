@@ -1,6 +1,7 @@
 // TEXTURES on blocks and other parts (GunnerVerse Studio): obj.tex = a built-in texture (TEXTURES, drawn right here,
 // nothing to download) or "f:<file id>" = a picture you imported; obj.texS = how many studs one copy covers (default 4).
-// The picture repeats over every side at the same size, so a long wall gets more bricks instead of stretched ones.
+// The picture repeats over every side at the same size, so a long wall gets more bricks instead of stretched ones;
+// obj.texFit = "stretch" puts ONE copy on each side instead, stretched to fit (posters, a face, one big picture).
 // Drag a texture from Toolbox > 🧱 Textures (or a picture from your computer) onto a part, or pick one in Properties.
 import * as THREE from "../vendor/three.module.js";
 import { pictureTexture } from "./files.js";
@@ -48,6 +49,20 @@ export const TEXTURES = {
     for (let i = 0; i < 160; i++) { g.fillStyle = ["#3f8a33", "#4fa23e", "#2a5f22", "#5bb447"][i % 4]; g.save(); g.translate(Math.random() * w, Math.random() * h); g.rotate(Math.random() * 6); g.beginPath(); g.ellipse(0, 0, 7, 3, 0, 0, Math.PI * 2); g.fill(); g.restore(); } } },
   bark: { label: "Tree bark", icon: "🌳", draw: (g, w, h) => { g.fillStyle = "#5b3b22"; g.fillRect(0, 0, w, h); g.strokeStyle = "#3e2716"; g.lineWidth = 3; for (let i = 0; i < 14; i++) { const x = Math.random() * w; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + 6, h / 3, x - 6, (2 * h) / 3, x + 3, h); g.stroke(); } } },
   carpet: { label: "Carpet", icon: "🟥", draw: (g, w, h) => { g.fillStyle = "#9c1f2e"; g.fillRect(0, 0, w, h); speckle(g, w, h, 1600, ["#a8283a", "#8a1726", "#b33244"], 2); g.strokeStyle = "#e0b04a"; g.lineWidth = 4; g.strokeRect(10, 10, w - 20, h - 20); } },
+  wallpaper: { label: "Old wallpaper", icon: "🟨", draw: (g, w, h) => { // (yellowed, faded stripes and little diamonds, a few damp stains)
+    g.fillStyle = "#cdbb6a"; g.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += w / 8) { g.fillStyle = "rgba(150,128,50,.22)"; g.fillRect(x, 0, 3, h); g.fillStyle = "rgba(255,245,180,.18)"; g.fillRect(x + 6, 0, 2, h); }
+    g.fillStyle = "rgba(140,118,45,.3)";
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { g.save(); g.translate(x * w / 8 + w / 16 + 1, y * h / 8 + h / 16); g.rotate(Math.PI / 4); g.fillRect(-2.5, -2.5, 5, 5); g.restore(); }
+    for (let i = 0; i < 3; i++) { const r = 10 + Math.random() * 18, gr = g.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, "rgba(120,100,40,.25)"); gr.addColorStop(1, "rgba(120,100,40,0)"); g.save(); g.translate(Math.random() * w, Math.random() * h); g.fillStyle = gr; g.fillRect(-r, -r, r * 2, r * 2); g.restore(); }
+    speckle(g, w, h, 300, ["rgba(110,95,40,.25)", "rgba(240,230,170,.25)"], 2); } },
+  oldcarpet: { label: "Damp carpet", icon: "🟫", draw: (g, w, h) => { g.fillStyle = "#a08f5c"; g.fillRect(0, 0, w, h); speckle(g, w, h, 2200, ["#958452", "#ab9a66", "#8a7a4a", "#b3a26d"], 2);
+    for (let i = 0; i < 2; i++) { const r = 14 + Math.random() * 20, gr = g.createRadialGradient(0, 0, 0, 0, 0, r); gr.addColorStop(0, "rgba(70,60,30,.3)"); gr.addColorStop(1, "rgba(70,60,30,0)"); g.save(); g.translate(Math.random() * w, Math.random() * h); g.fillStyle = gr; g.fillRect(-r, -r, r * 2, r * 2); g.restore(); } } },
+  ceiling: { label: "Ceiling tiles", icon: "⬜", draw: (g, w, h) => { g.fillStyle = "#9c9478"; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) { g.fillStyle = "#d9d2b4"; g.fillRect(x * w / 2 + 2, y * h / 2 + 2, w / 2 - 4, h / 2 - 4); }
+    speckle(g, w, h, 700, ["rgba(120,110,80,.35)", "rgba(160,150,120,.3)"], 1.5); } },
+  fluoro: { label: "Light panel", icon: "💡", draw: (g, w, h) => { g.fillStyle = "#c9c4ac"; g.fillRect(0, 0, w, h); g.fillStyle = "#fffbe8"; g.fillRect(8, 8, w - 16, h - 16);
+    g.fillStyle = "rgba(200,195,170,.6)"; for (let x = 8; x < w - 8; x += 10) g.fillRect(x, 8, 2, h - 16); } },
   glow: { label: "Sci-fi panel", icon: "🟦", draw: (g, w, h) => { g.fillStyle = "#1a2433"; g.fillRect(0, 0, w, h); g.strokeStyle = "#3ad1ff"; g.lineWidth = 3; g.strokeRect(6, 6, w - 12, h - 12); g.beginPath(); g.moveTo(6, h / 2); g.lineTo(w / 3, h / 2); g.lineTo(w / 2, h / 3); g.lineTo(w - 6, h / 3); g.stroke(); } },
 };
 
@@ -69,7 +84,7 @@ export function okTex(v) { return typeof v === "string" && (TEXTURES[v] || /^f:[
 // Every surface gets texture coordinates measured in studs (each side uses the two directions it faces across),
 // so the texture is the same size everywhere: inner = the built part (scaled to its size).
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _nm = new THREE.Matrix3();
-function studUVs(mesh, inner, texS) {
+function studUVs(mesh, inner, texS, stretch) {
   const src = mesh.geometry, pos = src.attributes.position, nor = src.attributes.normal;
   if (!pos || !nor) return src;
   const g = src.clone();
@@ -77,10 +92,18 @@ function studUVs(mesh, inner, texS) {
   _m.copy(inner.matrixWorld).invert().multiply(mesh.matrixWorld).premultiply(new THREE.Matrix4().makeScale(inner.scale.x, inner.scale.y, inner.scale.z));
   _nm.getNormalMatrix(_m);
   const uv = new Float32Array(pos.count * 2);
+  // stretched: each side's two directions go 0..1 across the part, so one copy of the picture covers the whole side
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  if (stretch) for (let i = 0; i < pos.count; i++) { _v.fromBufferAttribute(pos, i).applyMatrix4(_m); for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], _v.getComponent(k)); hi[k] = Math.max(hi[k], _v.getComponent(k)); } }
+  const fit = (a, k, s) => { const t = (a - lo[k]) / Math.max(1e-6, hi[k] - lo[k]); return s < 0 ? 1 - t : t; };
   for (let i = 0; i < pos.count; i++) {
     _v.fromBufferAttribute(pos, i).applyMatrix4(_m); _n.fromBufferAttribute(nor, i).applyMatrix3(_nm);
     const ax = Math.abs(_n.x), ay = Math.abs(_n.y), az = Math.abs(_n.z);
     let u, v;
+    if (stretch) {
+      if (ay >= ax && ay >= az) { u = fit(_v.x, 0, 1); v = fit(_v.z, 2, -Math.sign(_n.y || 1)); } else if (ax >= az) { u = fit(_v.z, 2, -Math.sign(_n.x || 1)); v = fit(_v.y, 1, 1); } else { u = fit(_v.x, 0, Math.sign(_n.z || 1)); v = fit(_v.y, 1, 1); }
+      uv[i * 2] = u; uv[i * 2 + 1] = v; continue;
+    }
     if (ay >= ax && ay >= az) { u = _v.x; v = _v.z; } else if (ax >= az) { u = _v.z * Math.sign(_n.x || 1); v = _v.y; } else { u = -_v.x * Math.sign(_n.z || 1); v = _v.y; }
     uv[i * 2] = u / texS; uv[i * 2 + 1] = v / texS;
   }
@@ -90,12 +113,12 @@ function studUVs(mesh, inner, texS) {
 // Put o.tex on a built part (world.js buildObject calls this after it's sized).
 export function applyTexture(inner, o) {
   const key = okTex(o.tex); if (!key) return;
-  const texS = Math.max(0.25, Math.min(64, Number(o.texS) || 4));
+  const texS = Math.max(0.25, Math.min(64, Number(o.texS) || 4)), stretch = o.texFit === "stretch";
   const meshes = []; inner.traverse((m) => { if (m.isMesh && !m.userData.noTex) meshes.push(m); });
   const put = (base) => {
     for (const m of meshes) {
-      m.geometry = studUVs(m, inner, texS);
-      const t = base.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.needsUpdate = true;
+      m.geometry = studUVs(m, inner, texS, stretch);
+      const t = base.clone(); t.wrapS = t.wrapT = stretch ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping; t.needsUpdate = true;
       const mats = (Array.isArray(m.material) ? m.material : [m.material]).map((x) => { const c = x.clone(); c.map = t; return c; });
       m.material = mats.length === 1 ? mats[0] : mats;
     }

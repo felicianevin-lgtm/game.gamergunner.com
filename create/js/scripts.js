@@ -37,11 +37,45 @@ export const HELP = [
     ["print(\"hi\")", "Write in the Output box (for testing)"], ["sound(\"scream\")", "Sounds: beep coin jump boom door alarm scream win lose click"],
     ["camera.view(find(\"Camera 1\"))", "Look through a Security Camera (camera.reset() goes back)"]]],
   ["The game", [
-    ["win(\"You win!\")", "The player wins"], ["lose(\"Game over!\")", "The player loses (they can try again)"], ["game.sky = \"night\"", "Change the sky: day, sunset, night, space"],
+    ["win(\"You win!\")", "The player wins"], ["lose(\"Game over!\")", "The player loses (they can try again)"], ["game.sky = \"night\"", "Change the sky: day, sunset, night, space, backrooms"],
     ["game.time", "Seconds since the game started"], ["random(1, 10)", "A random whole number"], ["shared.score = 0", "\"shared\" is the same for every script (keep scores here)"]]],
 ];
 
+// (the Backrooms starter's game script, also in the Examples list)
+export const BACKROOMS_CODE = `// THE BACKROOMS: the lights buzz and flicker, and you get a warning when the Entity is close.
+game.sky = "backrooms"
+say("You noclipped out of reality... Find the EXIT before the Entity finds you!", 5)
+
+const lights = findAll("Ceiling Light")
+const entity = find("Entity")
+
+// every so often a random light blinks off for a moment
+every(0.3, function () {
+  const light = lights[random(0, lights.length - 1)]
+  if (!light) return
+  light.hide()
+  after(random(1, 3) / 10, function () { light.show() })
+})
+
+// sometimes ALL the lights near you go dark...
+every(15, function () {
+  const near = lights.filter(function (light) { return light.distanceTo(player) < 25 })
+  for (const light of near) light.hide()
+  after(1.2, function () { for (const light of near) light.show() })
+})
+
+// a warning when the Entity gets close
+let warned = false
+every(1, function () {
+  if (!entity) return
+  const d = entity.distanceTo(player)
+  if (d < 25 && !warned) { warned = true; say("You hear something behind you...", 2); sound("alarm") }
+  if (d > 40) warned = false
+})
+`;
+
 export const EXAMPLES = [
+  { name: "Flickering lights (Backrooms)", for: "game", code: BACKROOMS_CODE },
   { name: "Open / close a panel", for: "gui", code: '// When this button is clicked, open (or close) the panel named "Shop".\n// (Change "Shop" to the name of YOUR panel.)\nme.onClick(function () {\n  find("Shop").toggle()\n  sound("click")\n})\n' },
   { name: "Click to open a door", for: "part", code: '// Click this part to open and close the part named "Door".\nconst door = find("Door")\n\nme.onClick(function () {\n  door.toggle()   // hidden = open, showing = closed\n  sound("door")\n})\n' },
   { name: "Chase the player", for: "part", code: '// This thing chases the player! (Great for an imported monster.)\nme.follow(player, 6)   // 6 = how fast\nme.play("Walk")        // imported characters: play a walk animation (if it has one)\n\nme.onTouch(function () {\n  sound("scream")\n  player.respawn()\n  say("It got you!")\n})\n' },
