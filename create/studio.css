@@ -410,3 +410,13 @@ body.playing .output { position: fixed; z-index: 30; max-width: 560px; height: 1
 .mon-box .tick { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 4px 0; cursor: pointer; }
 .big-check { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 6px 0; cursor: pointer; }
 .big-check input { width: 18px; height: 18px; accent-color: #1fae45; }
+
+/* ---------- many at once: the selection box, the buttons, the little message ---------- */
+.sel-rect { position: absolute; z-index: 6; border: 1.5px solid #2f7df6; background: rgba(47, 125, 246, .14); border-radius: 3px; pointer-events: none; }
+.many-dirs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); z-index: 300; padding: 10px 16px; border-radius: 12px; background: #131d19; border: 1px solid #1fae45; color: var(--cream); font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.many-dirs .btn { height: 30px; padding: 0 10px; font-size: 12px; }
+/* 🧱 Textures (textures.js) */
+.tex-note { grid-column: 1 / -1; margin: 0 0 4px; }
+.asset.tex-tile .ico img { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; image-rendering: auto; }

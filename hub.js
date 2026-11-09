@@ -616,7 +616,8 @@
       var box = document.getElementById("avBox");
       if (!box) return;
       if (!m) { box.innerHTML = '<p class="err">The avatar maker couldn\'t load. Refresh and try again.</p>'; return; }
-      m.mountAvatarEditor(box, { onChange: function (a) { sendAvatar(a); drawAccount(); } });
+      m.mountAvatarEditor(box, { onChange: function (a) { sendAvatar(a); drawAccount(); },
+        api: api, relay: RELAY, me: function () { return me; } }); // (🌍 publishing cosmetics for everyone needs your account)
       drawAccount();
     });
   }

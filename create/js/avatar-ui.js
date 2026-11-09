@@ -4,6 +4,8 @@
 // (your creations wait in this browser, "gv_made"; up to MAX_WORN are worn and go with your avatar).
 // Every change saves right away (avatar.js saveAvatar); hub.js also sends it to your account.
 import * as THREE from "../vendor/three.module.js";
+import { OrbitControls } from "../vendor/OrbitControls.js";
+import { TransformControls } from "../vendor/TransformControls.js";
 import { buildAvatar, animateAvatar, loadAvatar, saveAvatar, sanitizeAvatar, sanitizeMade, randomAvatar, avatarPicture, DEFAULT_AVATAR, PALETTE,
   TOPS, FACES, HAIR, HATS, EYES, BACK, HAND, BUILDS, ART, DRAW_COLORS, SHAPES, ATTACH, MAX_WORN, MAX_PIECES } from "./avatar.js";
 
@@ -37,7 +39,7 @@ export function mountAvatarEditor(box, opts) {
     '<p class="av-note">Drag to spin. Your avatar is you in every game made in GunnerVerse Studio. It saves by itself!</p></div>' +
     '<div class="av-pick"><div class="av-tabs" id="avTabs"></div><div class="av-items" id="avItems"></div></div></div>';
   const canvas = box.querySelector("#avCanvas");
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   const scene = new THREE.Scene();
@@ -50,16 +52,64 @@ export function mountAvatarEditor(box, opts) {
   let model = null, yaw = 0.5, spin = 0.5, drag = null, last = performance.now(), alive = true, t = 0;
   let draft = null, sel = 0; // (🛠️ Build: the cosmetic being made, shown on the avatar until it's saved)
   let zoom = 0; // (0 = whole avatar, 1 = close to the head)
+  // 🛠️ Build is a little studio: drag to look around, click a piece to pick it, then drag the arrows / rings / boxes
+  // to move, turn or size it (like the Studio's gizmo).
+  const orbit = new OrbitControls(camera, canvas);
+  orbit.enabled = false; orbit.enableDamping = true; orbit.dampingFactor = 0.15; orbit.minDistance = 1.2; orbit.maxDistance = 14;
+  orbit.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+  const gizmo = new TransformControls(camera, canvas);
+  gizmo.setSize(0.75); gizmo.setSpace("local");
+  scene.add(gizmo.getHelper());
+  let gizmoMode = "translate", gizmoMesh = null;
+  gizmo.addEventListener("dragging-changed", (e) => { orbit.enabled = !!draft && !e.value; });
+  gizmo.addEventListener("objectChange", () => { // (the piece follows the gizmo; the sliders follow too)
+    const P = draft && draft.b[sel], m = gizmoMesh; if (!P || !m) return;
+    const R2 = (v) => Math.round(v * 100) / 100, cl = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    P.p = [0, 1, 2].map((i) => R2(cl(m.position.getComponent(i), -2.5, 2.5)));
+    P.k = [0, 1, 2].map((i) => R2(cl(Math.abs(m.scale.getComponent(i)), 0.05, 3)));
+    P.r = ["x", "y", "z"].map((a) => Math.round(m.rotation[a] * 180 / Math.PI));
+    syncSliders();
+  });
+  gizmo.addEventListener("mouseUp", () => { rebuild(); });
+  function attachPiece() {
+    gizmo.detach(); gizmoMesh = null;
+    if (!draft || !model) return;
+    let root = null; model.traverse((o) => { if (o.userData.madeI === draft.i) root = o; });
+    const m = root && root.children.find((c) => c.userData.piece === sel);
+    if (m) { gizmoMesh = m; gizmo.setMode(gizmoMode); gizmo.attach(m); }
+  }
+  function startStudio() {
+    const at = { head: [0, 2.9], body: [0, 1.8], hand: [0.95, 1.2], handL: [-0.95, 1.2] }[draft.a] || [0, 2];
+    yaw = 0; holder.rotation.y = 0;
+    orbit.target.set(at[0], at[1], 0);
+    camera.position.set(at[0] + 2.2, at[1] + 1.1, draft.a === "head" ? -4.2 : -5.5);
+    orbit.enabled = true; orbit.update();
+  }
+  function stopStudio() { gizmo.detach(); gizmoMesh = null; orbit.enabled = false; camera.userData.look = null; }
+  let downAt = null; // (a click, not a drag, picks a piece)
+  canvas.addEventListener("pointerdown", (e) => { downAt = draft && !gizmo.axis ? { x: e.clientX, y: e.clientY } : null; });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!draft || !downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) return;
+    downAt = null;
+    const r = canvas.getBoundingClientRect(), ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+    for (const h of ray.intersectObject(model, true)) {
+      let o = h.object, piece = o.userData.piece;
+      while (o && o.userData.madeI == null) o = o.parent;
+      if (o && o.userData.madeI === draft.i && piece != null) { sel = piece; attachPiece(); drawItems(); return; }
+    }
+  });
   function rebuild() {
     if (model) holder.remove(model);
     let show = av;
     if (draft) show = sanitizeAvatar({ ...av, made: [draft].concat((av.made || []).filter((m) => m.i !== draft.i)).slice(0, MAX_WORN) });
     model = buildAvatar(show); holder.add(model);
+    if (draft) attachPiece();
     box.querySelector(".av-wrap").classList.toggle("building", !!draft); // (phones: the preview stays on screen while you build)
   }
   function changed() { saveAvatar(av); av = loadAvatar(); rebuild(); if (opts && opts.onChange) opts.onChange(av); }
-  canvas.addEventListener("pointerdown", (e) => { drag = e.clientX; spin = 0; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener("pointermove", (e) => { if (drag == null) return; yaw += (e.clientX - drag) * 0.012; drag = e.clientX; });
+  canvas.addEventListener("pointerdown", (e) => { if (draft) return; drag = e.clientX; spin = 0; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", (e) => { if (drag == null || draft) return; yaw += (e.clientX - drag) * 0.012; drag = e.clientX; });
   canvas.addEventListener("pointerup", () => { drag = null; setTimeout(() => { if (drag == null && !draft) spin = 0.5; }, 1500); });
   const camAt = new THREE.Vector3(), lookAt = new THREE.Vector3();
   function frame(now) {
@@ -68,6 +118,12 @@ export function mountAvatarEditor(box, opts) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (w && h && (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio()))) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    if (draft) { // (the little studio: you move the camera; the avatar stands still so the arrows match)
+      orbit.update();
+      if (model) { const L = model.userData.limbs; for (const k of ["legL", "legR", "armL", "armR"]) L[k].rotation.set(0, 0, 0); }
+      renderer.render(scene, camera);
+      return;
+    }
     yaw += spin * dt;
     holder.rotation.y = yaw;
     // the camera slides closer to the head while you build a hat
@@ -83,7 +139,7 @@ export function mountAvatarEditor(box, opts) {
     box.querySelector("#avTabs").innerHTML = TABS.map((x) => '<button type="button" data-tab="' + x.k + '" class="' + (x.k === tab ? "on" : "") + '"><span>' + x.icon + "</span>" + esc(x.label) + "</button>").join("");
     box.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => {
       if (draft && b.dataset.tab !== "make" && !confirm("Leave without saving your cosmetic?")) return;
-      if (b.dataset.tab !== "make") { draft = null; zoom = 0; rebuild(); }
+      if (b.dataset.tab !== "make") { draft = null; zoom = 0; stopStudio(); rebuild(); }
       tab = b.dataset.tab; drawTabs(); drawItems();
     }));
   }
@@ -194,13 +250,24 @@ export function mountAvatarEditor(box, opts) {
   }
 
   // ---------------------------------------------------------------- 🛠️ Build: your own cosmetics out of shapes
+  // the locker: 🧰 your creations (wear, change, delete, 🌍 publish) and 🌍 everyone's (published by players)
+  let shelf = "mine", pub = null, pubAt = 0;
+  const signedIn = () => !!(opts && opts.me && opts.me() && opts.me().t);
+  const API_ERR = { signin: "Sign in first (top right) to publish.", name: "Give it a name (2 letters or more).", toomany: "You've published 40 things. Remove one first.", slowdown: "Slow down a little, then try again.", banned: "Your account can't publish right now.", thumb: "The picture didn't work. Try again.", thing: "That cosmetic didn't work. Add at least one shape." };
+  function smallPic(m) { // (a little picture for everyone's shelf: your avatar wearing it, on a dark square)
+    const src = avatarPicture({ ...DEFAULT_AVATAR, made: [m] }, 160, m.a !== "head");
+    return new Promise((ok) => { const i = new Image(); i.onload = () => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#0b1210"; g.fillRect(0, 0, 128, 128); g.drawImage(i, 0, 0, 128, 128); ok(c.toDataURL("image/jpeg", 0.85)); }; i.onerror = () => ok(""); i.src = src; });
+  }
   function drawLocker() {
+    const tabs = '<div class="dr-top"><button type="button" class="chip' + (shelf === "mine" ? " on" : "") + '" data-shelf="mine">🧰 Mine</button><button type="button" class="chip' + (shelf === "all" ? " on" : "") + '" data-shelf="all">🌍 Everyone\'s</button></div>';
+    if (shelf === "all") return drawEveryone(tabs);
     const locker = loadLocker(), worn = new Set((av.made || []).map((m) => m.i));
-    items().innerHTML = '<p class="av-hint">Make your own hats, horns, wings, swords, anything! Stack shapes, color them, and wear up to ' + MAX_WORN + " at once.</p>" +
+    items().innerHTML = tabs + '<p class="av-hint">Make your own hats, horns, wings, swords, anything! Stack shapes, drag them into place, and wear up to ' + MAX_WORN + " at once. 🌍 Publish one so everyone can wear it.</p>" +
       '<div class="av-grid mk-grid"><button type="button" id="mkNew" class="mk-new"><span class="mk-plus">＋</span><span>New cosmetic</span></button>' +
       locker.map((m) => '<div class="mk-item' + (worn.has(m.i) ? " on" : "") + '"><img alt="" src="' + avatarPicture({ ...av, made: [m] }, 96, m.a !== "head") + '"><span>' + esc(m.n) + "</span>" +
-        '<div class="mk-acts"><button type="button" class="chip' + (worn.has(m.i) ? " on" : "") + '" data-wear="' + m.i + '">' + (worn.has(m.i) ? "✓ Wearing" : "Wear") + '</button><button type="button" class="chip" data-edit="' + m.i + '" title="Change it">✏️</button><button type="button" class="chip" data-del="' + m.i + '" title="Delete it">🗑️</button></div></div>').join("") + "</div>";
+        '<div class="mk-acts"><button type="button" class="chip' + (worn.has(m.i) ? " on" : "") + '" data-wear="' + m.i + '">' + (worn.has(m.i) ? "✓ Wearing" : "Wear") + '</button><button type="button" class="chip" data-edit="' + m.i + '" title="Change it">✏️</button><button type="button" class="chip" data-pub="' + m.i + '" title="Publish it for everyone">🌍</button><button type="button" class="chip" data-del="' + m.i + '" title="Delete it">🗑️</button></div></div>').join("") + "</div>";
     const el = items();
+    wireShelf(el);
     el.querySelector("#mkNew").onclick = () => {
       if (locker.length >= MAX_LOCKER) { alert("You have " + MAX_LOCKER + " cosmetics. Delete one to make a new one."); return; }
       draft = { i: newId(), n: "My cosmetic", a: "head", b: [{ s: "box", c: "#ffc531", p: [0, 0.6, 0], k: [0.8, 0.3, 0.8], r: [0, 0, 0] }] }; sel = 0; startEdit();
@@ -216,8 +283,62 @@ export function mountAvatarEditor(box, opts) {
       const m = locker.find((x) => x.i === b.dataset.del); if (!m || !confirm('Delete "' + m.n + '"?')) return;
       saveLocker(locker.filter((x) => x.i !== m.i)); av.made = (av.made || []).filter((x) => x.i !== m.i); changed(); drawItems();
     }));
+    el.querySelectorAll("[data-pub]").forEach((b) => (b.onclick = async () => {
+      const m = locker.find((x) => x.i === b.dataset.pub); if (!m) return;
+      if (!signedIn() || !opts.api) { alert(API_ERR.signin); return; }
+      const name = prompt("Publish it so everyone can find it in 🌍 Everyone's and wear it.\nWhat's it called?", m.n);
+      if (name == null) return;
+      b.disabled = true; b.textContent = "…";
+      try {
+        const r = await opts.api("/hub/share", { t: opts.me().t, kind: "cos", name: name.trim().slice(0, 30), thing: { made: { i: m.i, a: m.a, b: m.b } }, thumb: await smallPic(m) });
+        if (r && r.ok) { pub = null; alert("🌍 Published! Everyone can wear it now. (It's in 🌍 Everyone's.)"); }
+        else alert(API_ERR[r && r.e] || "That didn't work. Try again in a bit.");
+      } catch { alert("Couldn't reach the server. Try again in a bit."); }
+      drawItems();
+    }));
   }
-  function startEdit() { spin = 0; yaw = 0.4; zoom = draft.a === "head" ? 1 : 0; rebuild(); drawItems(); }
+  function wireShelf(el) { el.querySelectorAll("[data-shelf]").forEach((b) => (b.onclick = () => { shelf = b.dataset.shelf; drawItems(); })); }
+  async function drawEveryone(tabs) {
+    const el = items();
+    if (!opts || !opts.api) { el.innerHTML = tabs + '<p class="av-hint">Everyone\'s cosmetics show up on the GunnerVerse home page.</p>'; wireShelf(el); return; }
+    if (!pub || Date.now() - pubAt > 60000) {
+      el.innerHTML = tabs + '<p class="av-hint">Loading…</p>'; wireShelf(el);
+      try { const r = await opts.api("/hub/shared", { kind: "cos" }); pub = r && r.ok ? r.items : []; pubAt = Date.now(); } catch { pub = null; }
+      if (tab !== "make" || draft || shelf !== "all") return;
+    }
+    const me = opts.me && opts.me(), mine = me ? String(me.u).toLowerCase() : "";
+    el.innerHTML = tabs + (!pub ? '<p class="av-hint">Couldn\'t load them. Try again in a bit.</p>' : !pub.length ? '<p class="av-hint">Nobody has published one yet. Be the first: make one in 🧰 Mine and press 🌍!</p>' :
+      '<p class="av-hint">Cosmetics players made. Press Get it to put one in your locker (then wear it or change it).</p><div class="av-grid mk-grid">' +
+      pub.map((c) => '<div class="mk-item"><img alt="" src="' + esc((opts.relay || "") + "/hub/sthumb/" + c.id) + '"><span>' + esc(c.name) + '</span><small class="mk-by">by @' + esc(c.by) + (c.uses ? " · " + c.uses + " got it" : "") + "</small>" +
+        '<div class="mk-acts"><button type="button" class="chip" data-get="' + c.id + '">＋ Get it</button>' + (String(c.by).toLowerCase() === mine ? '<button type="button" class="chip" data-unpub="' + c.id + '" title="Take it down">🗑️</button>' : '<button type="button" class="chip" data-rep="' + c.id + '" title="Report it">🚩</button>') + "</div></div>").join("") + "</div>");
+    wireShelf(el);
+    el.querySelectorAll("[data-get]").forEach((b) => (b.onclick = async () => {
+      const locker = loadLocker();
+      if (locker.length >= MAX_LOCKER) { alert("Your locker is full (" + MAX_LOCKER + "). Delete one first."); return; }
+      b.disabled = true;
+      try {
+        const r = await opts.api("/hub/shared-get", { id: b.dataset.get });
+        const m = r && r.ok && r.thing && sanitizeMade(r.thing.made);
+        if (!m) { alert("That one isn't there anymore."); b.disabled = false; return; }
+        locker.unshift({ ...m, i: newId(), n: String(r.card.name || "Cosmetic").slice(0, 24) }); saveLocker(locker);
+        b.textContent = "✓ In your locker";
+      } catch { alert("Couldn't reach the server. Try again in a bit."); b.disabled = false; }
+    }));
+    el.querySelectorAll("[data-rep]").forEach((b) => (b.onclick = async () => {
+      if (!signedIn()) { alert("Sign in to report."); return; }
+      const why = prompt("What's wrong with it? (The GunnerVerse team will look.)", ""); if (why == null) return;
+      try { await opts.api("/hub/share-report", { t: opts.me().t, id: b.dataset.rep, why: why.slice(0, 200) }); b.textContent = "✓ Reported"; b.disabled = true; } catch {}
+    }));
+    el.querySelectorAll("[data-unpub]").forEach((b) => (b.onclick = async () => {
+      if (!confirm("Take it down? People who already got it keep theirs.")) return;
+      try { await opts.api("/hub/unshare", { t: opts.me().t, id: b.dataset.unpub }); pub = null; drawItems(); } catch {}
+    }));
+  }
+  function startEdit() { spin = 0; zoom = draft.a === "head" ? 1 : 0; rebuild(); startStudio(); attachPiece(); drawItems(); }
+  function syncSliders() {
+    const P = draft && draft.b[sel]; if (!P) return;
+    items().querySelectorAll("[data-sl]").forEach((inp) => { const [, w, i, , , , flip] = SL[Number(inp.dataset.sl)]; inp.value = (flip ? -1 : 1) * P[w][i]; });
+  }
   const SL = [ // [label, which list, index, min, max, step, flip]  (the avatar faces -z, so "Front" is -z)
     ["Left ↔ Right", "p", 0, -2.5, 2.5, 0.02, true], ["Down ↔ Up", "p", 1, -2.5, 2.5, 0.02], ["Back ↔ Front", "p", 2, -2.5, 2.5, 0.02, true],
     ["Width", "k", 0, 0.05, 3, 0.01], ["Height", "k", 1, 0.05, 3, 0.01], ["Depth", "k", 2, 0.05, 3, 0.01],
@@ -227,6 +348,8 @@ export function mountAvatarEditor(box, opts) {
     const P = draft.b[sel];
     items().innerHTML =
       '<div class="mk-head"><input id="mkName" maxlength="24" value="' + esc(draft.n) + '" aria-label="Name"><button type="button" class="btn" id="mkSave">✓ Save &amp; wear</button><button type="button" class="btn ghost" id="mkCancel">Cancel</button></div>' +
+      '<div class="mk-row mk-modes"><b>Drag on the avatar</b>' + [["translate", "✥ Move"], ["rotate", "⟳ Turn"], ["scale", "⤢ Size"]].map(([k, v]) => '<button type="button" class="chip' + (gizmoMode === k ? " on" : "") + '" data-gm="' + k + '">' + v + "</button>").join("") +
+      '<span class="mk-tip">Click a piece to pick it · drag empty space to look around · scroll to zoom</span></div>' +
       '<div class="mk-row"><b>Goes on</b>' + Object.entries(ATTACH).map(([k, v]) => '<button type="button" class="chip' + (draft.a === k ? " on" : "") + '" data-at="' + k + '">' + v + "</button>").join("") + "</div>" +
       '<div class="mk-row"><b>Add a shape</b>' + Object.entries(SHAPES).map(([k, v]) => '<button type="button" class="chip" data-add="' + k + '" title="' + v + '">' + SHAPE_ICON[k] + " " + v + "</button>").join("") + "</div>" +
       '<div class="mk-row"><b>Pieces</b>' + draft.b.map((p, i) => '<button type="button" class="chip piece' + (i === sel ? " on" : "") + '" data-sel="' + i + '"><i style="background:' + p.c + '"></i>' + SHAPE_ICON[p.s] + " " + (i + 1) + "</button>").join("") + "</div>" +
@@ -239,14 +362,16 @@ export function mountAvatarEditor(box, opts) {
       '<p class="av-hint">Tip: pick "Goes on", then add shapes and slide them into place. Drag the avatar to see every side.</p>';
     const el = items(), redraw = () => { rebuild(); drawItems(); };
     el.querySelector("#mkName").oninput = (e) => { draft.n = e.target.value; };
-    el.querySelectorAll("[data-at]").forEach((b) => (b.onclick = () => { draft.a = b.dataset.at; zoom = draft.a === "head" ? 1 : 0; redraw(); }));
+    el.querySelectorAll("[data-at]").forEach((b) => (b.onclick = () => { draft.a = b.dataset.at; zoom = draft.a === "head" ? 1 : 0; redraw(); startStudio(); }));
+    el.querySelectorAll("[data-gm]").forEach((b) => (b.onclick = () => { gizmoMode = b.dataset.gm; gizmo.setMode(gizmoMode); el.querySelectorAll("[data-gm]").forEach((x) => x.classList.toggle("on", x === b)); }));
+    el.querySelectorAll("[data-sel]").forEach((b) => (b.ondblclick = () => { sel = Number(b.dataset.sel); attachPiece(); }));
     el.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => {
       if (draft.b.length >= MAX_PIECES) { alert("A cosmetic can have " + MAX_PIECES + " pieces."); return; }
       const y = draft.a === "head" ? 0.7 : 0, last = draft.b[sel];
       draft.b.push({ s: b.dataset.add, c: last ? last.c : "#ffc531", p: [0, y, draft.a === "body" ? 0.5 : 0], k: [0.4, 0.4, 0.4], r: [0, 0, 0] }); sel = draft.b.length - 1; redraw();
     }));
-    el.querySelectorAll("[data-sel]").forEach((b) => (b.onclick = () => { sel = Number(b.dataset.sel); drawItems(); }));
-    el.querySelector("#mkCancel").onclick = () => { draft = null; zoom = 0; spin = 0.5; rebuild(); drawItems(); };
+    el.querySelectorAll("[data-sel]").forEach((b) => (b.onclick = () => { sel = Number(b.dataset.sel); attachPiece(); drawItems(); }));
+    el.querySelector("#mkCancel").onclick = () => { draft = null; zoom = 0; spin = 0.5; stopStudio(); rebuild(); drawItems(); };
     el.querySelector("#mkSave").onclick = () => {
       const clean = sanitizeMade(draft);
       if (!clean) { alert("Add at least one shape first."); return; }
@@ -256,7 +381,7 @@ export function mountAvatarEditor(box, opts) {
       saveLocker(locker);
       let made = (av.made || []).filter((x) => x.i !== item.i);
       made.unshift({ i: item.i, a: item.a, b: item.b }); av.made = made.slice(0, MAX_WORN);
-      draft = null; zoom = 0; spin = 0.5; changed(); drawItems();
+      draft = null; zoom = 0; spin = 0.5; stopStudio(); changed(); drawItems();
     };
     if (!P) return;
     el.querySelectorAll("[data-pc]").forEach((b) => (b.onclick = () => { P.c = b.dataset.pc; redraw(); }));

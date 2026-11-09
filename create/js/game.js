@@ -11,6 +11,7 @@ import { sanitizeGui } from "./gui.js";
 import { sanitizeMonster } from "./monster.js";
 import { sanitizeMotion } from "./motion.js";
 import { sanitizeChase, sanitizeScare } from "./scare.js";
+import { okTex } from "./textures.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space" };
 export const DEFAULT_SETTINGS = { sky: "day", gravity: 70, walk: 14, jump: 26 };
@@ -81,6 +82,7 @@ export function sanitize(g) {
     if (o.type === "monster") c.mon = sanitizeMonster(o.mon); // (the monster's recipe, monster.js)
     if (Number(o.transp) > 0) c.transp = Math.min(100, Math.round(Number(o.transp))); // (see-through %, 100 = invisible)
     if (/^[a-z0-9]{6,40}$/i.test(o.file || "")) c.file = o.file;
+    if (okTex(o.tex)) { c.tex = o.tex; if (Number(o.texS) > 0) c.texS = Math.min(64, Math.max(0.25, Number(o.texS))); } // (🧱 a texture - textures.js)
     if (typeof o.anim === "string" && o.anim) c.anim = o.anim.slice(0, 60);
     if (o.mo) c.mo = sanitizeMotion(o.mo); // (Animation settings: walk style, standing move, when, speed - motion.js)
     if (typeof o.bump === "boolean") c.bump = o.bump; // (walls stop it when it moves; monsters do unless this is false)

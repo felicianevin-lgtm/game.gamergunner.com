@@ -308,10 +308,10 @@ function geoOf(s) {
 }
 const D2R = Math.PI / 180;
 export function buildMade(m) {
-  const root = new THREE.Group();
+  const root = new THREE.Group(); root.userData.madeI = m.i; // (the Build tab finds the one you're making)
   for (const p of m.b) {
     const mat = M(p.c, { ...(p.m ? { metalness: 0.75, roughness: 0.25 } : {}), ...(p.g ? { emissive: new THREE.Color(p.c), emissiveIntensity: 0.8 } : {}), side: THREE.DoubleSide });
-    const mesh = part(root, geoOf(p.s), mat, p.p[0], p.p[1], p.p[2]);
+    const mesh = part(root, geoOf(p.s), mat, p.p[0], p.p[1], p.p[2]); mesh.userData.piece = root.children.length - 1;
     mesh.scale.set(p.k[0], p.k[1], p.k[2]);
     mesh.rotation.set(p.r[0] * D2R, p.r[1] * D2R, p.r[2] * D2R);
   }

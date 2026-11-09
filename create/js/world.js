@@ -1,6 +1,7 @@
 // The 3D world both the editor and Play use: renderer, sky, sun, and turning a game object (game.js) into meshes.
 import * as THREE from "../vendor/three.module.js";
 import { BY_TYPE, gridMaterialFor, material } from "./assets.js";
+import { applyTexture } from "./textures.js";
 import { loadModel, modelCopy, pictureTexture, fileType } from "./files.js";
 
 // See-through parts (transp = 0..100 %): their own copies of the materials, faded.
@@ -124,6 +125,7 @@ export function buildObject(o) {
     inner.traverse((m) => { if (m.isMesh && m.material === plain) m.material = gm; });
   }
   inner.scale.set(o.size[0] / a.base[0], o.size[1] / a.base[1], o.size[2] / a.base[2]);
+  if (o.tex && !inner.userData.model && !inner.userData.picture) applyTexture(inner, o); // (🧱 textures.js)
   const g = new THREE.Group();
   g.add(inner);
   if (inner.userData.model) addModel(inner, o, seeThrough);

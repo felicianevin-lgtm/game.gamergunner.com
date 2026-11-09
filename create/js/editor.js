@@ -23,6 +23,7 @@ import { openScript, closeScript, scriptOpen, starterCode, flushScript } from ".
 import { api, account, RELAY } from "./net.js";
 import { describe, buildMonster, monsterSize, sanitizeMonster, SURPRISE } from "./monster.js";
 import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount } from "./motion.js";
+import { TEXTURES, texturePicture } from "./textures.js";
 import { CHASE_SOUNDS, SCARE_FX, FLASHES, SCARE_SOUNDS, SCARE_WHEN, DEFAULT_CHASE, DEFAULT_SCARE, sanitizeChase, sanitizeScare, playScare } from "./scare.js";
 
 const $ = (id) => document.getElementById(id);
@@ -41,6 +42,7 @@ let undoStack = [], redoStack = [];
 let dirty = false, saveTimer = 0, playing = null;
 let category = "All";
 const SHARED = "🌍 Shared"; // (Toolbox tab: things players shared, drawShared)
+const TEX_CAT = "🧱 Textures"; // (Toolbox tab: textures to drag onto parts, drawTextures)
 let shared = null, sharedAt = 0;
 let myFiles = [];              // imported files in this browser (files.js listFiles)
 let selScript = null;          // the script open in the script editor
@@ -67,6 +69,7 @@ transform.addEventListener("dragging-changed", (e) => { orbit.enabled = !e.value
 const selBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0x2f7df6, depthTest: false, transparent: true }));
 selBox.renderOrder = 999; selBox.visible = false;
 scene.add(selBox);
+const extraBoxes = []; // (one per other selected thing)
 
 // ---------------------------------------------------------------- objects in the world
 function obj(id) { return game.objects.find((o) => o.id === id) || null; }
@@ -79,7 +82,7 @@ function rebuild(o) {
   const g = buildObject(o);
   world.root.add(g);
   groups.set(o.id, g);
-  if (selected === o.id && tool !== "select") transform.attach(g);
+  if (selected === o.id && tool !== "select" && !many()) transform.attach(g);
   return g;
 }
 function disposeGroup(g) { g.traverse((m) => { if (m.isMesh && m.geometry) m.geometry.dispose(); }); }
@@ -127,17 +130,48 @@ window.addEventListener("beforeunload", saveNow);
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveNow(); });
 
 // ---------------------------------------------------------------- selecting + tools
+// MANY AT ONCE: Shift / Ctrl + click (in the world or the Explorer) adds or takes away, and dragging a box over empty
+// space picks everything inside it. Then the gizmo moves / turns / sizes them all together (around their middle),
+// Ctrl+C / Ctrl+V copy and paste them (even into another game) and Ctrl+D puts copies right next to them.
+const extra = new Set();        // the other selected things (selected is the last one clicked)
+const pivot = new THREE.Object3D(); scene.add(pivot); // (the gizmo holds this when many are selected)
+function many() { return !!selected && extra.size > 0; }
+function selIds() { return selected && obj(selected) ? [selected, ...extra].filter((id) => obj(id)) : []; }
 function select(id) {
+  extra.clear();
   selected = id && (obj(id) || guiItem(id)) ? id : null;
-  const g = selected && groups.get(selected);
-  if (g && tool !== "select") transform.attach(g); else transform.detach();
+  attachGizmo();
   drawTree(); drawProps(); updateButtons(); drawGui();
+}
+function selectMany(ids) {
+  ids = [...new Set(ids)].filter((id) => obj(id));
+  extra.clear();
+  selected = ids.length ? ids[ids.length - 1] : null;
+  for (const id of ids.slice(0, -1)) extra.add(id);
+  attachGizmo();
+  drawTree(); drawProps(); updateButtons(); drawGui();
+}
+function toggleSel(id) {
+  if (!obj(id)) { select(id); return; }
+  const ids = selIds();
+  selectMany(ids.includes(id) ? ids.filter((x) => x !== id) : ids.concat(id));
+}
+function centerOf(ids) {
+  const c = new THREE.Vector3(); let n = 0;
+  for (const id of ids) { const g = groups.get(id); if (g) { c.add(g.position); n++; } }
+  return n ? c.multiplyScalar(1 / n) : c;
+}
+function attachGizmo() {
+  if (tool === "select" || !selected) { transform.detach(); return; }
+  if (many()) { pivot.position.copy(centerOf(selIds())); pivot.quaternion.identity(); pivot.scale.set(1, 1, 1); pivot.updateMatrixWorld(); transform.attach(pivot); return; }
+  const g = groups.get(selected);
+  if (g) transform.attach(g); else transform.detach();
 }
 function setTool(t) {
   tool = t;
   document.querySelectorAll(".tool").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
   if (t !== "select") transform.setMode(t);
-  select(selected);
+  attachGizmo(); drawProps();
 }
 function applySnap() {
   const s = SNAPS[snapIndex];
@@ -150,12 +184,31 @@ function applySnap() {
 function updateButtons() {
   $("btnUndo").disabled = !undoStack.length; $("btnRedo").disabled = !redoStack.length;
   $("btnDup").disabled = !selected; $("btnDel").disabled = !selected;
+  $("btnDup").title = many() ? "Copies right next to them (Ctrl+D)" : "Duplicate (Ctrl+D)";
 }
 
 // Move / rotate / scale with the gizmo.
-let dragStartSize = null;
-transform.addEventListener("mouseDown", () => { pushUndo(); const o = obj(selected); dragStartSize = o ? o.size.slice() : null; });
+let dragStartSize = null, manyStart = null;
+transform.addEventListener("mouseDown", () => {
+  pushUndo(); const o = obj(selected); dragStartSize = o ? o.size.slice() : null;
+  manyStart = many() ? { p: pivot.position.clone(), list: selIds().map((id) => { const g = groups.get(id); return { id, p: g.position.clone(), q: g.quaternion.clone(), size: obj(id).size.slice() }; }) } : null;
+});
+const _dq = new THREE.Quaternion(), _off = new THREE.Vector3(), _e = new THREE.Euler();
 transform.addEventListener("objectChange", () => {
+  if (manyStart) { // (all of them, around their middle)
+    _dq.copy(pivot.quaternion);
+    for (const s of manyStart.list) {
+      const o = obj(s.id), g = groups.get(s.id); if (!o || !g) continue;
+      _off.copy(s.p).sub(manyStart.p).multiply(pivot.scale).applyQuaternion(_dq);
+      g.position.copy(pivot.position).add(_off);
+      g.quaternion.copy(_dq).multiply(s.q);
+      _e.setFromQuaternion(g.quaternion);
+      o.pos = [r2(g.position.x), r2(g.position.y), r2(g.position.z)];
+      o.rot = [r2(_e.x / D2R), r2(_e.y / D2R), r2(_e.z / D2R)];
+      if (tool === "scale") g.scale.set(Math.abs(pivot.scale.x), Math.abs(pivot.scale.y), Math.abs(pivot.scale.z)); // (the real sizes are set when you let go)
+    }
+    return;
+  }
   const o = obj(selected), g = groups.get(selected);
   if (!o || !g) return;
   o.pos = [r2(g.position.x), r2(g.position.y), r2(g.position.z)];
@@ -164,6 +217,10 @@ transform.addEventListener("objectChange", () => {
   drawProps(true);
 });
 transform.addEventListener("mouseUp", () => {
+  if (manyStart) {
+    if (tool === "scale") for (const s of manyStart.list) { const o = obj(s.id); if (!o) continue; o.size = [0, 1, 2].map((i) => r2(Math.max(0.1, s.size[i] * Math.abs(pivot.scale.getComponent(i))))); rebuild(o); }
+    manyStart = null; attachGizmo(); changed(); drawProps(); return;
+  }
   const o = obj(selected), g = groups.get(selected);
   if (o && g && tool === "scale") { g.scale.set(1, 1, 1); rebuild(o); }
   changed();
@@ -181,22 +238,53 @@ function hitAt(clientX, clientY) {
   return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ground) ? { id: null, point: ground } : null;
 }
 let downAt = null, rightAt = null;
-canvas.addEventListener("pointerdown", (e) => { canvas.focus(); if (e.button === 0) downAt = { x: e.clientX, y: e.clientY }; if (e.button === 2) rightAt = { x: e.clientX, y: e.clientY }; });
+let boxing = null, lastMouse = null; // (dragging a selection box; where the mouse was, for Paste)
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.focus();
+  if (e.button === 0) { downAt = { x: e.clientX, y: e.clientY }; boxing = transform.axis ? null : { x: e.clientX, y: e.clientY, add: e.shiftKey || e.ctrlKey || e.metaKey, on: false }; }
+  if (e.button === 2) rightAt = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener("pointermove", (e) => {
+  lastMouse = { x: e.clientX, y: e.clientY };
+  if (!boxing || playing || transform.dragging || !(e.buttons & 1)) return;
+  if (!boxing.on && Math.hypot(e.clientX - boxing.x, e.clientY - boxing.y) < 6) return;
+  boxing.on = true;
+  const r = $("view").getBoundingClientRect(), el = $("selRect");
+  el.classList.remove("hidden");
+  el.style.left = Math.min(e.clientX, boxing.x) - r.left + "px"; el.style.top = Math.min(e.clientY, boxing.y) - r.top + "px";
+  el.style.width = Math.abs(e.clientX - boxing.x) + "px"; el.style.height = Math.abs(e.clientY - boxing.y) + "px";
+});
+// everything whose middle is inside the box (not huge things like the baseplate)
+function boxSelect(x0, y0, x1, y1, add) {
+  const r = canvas.getBoundingClientRect(), v = new THREE.Vector3(), ids = add ? selIds() : [];
+  const ax = Math.min(x0, x1), bx = Math.max(x0, x1), ay = Math.min(y0, y1), by = Math.max(y0, y1);
+  for (const o of game.objects) {
+    const g = groups.get(o.id); if (!g || Math.max(o.size[0], o.size[2]) > 150) continue;
+    v.copy(boundsBox(o, g.position, g.quaternion).c).project(camera);
+    if (v.z > 1) continue;
+    const sx = r.left + ((v.x + 1) / 2) * r.width, sy = r.top + ((1 - v.y) / 2) * r.height;
+    if (sx >= ax && sx <= bx && sy >= ay && sy <= by && !ids.includes(o.id)) ids.push(o.id);
+  }
+  selectMany(ids);
+}
 canvas.addEventListener("pointerup", (e) => {
   if (e.button === 2 && rightAt && !playing) { // a right CLICK (not a drag to look around): the menu
     const moved = Math.hypot(e.clientX - rightAt.x, e.clientY - rightAt.y);
     rightAt = null;
     if (moved > 5) return;
     const h = hitAt(e.clientX, e.clientY);
+    if (h && h.id && many() && selIds().includes(h.id)) { manyMenu(e.clientX, e.clientY); return; }
     if (h && h.id) { select(h.id); thingMenu(h.id, e.clientX, e.clientY); }
     return;
   }
   if (e.button !== 0 || !downAt || playing) return;
-  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
-  downAt = null;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y), bx = boxing;
+  downAt = null; boxing = null; $("selRect").classList.add("hidden");
+  if (bx && bx.on) { boxSelect(bx.x, bx.y, e.clientX, e.clientY, bx.add); return; }
   if (moved > 5 || transform.dragging || (transform.axis && transform.object)) return;
   const h = hitAt(e.clientX, e.clientY);
-  // (clicking the huge baseplate selects it like anything else; Esc clears)
+  // (clicking the huge baseplate selects it like anything else; Esc clears; Shift / Ctrl + click adds or takes away)
+  if ((e.shiftKey || e.ctrlKey || e.metaKey) && h && h.id) { toggleSel(h.id); return; }
   select(h && h.id ? h.id : null);
 });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -230,6 +318,7 @@ function copyScripts(fromId, toId) {
   for (const sc of scriptsOf(fromId)) if (game.scripts.length < MAX_SCRIPTS) game.scripts.push({ ...sc, id: uid(), on: toId });
 }
 function duplicate() {
+  if (many()) { dupNextTo("right"); return; }
   const gi = guiItem(selected);
   if (gi) {
     const kids = gi.kind === "frame" ? game.gui.filter((x) => x.parent === gi.id) : [];
@@ -255,6 +344,7 @@ function duplicate() {
   changed();
 }
 function remove() {
+  if (many()) { removeMany(); return; }
   const gi = guiItem(selected);
   if (gi) {
     pushUndo();
@@ -272,6 +362,114 @@ function remove() {
   const g = groups.get(o.id); if (g) { world.root.remove(g); disposeGroup(g); groups.delete(o.id); }
   select(null);
   changed();
+}
+// ---------------------------------------------------------------- many things: copies next to them, copy / paste, forests
+const MAX_THINGS = 2000; // (relay publish.js takes games up to 2000 things)
+function roomFor(n) { if (game.objects.length + n <= MAX_THINGS) return true; alert("A game can have up to " + MAX_THINGS + " things. This would make " + (game.objects.length + n) + "."); return false; }
+// Copies of these objects, moved by off (a Vector3, or a function giving each one's new pos). Returns the new ids.
+function copyObjects(list, off, scripts, files) {
+  const made = [], ids = new Map();
+  for (const o of list) {
+    const c = JSON.parse(JSON.stringify(o));
+    c.id = uid(); ids.set(o.id, c.id);
+    c.name = uniqueName(o.name.replace(/ \d+$/, ""));
+    if (typeof off === "function") off(c, o); else c.pos = [r2(o.pos[0] + off.x), r2(o.pos[1] + off.y), r2(o.pos[2] + off.z)];
+    game.objects.push(c); made.push(c.id);
+  }
+  for (const sc of scripts || game.scripts.filter((x) => ids.has(x.on))) if (ids.has(sc.on) && game.scripts.length < MAX_SCRIPTS) game.scripts.push({ ...sc, id: uid(), on: ids.get(sc.on) });
+  for (const [fid, f] of Object.entries(files || {})) if (!game.files[fid]) game.files[fid] = f;
+  for (const id of made) rebuild(obj(id));
+  return made;
+}
+function boxOf(ids) { const b = new THREE.Box3(); for (const id of ids) { const g = groups.get(id); if (g) b.union(new THREE.Box3().setFromObject(g)); } return b; }
+// Ctrl+D with many: a copy of all of them right next to them, on the side you're looking at (press again: another row)
+const DIRS = { right: "→ Right", left: "← Left", back: "↑ Behind", front: "↓ In front", up: "⬆ On top" };
+function dupNextTo(dir) {
+  const ids = selIds(); if (!ids.length || !roomFor(ids.length)) return;
+  const size = boxOf(ids).getSize(new THREE.Vector3());
+  camera.getWorldDirection(fwd); right.crossVectors(fwd, camera.up).normalize(); fwd.y = 0; fwd.normalize();
+  let v = dir === "up" ? new THREE.Vector3(0, 1, 0) : (dir === "left" || dir === "right" ? right.clone().multiplyScalar(dir === "left" ? -1 : 1) : fwd.clone().multiplyScalar(dir === "front" ? -1 : 1));
+  if (dir !== "up") v = Math.abs(v.x) > Math.abs(v.z) ? new THREE.Vector3(Math.sign(v.x), 0, 0) : new THREE.Vector3(0, 0, Math.sign(v.z)); // (along the grid)
+  const step = v.clone().multiply(size).add(v.clone().multiplyScalar(SNAPS[snapIndex] ? 0 : 0.2));
+  pushUndo();
+  selectMany(copyObjects(ids.map(obj), step));
+  changed();
+}
+function copySel() {
+  const ids = selIds(); if (!ids.length) return;
+  const set = new Set(ids), list = ids.map((id) => JSON.parse(JSON.stringify(obj(id))));
+  const files = {}; for (const o of list) for (const f of [o.file, o.tex && o.tex.startsWith("f:") ? o.tex.slice(2) : ""]) if (f && game.files[f]) files[f] = game.files[f];
+  const clip = { objects: list, scripts: game.scripts.filter((x) => set.has(x.on)), files };
+  try { localStorage.setItem("gv_clip", JSON.stringify(clip)); } catch {}
+  toast("📋 Copied " + ids.length + " thing" + (ids.length === 1 ? "" : "s") + ". Ctrl+V pastes where your mouse is.");
+}
+function pasteClip() {
+  let clip = null; try { clip = JSON.parse(localStorage.getItem("gv_clip") || "null"); } catch {}
+  if (!clip || !Array.isArray(clip.objects) || !clip.objects.length) { toast("Nothing copied yet. Select things and press Ctrl+C."); return; }
+  const list = sanitize({ ...game, objects: clip.objects, scripts: [], gui: [] }).objects; // (cleaned like a loaded game)
+  if (!list.length || !roomFor(list.length)) return;
+  const r = canvas.getBoundingClientRect(), m = lastMouse || { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  const h = hitAt(m.x, m.y), at = h ? h.point : orbit.target.clone();
+  const cx = list.reduce((s, o) => s + o.pos[0], 0) / list.length, cz = list.reduce((s, o) => s + o.pos[2], 0) / list.length, y0 = Math.min(...list.map((o) => o.pos[1]));
+  pushUndo();
+  const snap = (v) => (SNAPS[snapIndex] ? Math.round(v / SNAPS[snapIndex]) * SNAPS[snapIndex] : v);
+  const ids = copyObjects(list, (c, o) => { c.pos = [r2(o.pos[0] - cx + snap(at.x)), r2(o.pos[1] - y0 + at.y), r2(o.pos[2] - cz + snap(at.z))]; }, (clip.scripts || []).map((s) => ({ ...s, code: String(s.code || "").slice(0, 20000), name: String(s.name || "Script").slice(0, 40) })), clip.files);
+  if (tool === "select") setTool("translate");
+  selectMany(ids); changed();
+}
+// 🌲 Spread copies around (forests, rocks, crowds...): n copies of what's selected, scattered in a circle around them,
+// each turned a random way (and a little bigger or smaller if you want), not on top of each other.
+function spreadCopies(n, radius, sizes) {
+  const src = selIds().map(obj); if (!src.length || !roomFor(n)) return;
+  const c = centerOf(selIds()), taken = src.map((o) => [o.pos[0], o.pos[2], Math.max(o.size[0], o.size[2]) * 0.45]);
+  pushUndo();
+  const ids = [];
+  for (let i = 0; i < n; i++) {
+    const o = src[Math.floor(Math.random() * src.length)], k = sizes ? 0.75 + Math.random() * 0.55 : 1, rr = Math.max(o.size[0], o.size[2]) * 0.45 * k;
+    let x = 0, z = 0, ok = false;
+    for (let t = 0; t < 30 && !ok; t++) {
+      const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * radius;
+      x = c.x + Math.cos(a) * d; z = c.z + Math.sin(a) * d;
+      ok = taken.every(([tx, tz, tr]) => Math.hypot(tx - x, tz - z) > (tr + rr) * 0.9);
+    }
+    taken.push([x, z, rr]);
+    ids.push(...copyObjects([o], (cc) => { cc.pos = [r2(x), o.pos[1], r2(z)]; cc.rot = [o.rot[0], r2(Math.random() * 360), o.rot[2]]; cc.size = o.size.map((s) => r2(s * k)); }));
+  }
+  selectMany(selIds().concat(ids)); changed();
+}
+function removeMany() {
+  const ids = new Set(selIds()); if (!ids.size) return;
+  pushUndo();
+  game.objects = game.objects.filter((x) => !ids.has(x.id));
+  dropScripts(ids);
+  transform.detach();
+  for (const id of ids) { const g = groups.get(id); if (g) { world.root.remove(g); disposeGroup(g); groups.delete(id); } }
+  select(null); changed();
+}
+
+// Properties when many things are selected
+function drawManyProps(box) {
+  const ids = selIds();
+  $("propsFor").textContent = ids.length + " things";
+  box.innerHTML = '<p class="note">' + ids.length + " things selected. Drag the gizmo to move, turn or size them all together. Shift / Ctrl + click adds or takes away.</p>" +
+    '<div class="group-title">⧉ Copies right next to them</div><div class="many-dirs">' + Object.entries(DIRS).map(([k, v]) => '<button type="button" class="btn small ghost" data-dir="' + k + '">' + v + "</button>").join("") + "</div>" +
+    '<p class="note">Press again to keep going: a whole row, wall or forest. (Ctrl+D does → Right.)</p>' +
+    spreadBox() +
+    '<div class="group-title">Look (all of them)</div><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div>" +
+    '<div class="group-title">More</div><div class="many-dirs"><button type="button" class="btn small ghost" id="mCopy">📋 Copy (Ctrl+C)</button><button type="button" class="btn small ghost" id="mPaste">📥 Paste (Ctrl+V)</button><button type="button" class="btn small ghost" id="mFocus">🎯 Zoom to them</button><button type="button" class="btn small danger" id="mDel">🗑️ Delete all</button></div>';
+  box.querySelectorAll("[data-dir]").forEach((b) => (b.onclick = () => dupNextTo(b.dataset.dir)));
+  box.querySelectorAll("[data-c]").forEach((b) => (b.onclick = () => { pushUndo(); for (const id of selIds()) { const o = obj(id); o.color = b.dataset.c; rebuild(o); } changed(); }));
+  wireSpread(box);
+  $("mCopy").onclick = copySel; $("mPaste").onclick = pasteClip; $("mDel").onclick = removeMany;
+  $("mFocus").onclick = () => { const b = boxOf(selIds()), c = b.getCenter(new THREE.Vector3()), r = Math.max(8, b.getSize(new THREE.Vector3()).length()); const d = camera.position.clone().sub(orbit.target).normalize(); orbit.target.copy(c); camera.position.copy(c).addScaledVector(d, r); };
+}
+function spreadBox() {
+  return '<div class="group-title">🌲 Spread copies around</div><p class="note">Copies scattered around them, each turned a different way. Great for forests, rocks and crowds.</p>' +
+    row("How many", '<input type="number" id="spN" min="1" max="200" value="12">') + row("How far (studs)", '<input type="number" id="spR" min="4" max="500" value="40">') +
+    row("Different sizes", '<input type="checkbox" id="spK" checked>') + '<button type="button" class="btn add-script" id="spGo">🌲 Spread them!</button>';
+}
+function wireSpread(box) {
+  box.querySelector("#spGo").onclick = () => spreadCopies(clamp(box.querySelector("#spN").value, 1, 200, 12), clamp(box.querySelector("#spR").value, 4, 500, 40), box.querySelector("#spK").checked);
 }
 function dropScripts(ids) {
   if (scriptOpen() && ids.has((game.scripts.find((x) => x.id === scriptOpen()) || {}).on)) closeScript();
@@ -329,6 +527,15 @@ function showMenu(x, y, items) {
 function hideMenu() { $("ctxMenu").classList.add("hidden"); }
 document.addEventListener("pointerdown", (e) => { if (!$("ctxMenu").contains(e.target)) hideMenu(); }, true);
 window.addEventListener("blur", hideMenu);
+function manyMenu(x, y) {
+  const n = selIds().length;
+  showMenu(x, y, [
+    { icon: "⧉", label: "Copies next to them (Ctrl+D)", fn: () => dupNextTo("right") },
+    { icon: "🌲", label: "Spread copies around…", fn: () => { const k = prompt("How many copies? (scattered around them, each turned a different way)", "12"); if (k) spreadCopies(clamp(k, 1, 200, 12), Math.max(30, boxOf(selIds()).getSize(new THREE.Vector3()).length() * 1.5), true); } },
+    { icon: "📋", label: "Copy " + n + " things (Ctrl+C)", fn: copySel },
+    "-", { icon: "🗑️", label: "Delete " + n + " things", danger: true, fn: removeMany },
+  ]);
+}
 function thingMenu(id, x, y) {
   const g = guiItem(id), o = obj(id);
   if (!g && !o) return;
@@ -336,7 +543,9 @@ function thingMenu(id, x, y) {
     { icon: "📜", label: "Add Script", fn: () => addScript(id) },
     { icon: "✏️", label: "Rename", fn: () => { select(id); const n = $(g ? "gName" : "pObjName"); if (n) { n.focus(); n.select(); } } },
     { icon: "⧉", label: "Duplicate", fn: () => { select(id); duplicate(); } },
+    { icon: "📋", label: "Copy (Ctrl+C)", fn: () => { select(id); copySel(); } },
   ];
+  if (o) items.push({ icon: "🌲", label: "Spread copies around…", fn: () => { select(id); const n = prompt("How many copies? (they're scattered around it, each turned a different way)", "12"); if (n) spreadCopies(clamp(n, 1, 200, 12), Math.max(20, Math.max(o.size[0], o.size[2]) * 6), true); } });
   if (o) items.push({ icon: "🎯", label: "Zoom to it", fn: () => { select(id); focusSelected(); } }, { icon: "🎬", label: "Animation…", fn: () => { select(id); openAnimator(o); } },
     { icon: "🌍", label: "Share to the Toolbox…", fn: () => { select(id); openShare(o); } });
   if (g) items.push({ icon: g.visible ? "🙈" : "👁️", label: g.visible ? "Hide at start" : "Show at start", fn: () => { pushUndo(); g.visible = !g.visible; changed(); drawGui(); drawProps(); } });
@@ -364,13 +573,14 @@ function focusSelected() {
 
 // ---------------------------------------------------------------- Toolbox
 function drawCats() {
-  $("cats").innerHTML = CATEGORIES.concat("My imports", SHARED).map((c) => '<button type="button" data-cat="' + c + '" class="' + (c === category ? "on" : "") + '">' + c + "</button>").join("");
+  $("cats").innerHTML = CATEGORIES.concat(TEX_CAT, "My imports", SHARED).map((c) => '<button type="button" data-cat="' + c + '" class="' + (c === category ? "on" : "") + '">' + c + "</button>").join("");
   $("cats").querySelectorAll("button").forEach((b) => (b.onclick = () => { category = b.dataset.cat; drawCats(); drawAssets(); }));
 }
 function drawAssets() {
   const q = $("assetSearch").value.trim().toLowerCase();
   if (category === "My imports") return drawImports(q);
   if (category === SHARED) return drawShared(q);
+  if (category === TEX_CAT) return drawTextures(q);
   const list = ASSETS.filter((a) => !a.hidden && (category === "All" || a.cat === category) && (!q || (a.label + " " + a.cat).toLowerCase().includes(q)));
   // (the Monster Maker gets its own tile, so nobody has to dig for it in the ＋ Add menu)
   const mon = (category === "All" || category === "Gameplay") && (!q || "make a monster".includes(q) || q.includes("monster"));
@@ -383,6 +593,42 @@ function drawAssets() {
   });
 }
 $("assetSearch").oninput = drawAssets;
+// 🧱 Textures: drag one onto a part (or click it to put it on what's selected). Your own pictures are here too.
+function drawTextures(q) {
+  const pics = myFiles.filter((f) => f.kind === "image" && (!q || f.name.toLowerCase().includes(q)));
+  $("assets").innerHTML = '<p class="note tex-note">Drag a texture onto a block, or click one to put it on what\'s selected. You can also drag a picture from your computer right onto a block.</p>' +
+    Object.entries(TEXTURES).filter(([, t]) => !q || t.label.toLowerCase().includes(q)).map(([k, t]) => '<div class="asset tex-tile" draggable="true" data-tex="' + k + '" title="' + esc(t.label) + '"><span class="ico"><img alt="" src="' + texturePicture(k) + '"></span><span class="nm">' + esc(t.label) + "</span></div>").join("") +
+    pics.map((f) => '<div class="asset tex-tile" draggable="true" data-tex="f:' + f.id + '" title="' + esc(f.name) + '"><span class="ico"><img alt="" src="' + esc(fileUrl(f.id)) + '"></span><span class="nm">' + esc(f.name) + "</span></div>").join("") +
+    '<div class="asset import-tile" id="texImp" title="Use a picture from your computer as a texture"><span class="ico">📥</span><span class="nm">Your own picture…</span></div>' +
+    '<div class="asset import-tile" id="texOff" title="Take the texture off what\'s selected"><span class="ico">🚫</span><span class="nm">No texture</span></div>';
+  $("assets").querySelectorAll("[data-tex]").forEach((el) => {
+    el.ondragstart = (e) => { e.dataTransfer.setData("text/gv-tex", el.dataset.tex); e.dataTransfer.effectAllowed = "copy"; };
+    el.onclick = () => { const ids = selIds(); if (!ids.length) { toast("Select a block first (or drag the texture onto it)."); return; } const f = myFiles.find((x) => "f:" + x.id === el.dataset.tex); if (f) useFile(f); setTexture(ids, el.dataset.tex); };
+  });
+  $("texImp").onclick = () => pickFile(async (file) => { const rec = await importIt(file); if (!rec || rec.kind !== "image") { if (rec) alert("That's a 3D model. Pick a picture (PNG or JPG)."); return; } useFile(rec); await refreshFiles(); drawTextures(""); if (selIds().length) setTexture(selIds(), "f:" + rec.id); }, ".png,.jpg,.jpeg,.webp,.gif");
+  $("texOff").onclick = () => { if (selIds().length) setTexture(selIds(), ""); };
+}
+function texSelect(o) {
+  const pics = myFiles.filter((f) => f.kind === "image"), cur = o.tex || "";
+  const fid = cur.startsWith("f:") ? cur.slice(2) : "";
+  return '<select id="pTex"><option value="">None</option>' + Object.entries(TEXTURES).map(([k, t]) => '<option value="' + k + '"' + (k === cur ? " selected" : "") + ">" + t.icon + " " + esc(t.label) + "</option>").join("") +
+    pics.map((f) => '<option value="f:' + f.id + '"' + ("f:" + f.id === cur ? " selected" : "") + ">🖼️ " + esc(f.name) + "</option>").join("") +
+    (fid && !pics.some((f) => f.id === fid) ? '<option value="' + cur + '" selected>🖼️ ' + esc((game.files[fid] || {}).name || "Picture") + "</option>" : "") +
+    '<option value="+">📥 Your own picture…</option></select>';
+}
+function texturable(o) { const a = BY_TYPE[o.type]; return !!a && o.type !== "model" && o.type !== "picture" && o.type !== "monster"; }
+function setTexture(ids, tex) {
+  const list = ids.map(obj).filter((o) => o && texturable(o));
+  if (!list.length) { toast("Textures go on blocks, balls, ramps, walls and other parts."); return; }
+  pushUndo();
+  for (const o of list) {
+    if (tex && !o.tex && o.type !== "baseplate") o.color = "#ffffff"; // (so you see the texture's own colors; change the color after to tint it)
+    if (tex) o.tex = tex; else { delete o.tex; delete o.texS; }
+    rebuild(o);
+  }
+  changed(); drawProps();
+  toast(tex ? "🧱 Texture on " + list.length + " thing" + (list.length === 1 ? "" : "s") + "!" : "Texture taken off.");
+}
 function drawImports(q) {
   const list = myFiles.filter((f) => !q || f.name.toLowerCase().includes(q));
   $("assets").innerHTML = '<div class="asset import-tile" id="impTile" title="Bring in a 3D model or a picture from your computer"><span class="ico">📥</span><span class="nm">Import…</span></div>' +
@@ -503,7 +749,11 @@ function pickFile(then, accept) {
   inp.onchange = () => { if (inp.files && inp.files[0]) then(inp.files[0]); };
   inp.click();
 }
-function toast(text, secs) { const t = $("toast"); t.textContent = text; t.classList.toggle("hidden", !text); clearTimeout(toast.tm); if (secs) toast.tm = setTimeout(() => t.classList.add("hidden"), secs * 1000); }
+function toast(text, secs) { // (a message that goes away by itself, unless it's still working on something…)
+  const t = $("toast"); t.textContent = text; t.classList.toggle("hidden", !text); clearTimeout(toast.tm);
+  secs = secs || (/…$/.test(text) ? 0 : 3);
+  if (secs) toast.tm = setTimeout(() => t.classList.add("hidden"), secs * 1000);
+}
 async function importIt(file) {
   toast("📥 Importing " + file.name + "…");
   try { const rec = await importFile(file); await refreshFiles(); toast("✓ " + rec.name + " imported! It's in Toolbox > My imports.", 3); return rec; }
@@ -526,13 +776,26 @@ async function placeFile(f, at) {
   }
 }
 const view = $("view");
-view.addEventListener("dragover", (e) => { const t = [...e.dataTransfer.types]; if (t.includes("text/gv-asset") || t.includes("Files")) { e.preventDefault(); view.classList.add("drop-ok"); } });
+view.addEventListener("dragover", (e) => { const t = [...e.dataTransfer.types]; if (t.includes("text/gv-asset") || t.includes("text/gv-tex") || t.includes("Files")) { e.preventDefault(); view.classList.add("drop-ok"); } });
 view.addEventListener("dragleave", () => view.classList.remove("drop-ok"));
 view.addEventListener("drop", (e) => {
   view.classList.remove("drop-ok");
+  const tex = e.dataTransfer.getData("text/gv-tex");
+  if (tex) { // 🧱 a texture dropped on a part (on any of the selected ones: all of them)
+    e.preventDefault();
+    const h = hitAt(e.clientX, e.clientY);
+    if (!h || !h.id || !obj(h.id)) { toast("Drop a texture right onto a block or part."); return; }
+    setTexture(many() && selIds().includes(h.id) ? selIds() : [h.id], tex);
+    return;
+  }
   if (e.dataTransfer.files && e.dataTransfer.files.length) { // a model or picture dropped from the computer
     e.preventDefault();
     const h = hitAt(e.clientX, e.clientY);
+    const on = h && h.id && obj(h.id), pics = [...e.dataTransfer.files].filter((f) => /\.(png|jpe?g|webp|gif)$/i.test(f.name));
+    if (on && pics.length && texturable(on)) { // (a picture dropped ON a part: it becomes its texture)
+      importIt(pics[0]).then((rec) => { if (rec && rec.kind === "image") { useFile(rec); setTexture(many() && selIds().includes(on.id) ? selIds() : [on.id], "f:" + rec.id); refreshFiles().catch(() => {}); } });
+      return;
+    }
     [...e.dataTransfer.files].slice(0, 5).reduce((p, f) => p.then(() => importAndPlace(f, h ? h.point : null)), Promise.resolve());
     return;
   }
@@ -551,7 +814,7 @@ function drawTree() {
   let html = '<div class="tree-row tree-root' + (selected ? "" : " on") + '" data-id=""><span class="ti">🌐</span><span class="tn">Workspace</span></div>';
   for (const o of game.objects) {
     const a = BY_TYPE[o.type], b = o.b && o.b.k !== "none" ? BEHAVIORS[o.b.k].label.split(" ")[0] : "";
-    html += '<div class="tree-row child' + (o.id === selected ? " on" : "") + '" data-id="' + o.id + '"><span class="ti">' + a.icon + '</span><span class="tn">' + esc(o.name) + "</span>" +
+    html += '<div class="tree-row child' + (o.id === selected || extra.has(o.id) ? " on" : "") + '" data-id="' + o.id + '"><span class="ti">' + a.icon + '</span><span class="tn">' + esc(o.name) + "</span>" +
       (b ? '<span class="tb2">' + esc(b) + "</span>" : "") + "</div>" + scRows(o.id, 2);
   }
   html += '<div class="tree-row tree-root gui-root" data-root="gui"><span class="ti">🖥️</span><span class="tn">ScreenGui</span></div>';
@@ -565,7 +828,7 @@ function drawTree() {
   html += '<div class="tree-row tree-root" data-root="scripts"><span class="ti">📜</span><span class="tn">Game Scripts</span><button type="button" class="tree-add" id="addGameScript" title="Add a script for the whole game">＋</button></div>' + scRows("", 1);
   $("tree").innerHTML = html;
   $("tree").querySelectorAll(".tree-row[data-id]").forEach((r) => {
-    r.onclick = () => select(r.dataset.id || null);
+    r.onclick = (e) => { if ((e.shiftKey || e.ctrlKey || e.metaKey) && r.dataset.id) toggleSel(r.dataset.id); else select(r.dataset.id || null); };
     r.ondblclick = () => { if (r.dataset.id) { select(r.dataset.id); focusSelected(); } };
     r.oncontextmenu = (e) => { e.preventDefault(); if (r.dataset.id) { select(r.dataset.id); thingMenu(r.dataset.id, e.clientX, e.clientY); } else showMenu(e.clientX, e.clientY, [{ icon: "📜", label: "Add Game Script", fn: () => addScript("") }]); };
   });
@@ -591,6 +854,7 @@ function drawProps(numbersOnly) {
     box.querySelectorAll("input[data-k]").forEach((inp) => { if (inp !== document.activeElement) inp.value = o[inp.dataset.k][+inp.dataset.i]; });
     return;
   }
+  if (many()) { if (!numbersOnly) drawManyProps(box); return; }
   if (!o) {
     $("propsFor").textContent = "Workspace";
     const s = game.settings;
@@ -622,6 +886,7 @@ function drawProps(numbersOnly) {
     row("Color", '<input type="color" id="pColor" value="' + o.color + '">') +
     '<div class="row"><span></span><div class="swatches">' + SWATCHES.map((c) => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + c + '"></button>').join("") + "</div></div>" +
     row("Material", '<select id="pMat">' + MATERIALS.map(([k, v]) => '<option value="' + k + '"' + (k === o.mat ? " selected" : "") + ">" + v + "</option>").join("") + "</select>") +
+    (texturable(o) ? row("Texture", texSelect(o)) + (o.tex ? row("Texture size", '<input type="number" id="pTexS" min="0.25" max="64" step="0.5" value="' + (o.texS || 4) + '" title="How many studs one copy of the texture covers (smaller = more, tinier bricks)">') : "") : "") +
     row("Solid", '<input type="checkbox" id="pSolid"' + (o.solid ? " checked" : "") + ' title="Players bump into it">') +
     row("See-through", seeRow("pTransp", o.transp)) +
     row("Visible", '<input type="checkbox" id="pVisible"' + (o.visible ? " checked" : "") + ' title="Shown in Play (invisible walls are handy!)">');
@@ -660,6 +925,13 @@ function drawProps(numbersOnly) {
     $("pAnim").onchange = (e) => edit(() => { if (e.target.value) o.anim = e.target.value; else delete o.anim; }, true);
   }
   if ($("pMonster")) $("pMonster").onclick = () => openMonsterMaker(o);
+  if ($("pTex")) $("pTex").onchange = (e) => {
+    const v = e.target.value;
+    if (v === "+") { e.target.value = o.tex || ""; pickFile(async (file) => { const rec = await importIt(file); if (rec && rec.kind === "image") { useFile(rec); await refreshFiles(); setTexture([o.id], "f:" + rec.id); } else if (rec) alert("That's a 3D model. Pick a picture (PNG or JPG)."); }, ".png,.jpg,.jpeg,.webp,.gif"); return; }
+    const f = myFiles.find((x) => "f:" + x.id === v); if (f) useFile(f);
+    setTexture([o.id], v);
+  };
+  if ($("pTexS")) $("pTexS").onchange = (e) => { pushUndo(); o.texS = clamp(e.target.value, 0.25, 64, 4); rebuild(o); changed(); };
   $("pAnimate").onclick = () => openAnimator(o);
   $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster" || !!o.chase)) delete o.bump; else o.bump = e.target.checked; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
@@ -1256,6 +1528,9 @@ window.addEventListener("keydown", (e) => {
   if (ctrl && k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (ctrl && k === "y") { e.preventDefault(); redo(); return; }
   if (ctrl && k === "d") { e.preventDefault(); duplicate(); return; }
+  if (ctrl && k === "c") { e.preventDefault(); copySel(); return; }
+  if (ctrl && k === "v") { e.preventDefault(); pasteClip(); return; }
+  if (ctrl && k === "a") { e.preventDefault(); selectMany(game.objects.filter((o) => Math.max(o.size[0], o.size[2]) <= 150).map((o) => o.id)); return; }
   if (ctrl && k === "s") { e.preventDefault(); dirty = true; saveNow(); return; }
   if (ctrl) return;
   if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); remove(); return; }
@@ -1296,7 +1571,10 @@ function frame() {
   }
   orbit.update();
   const o = selected && obj(selected);
-  if (o) {
+  if (o && many()) { // (the last one clicked, in a box like the others)
+    const g = groups.get(o.id), b = boundsBox(o, g.position, g.quaternion);
+    selBox.position.copy(b.c); selBox.quaternion.copy(b.q); selBox.scale.set(o.size[0] * g.scale.x + 0.08, o.size[1] * g.scale.y + 0.08, o.size[2] * g.scale.z + 0.08); selBox.visible = true;
+  } else if (o) {
     const g = groups.get(o.id);
     const b = boundsBox(o, g ? g.position : null, g ? g.quaternion : null);
     const sc = g ? g.scale : new THREE.Vector3(1, 1, 1);
@@ -1305,6 +1583,17 @@ function frame() {
     if (tool === "scale" && transform.dragging && dragStartSize) selBox.scale.set(o.size[0] + 0.08, o.size[1] + 0.08, o.size[2] + 0.08);
     selBox.visible = true;
   } else selBox.visible = false;
+  // a blue box around each of the others when many are selected
+  let bi = 0;
+  for (const id of extra) {
+    const eo = obj(id), g = groups.get(id); if (!eo || !g) continue;
+    let bx = extraBoxes[bi]; if (!bx) { bx = selBox.clone(); scene.add(bx); extraBoxes.push(bx); }
+    const b = boundsBox(eo, g.position, g.quaternion);
+    bx.position.copy(b.c); bx.quaternion.copy(b.q); bx.scale.set(eo.size[0] * g.scale.x + 0.08, eo.size[1] * g.scale.y + 0.08, eo.size[2] * g.scale.z + 0.08);
+
+    bx.visible = true; bi++;
+  }
+  for (; bi < extraBoxes.length; bi++) extraBoxes[bi].visible = false;
   world.follow(orbit.target);
   renderer.render(scene, camera);
 }

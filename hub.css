@@ -274,3 +274,7 @@ h2.row-title small { font: 400 14px "Inter", sans-serif; color: var(--dim); }
 /* ---------- passwords ---------- */
 .account { display: flex; gap: 8px; align-items: center; }
 .pw-tip { border: 1px solid var(--gold); border-radius: 10px; padding: 10px 12px; color: var(--cream); background: rgba(255, 197, 49, .08); }
+/* 🛠️ Build studio + 🌍 everyone's cosmetics */
+.mk-modes .mk-tip { width: 100%; color: var(--dim); font-size: 12px; }
+.mk-by { color: var(--dim); font-size: 11px; font-weight: 600; }
+.av-wrap.building .av-stage canvas { cursor: default; }
