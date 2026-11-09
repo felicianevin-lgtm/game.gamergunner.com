@@ -159,7 +159,8 @@ function boneLimbs(root, bones) {
   pickSide(legs.slice(0, 8)).forEach((p, i, a) => out.push(limb(p.b, root, "leg", p.x < 0 ? -1 : 1, (p.x < 0 ? 0 : Math.PI) + (a.length > 2 ? (i >> 1) * Math.PI : 0))));
   pickSide(arms.slice(0, 6)).forEach((p) => out.push(limb(p.b, root, "arm", p.x < 0 ? -1 : 1, p.x < 0 ? 0 : Math.PI)));
   // knees bend a little when the leg swings back
-  for (const L of out) if (L.kind === "leg") { const k = L.j.children.find((c) => c.isBone); if (k) L.knee = limb(k, root, "knee", L.side, 0); }
+  // (and the foot below the knee turns back so it stays flat on the ground)
+  for (const L of out) if (L.kind === "leg") { const k = L.j.children.find((c) => c.isBone); if (k) { L.knee = limb(k, root, "knee", L.side, 0); const f = k.children.find((c) => c.isBone && !/toe/i.test(c.name)); if (f) L.foot = limb(f, root, "foot", L.side, 0); } }
   return out;
 }
 function pieceLimbs(root) {
@@ -197,13 +198,100 @@ function pieceLimbs(root) {
   for (const [k, list] of groups(arms, false)) make(k, list, "arm");
   return out;
 }
+// AUTO-RIG: an imported character that's one solid mesh (no skeleton, no separate leg / arm pieces) gets bones made
+// for it: the shape is measured, the bottom half split into a left and right leg (with knees), and whatever sticks
+// out of the sides of the body above the hips becomes arms. Each point of the mesh follows the bone it's in, blended
+// softly at the hips and shoulders, so the legs and arms really bend. Only for upright, person-or-animal shapes.
+const _w = new THREE.Vector3(), _mm = new THREE.Matrix4();
+function autoRig(root) {
+  root.updateWorldMatrix(true, true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), meshes = [];
+  let count = 0;
+  root.traverse((m) => { if (m.isMesh && !m.isSkinnedMesh && m.geometry && m.geometry.attributes.position) { meshes.push(m); count += m.geometry.attributes.position.count; } });
+  if (!meshes.length || count > 250000) return false;
+  // where every point is (in the model's own space)
+  const pts = meshes.map((m) => { _mm.multiplyMatrices(inv, m.matrixWorld); const a = m.geometry.attributes.position, out = new Float32Array(a.count * 3); for (let i = 0; i < a.count; i++) { _w.fromBufferAttribute(a, i).applyMatrix4(_mm); out[i * 3] = _w.x; out[i * 3 + 1] = _w.y; out[i * 3 + 2] = _w.z; } return out; });
+  const B = new THREE.Box3(); for (const p of pts) for (let i = 0; i < p.length; i += 3) B.expandByPoint(_w.set(p[i], p[i + 1], p[i + 2]));
+  const S = B.getSize(new THREE.Vector3()), C = B.getCenter(new THREE.Vector3());
+  if (S.y < 0.6 * Math.max(S.x, S.z) && S.y < 0.4 * (S.x + S.z)) return false; // (flat or long things aren't people)
+  const y0 = B.min.y, hipY = y0 + 0.47 * S.y, kneeY = y0 + 0.25 * S.y, shY = y0 + 0.8 * S.y;
+  // where each leg is, and how wide the legs are
+  let legX = [0, 0], legN = [0, 0], legOut = 0, maxX = 0;
+  for (const p of pts) for (let i = 0; i < p.length; i += 3) {
+    const x = p[i] - C.x, y = p[i + 1];
+    maxX = Math.max(maxX, Math.abs(x));
+    if (y < kneeY) { const s = x < 0 ? 0 : 1; legX[s] += x; legN[s]++; }
+    if (y > y0 + 0.18 * S.y && y < y0 + 0.32 * S.y) legOut = Math.max(legOut, Math.abs(x));
+  }
+  if (!legN[0] || !legN[1] || maxX < 1e-4) return false;
+  // where the arms start, on each side: across the chest, the body's surface is solid out to its edge, then there's a
+  // gap, then the arm. (No gap, like arms pressed to the body: a bit past the legs.)
+  const BINS = 48, cover = [new Uint8Array(BINS), new Uint8Array(BINS)], cy0 = hipY + 0.08 * S.y, cy1 = shY - 0.04 * S.y;
+  meshes.forEach((m, mi) => {
+    const p = pts[mi], idx = m.geometry.index, tri = idx ? idx.count / 3 : p.length / 9;
+    for (let f = 0; f < tri; f++) {
+      let lo = Infinity, hi = -Infinity, ylo = Infinity, yhi = -Infinity;
+      for (let v = 0; v < 3; v++) { const k = idx ? idx.getX(f * 3 + v) : f * 3 + v, x = p[k * 3] - C.x, y = p[k * 3 + 1]; lo = Math.min(lo, x); hi = Math.max(hi, x); ylo = Math.min(ylo, y); yhi = Math.max(yhi, y); }
+      if (yhi < cy0 || ylo > cy1) continue;
+      for (const s of [0, 1]) {
+        const a = s ? Math.max(0, lo) : Math.max(0, -hi), b = s ? hi : -lo;
+        if (b < 0 || b < a) continue;
+        for (let i = Math.floor((a / maxX) * (BINS - 1)); i <= Math.min(BINS - 1, Math.ceil((b / maxX) * (BINS - 1))); i++) cover[s][i] = 1;
+      }
+    }
+  });
+  const armAt = [0, 1].map((s) => {
+    const c = cover[s]; let i = 0;
+    while (i < BINS && c[i]) i++;           // (the body)
+    let j = i; while (j < BINS && !c[j]) j++; // (the gap)
+    return i > 1 && j < BINS && j > i ? ((i + j) / 2 / (BINS - 1)) * maxX : Math.max(legOut * 1.15, 0.3 * maxX);
+  });
+  const lx = [legX[0] / legN[0], legX[1] / legN[1]], blend = 0.05 * S.y;
+  // the bones: body > hips > knees, body > shoulders
+  const mk = (name, parent, x, y, z) => { const b = new THREE.Bone(); b.name = name; parent.add(b); b.position.set(x, y, z); return b; };
+  const body = new THREE.Bone(); body.name = "auto_body"; root.add(body); body.position.set(C.x, hipY, C.z);
+  const thighs = [0, 1].map((s) => mk("thigh_" + "LR"[s], body, lx[s], 0, 0));
+  const shins = [0, 1].map((s) => mk("shin_" + "LR"[s], thighs[s], 0, kneeY - hipY, 0));
+  const arms = [0, 1].map((s) => mk("upperarm_" + "LR"[s], body, (s ? 1 : -1) * armAt[s], shY - hipY - 0.03 * S.y, 0));
+  const bones = [body, ...thighs, ...shins, ...arms]; // (indexes: 0 body, 1-2 thighs, 3-4 shins, 5-6 arms)
+  root.updateWorldMatrix(true, true);
+  const skeleton = new THREE.Skeleton(bones);
+  const sm = (t) => t * t * (3 - 2 * t), ramp = (v, a, b) => sm(Math.min(1, Math.max(0, (v - a) / (b - a))));
+  meshes.forEach((m, mi) => {
+    const p = pts[mi], n = p.length / 3, si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      const x = p[i * 3] - C.x, y = p[i * 3 + 1], side = x < 0 ? 0 : 1;
+      const arm = ramp(Math.abs(x), armAt[side] - 0.01 * S.x, armAt[side] + 0.03 * S.x) *ramp(y, hipY - 0.12 * S.y, hipY) * (1 - ramp(y, shY + 0.06 * S.y, shY + 0.1 * S.y));
+      const leg = (1 - ramp(y, hipY - blend, hipY + blend)) * (1 - arm);
+      const shin = 1 - ramp(y, kneeY - blend, kneeY + blend);
+      // up to 3 bones per point: the body, the arm, the thigh or shin
+      si[i * 4] = 0; sw[i * 4] = Math.max(0, 1 - arm - leg);
+      si[i * 4 + 1] = 5 + side; sw[i * 4 + 1] = arm;
+      si[i * 4 + 2] = shin > 0.5 ? 3 + side : 1 + side; sw[i * 4 + 2] = leg;
+      si[i * 4 + 3] = 0; sw[i * 4 + 3] = 0;
+    }
+    const g = m.geometry.clone();
+    g.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4));
+    g.setAttribute("skinWeight", new THREE.Float32BufferAttribute(sw, 4));
+    const s = new THREE.SkinnedMesh(g, m.material);
+    s.name = m.name; s.position.copy(m.position); s.quaternion.copy(m.quaternion); s.scale.copy(m.scale);
+    s.castShadow = m.castShadow; s.receiveShadow = m.receiveShadow; s.frustumCulled = false;
+    m.parent.add(s); m.parent.remove(m);
+    s.updateWorldMatrix(true, false);
+    s.bind(skeleton, s.matrixWorld.clone());
+  });
+  return true;
+}
+
 // The limbs of a built thing (inner = world.js's scaled group). Imported models are found once they finish loading.
 export function findLimbs(inner) {
   const src = inner.userData.copy || (inner.userData.model ? null : inner);
   if (!src) return null;
   if (inner.userData.limbs && inner.userData.limbsFor === src) return inner.userData.limbs;
   const bones = []; src.traverse((o) => { if (o.isBone) bones.push(o); });
-  const limbs = bones.length ? boneLimbs(src, bones) : pieceLimbs(src);
+  let limbs = bones.length ? boneLimbs(src, bones) : pieceLimbs(src);
+  // an imported model with nothing found: give it bones (autoRig), then use those
+  if (!bones.length && !limbs.length && inner.userData.copy && autoRig(src)) { const b2 = []; src.traverse((o) => { if (o.isBone) b2.push(o); }); limbs = boneLimbs(src, b2); }
   inner.userData.limbs = limbs; inner.userData.limbsFor = src;
   return limbs;
 }
@@ -230,7 +318,7 @@ export function animateThing(inner, h, t, walk, mo) {
   const limbs = inner.userData.mixing ? null : findLimbs(inner); // (a playing model animation moves the bones itself)
   if (!limbs) return;
   for (const L of limbs) {
-    if (L.kind === "leg") { const a = b.leg(L.phase, L.side); turn(L, a.x, 0); if (L.knee) turn(L.knee, Math.max(0, -a.x) * 0.9, 0); }
+    if (L.kind === "leg") { const a = b.leg(L.phase, L.side), k = Math.max(0, -a.x) * 0.9; turn(L, a.x, 0); if (L.knee) turn(L.knee, -k, 0); if (L.foot) turn(L.foot, (k - a.x) * 0.8, 0); } // (+ = swings forward, so a knee bends with -)
     else if (L.kind === "arm") { const a = b.arm(L.phase, L.side); turn(L, a.x, a.z); }
   }
 }

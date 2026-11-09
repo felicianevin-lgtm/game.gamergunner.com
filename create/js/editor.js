@@ -23,6 +23,7 @@ import { openScript, closeScript, scriptOpen, starterCode, flushScript } from ".
 import { api, account, RELAY } from "./net.js";
 import { describe, buildMonster, monsterSize, sanitizeMonster, SURPRISE } from "./monster.js";
 import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount } from "./motion.js";
+import { CHASE_SOUNDS, SCARE_FX, FLASHES, SCARE_SOUNDS, SCARE_WHEN, DEFAULT_CHASE, DEFAULT_SCARE, sanitizeChase, sanitizeScare, playScare } from "./scare.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -645,6 +646,7 @@ function drawProps(numbersOnly) {
   html += '<div class="group-title">Animation</div><p class="note">' + (mo ? (GAITS[mo.g].icon + " " + esc(GAITS[mo.g].label) + " · " + IDLES[mo.i].icon + " " + esc(IDLES[mo.i].label) + " · " + esc(WHEN[mo.w])) : "No animation yet. Any thing can walk, dance, wave, hop…") + "</p>" +
     '<button type="button" class="btn add-script" id="pAnimate">🎬 Animation…</button>' +
     row("Walls stop it", '<input type="checkbox" id="pBump"' + (bumps(o) ? " checked" : "") + ' title="When a script moves it, it bumps into walls and stands on floors instead of going through">');
+  html += monsterProps(o);
   html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>" + scriptBox(o.id);
   box.innerHTML = html;
   wireScriptBox(o.id);
@@ -659,8 +661,9 @@ function drawProps(numbersOnly) {
   }
   if ($("pMonster")) $("pMonster").onclick = () => openMonsterMaker(o);
   $("pAnimate").onclick = () => openAnimator(o);
-  $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster")) delete o.bump; else o.bump = e.target.checked; changed(); };
+  $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster" || !!o.chase)) delete o.bump; else o.bump = e.target.checked; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
+  wireMonsterProps(o);
 
   const edit = (fn, look) => { pushUndo(); fn(); if (look) rebuild(o); else placeObject(groups.get(o.id), o); changed(); };
   $("pObjName").onchange = (e) => { pushUndo(); o.name = e.target.value.trim() || a.label; $("propsFor").textContent = o.name; changed(); };
@@ -981,7 +984,63 @@ function openMonsterMaker(o) {
 // ---------------------------------------------------------------- 🎬 Animation (motion.js) for ANY thing
 // Pick a walk style and a standing-still move from the presets; the legs and arms are found by themselves and the
 // preview shows it walking or standing. "Walls stop it" (obj.bump) is next to it in Properties.
-function bumps(o) { return typeof o.bump === "boolean" ? o.bump : o.type === "monster"; }
+// ---------------------------------------------------------------- 👾 Monster + 😱 Jump scare for ANY thing (scare.js)
+// Tick a box in Properties and the settings show up right there. play.js does the chasing and the scares.
+function monsterProps(o) {
+  const slide = (k, label, lo, hi, step, v, show) => '<label class="slide"><span>' + label + ": <b data-show=\"" + k + '">' + show(v) + '</b></span><input type="range" data-sl="' + k + '" min="' + lo + '" max="' + hi + '" step="' + step + '" value="' + v + '"></label>';
+  const chips = (k, list, v) => '<div class="chips">' + Object.entries(list).map(([key, l]) => '<button type="button" data-chip="' + k + '" data-v="' + key + '" class="' + (key === v ? "on" : "") + '"' + (l.note ? ' title="' + esc(l.note) + '"' : "") + ">" + (l.icon ? l.icon + " " + esc(l.label) : esc(l)) + "</button>").join("") + "</div>";
+  const c = o.chase, s = o.scare;
+  let html = '<div class="group-title">👾 Monster</div><label class="big-check"><input type="checkbox" id="pChase"' + (c ? " checked" : "") + "> It chases players</label>";
+  if (c) html += '<div class="mon-box">' +
+    slide("c.sp", "Speed", 1, 40, 0.5, c.sp, (v) => v + (v < 6 ? " (slow)" : v < 15 ? "" : " (fast!)")) +
+    slide("c.dmg", "Damage per hit", 0, 100, 5, c.dmg, (v) => (v ? v + " of 100 health" : "none (it just chases)")) +
+    slide("c.r", "Starts chasing when you're closer than", 0, 150, 5, c.r, (v) => (v ? v + " studs" : "always chasing")) +
+    '<div class="lbl">Sound when it hits</div>' + chips("c.snd", CHASE_SOUNDS, c.snd) +
+    '<label class="tick"><input type="checkbox" data-tick="c.face"' + (c.face ? " checked" : "") + "> Turns to face you</label>" +
+    '<p class="note">Walls stop it (see Animation above). Pick a walk in 🎬 Animation, its legs and arms move by themselves.</p></div>';
+  else html += '<p class="note">Tick it and this hunts the player: speed, damage and more pop up here.</p>';
+  html += '<div class="group-title">😱 Jump scare</div><label class="big-check"><input type="checkbox" id="pScare"' + (s ? " checked" : "") + "> Jump scare</label>";
+  if (s) html += '<div class="mon-box">' +
+    '<div class="lbl">When</div>' + chips("s.when", SCARE_WHEN, s.when) +
+    (s.when === "near" ? slide("s.r", "How close", 2, 60, 1, s.r, (v) => v + " studs") : "") +
+    '<div class="lbl">Animation</div>' + chips("s.fx", SCARE_FX, s.fx) +
+    '<div class="lbl">Flash</div>' + chips("s.flash", FLASHES, s.flash) +
+    '<div class="lbl">Sound</div>' + chips("s.snd", SCARE_SOUNDS, s.snd) +
+    slide("s.secs", "How long", 0.5, 4, 0.1, s.secs, (v) => v + " s") +
+    '<div class="lbl">What jumps out</div>' + pictureSelect("pScarePic", s.pic).replace("(pick a picture)", "This thing itself") +
+    '<label class="tick"><input type="checkbox" data-tick="s.hide"' + (s.hide ? " checked" : "") + "> Hidden until it jumps out</label>" +
+    '<label class="tick"><input type="checkbox" data-tick="s.again"' + (s.again ? " checked" : "") + "> Every time (not just once)</label>" +
+    '<button type="button" class="btn add-script" id="pScareTry">▶ Try it</button></div>';
+  else html += '<p class="note">Tick it, pick an animation, and press ▶ Try it.</p>';
+  return html;
+}
+function wireMonsterProps(o) {
+  const box = $("props");
+  const target = (key) => (key[0] === "c" ? o.chase : o.scare);
+  const save = (fn) => { pushUndo(); fn(); if (o.chase) o.chase = sanitizeChase(o.chase); if (o.scare) o.scare = sanitizeScare(o.scare); changed(); };
+  $("pChase").onchange = (e) => save(() => {
+    if (!e.target.checked) { delete o.chase; return; }
+    o.chase = { ...DEFAULT_CHASE };
+    if (!o.mo && o.type !== "monster") o.mo = sanitizeMotion({ g: "walk", i: "breathe", w: "move" }); // (so it walks, not slides)
+  }) || drawProps();
+  $("pScare").onchange = (e) => save(() => { if (e.target.checked) o.scare = { ...DEFAULT_SCARE }; else delete o.scare; }) || (rebuild(o), drawProps());
+  box.querySelectorAll("[data-sl]").forEach((inp) => {
+    const [w, k] = inp.dataset.sl.split("."), show = box.querySelector('[data-show="' + inp.dataset.sl + '"]');
+    inp.oninput = () => { const v = Number(inp.value); target(w)[k] = v; show.textContent = { "c.sp": v + (v < 6 ? " (slow)" : v < 15 ? "" : " (fast!)"), "c.dmg": v ? v + " of 100 health" : "none (it just chases)", "c.r": v ? v + " studs" : "always chasing", "s.r": v + " studs", "s.secs": v + " s" }[inp.dataset.sl]; };
+    inp.onchange = () => save(() => {});
+  });
+  box.querySelectorAll("[data-chip]").forEach((b) => (b.onclick = () => { const [w, k] = b.dataset.chip.split("."); save(() => { target(w)[k] = b.dataset.v; }); drawProps(); if (w === "s" && k === "fx") tryScare(o); }));
+  box.querySelectorAll("[data-tick]").forEach((inp) => (inp.onchange = () => { const [w, k] = inp.dataset.tick.split("."); save(() => { target(w)[k] = inp.checked ? 1 : 0; }); }));
+  if ($("pScarePic")) wirePicture($("pScarePic"), o.scare.pic, (id) => { save(() => { o.scare.pic = id; }); drawProps(); });
+  if ($("pScareTry")) $("pScareTry").onclick = () => tryScare(o);
+}
+function tryScare(o) {
+  if (!o.scare) return;
+  let thing = null;
+  try { if (!o.scare.pic) thing = buildObject(o); } catch {}
+  playScare(thing, o, o.scare.pic ? fileUrl(o.scare.pic) : null);
+}
+function bumps(o) { return typeof o.bump === "boolean" ? o.bump : o.type === "monster" || !!o.chase; }
 function openAnimator(o) {
   if (!game || !o) return;
   const had = motionOf(o);

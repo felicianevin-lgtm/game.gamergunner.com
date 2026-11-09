@@ -16,6 +16,7 @@ import { filterText } from "./filter.js";
 import { buildAvatar, animateAvatar, loadAvatar } from "./avatar.js";
 import { fileUrl, updateMixers, clearMixers } from "./files.js";
 import { animateThing, motionOf, withPlay } from "./motion.js";
+import { playScare, scareSound, stopScare } from "./scare.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -34,13 +35,13 @@ export function startPlay(world, game, opts) {
   // ---------------------------------------------------------------- the things in the game
   function makeEnt(o) {
     const g = buildObject(o);
-    g.visible = o.visible;
+    g.visible = o.visible && !(o.scare && o.scare.hide); // (a hidden jump scare only shows when it jumps out)
     world.root.add(g);
     const e = { o, g, k: o.b.k, base: g.position.clone(), baseQ: g.quaternion.clone(), offset: new THREE.Vector3(), done: false, off: false, prevPos: g.position.clone(), prevQ: g.quaternion.clone() };
     e.moving = ["spin", "move", "door", "car"].includes(e.k);
     e.boxes = o.solid ? worldBoxes(o) : [];
     e.bounds = boundsBox(o);
-    e.walker = typeof o.bump === "boolean" ? o.bump : o.type === "monster"; // (walls stop it when a script moves it)
+    e.walker = typeof o.bump === "boolean" ? o.bump : o.type === "monster" || !!o.chase; // (walls stop it when it moves)
     if (e.walker) { e.vy = 0; e.home = g.position.clone(); }
     e.clip = !!(o.anim && o.type === "model"); // (an imported model playing its own animation)
     return e;
@@ -347,7 +348,9 @@ export function startPlay(world, game, opts) {
     // moving things first (so riders move with them); things scripts move count too
     for (const e of ents) if (e.moving || e.scripted) { e.prevPos.copy(e.g.position); e.prevQ.copy(e.g.quaternion); }
     applyScripts();
+    for (const e of ents) if (e.o.chase && !e.off && e !== driving) chaseStep(e, dt);
     for (const e of ents) if (e.walker && !e.off && e !== driving) stepWalker(e, dt);
+    checkScares();
     for (const e of ents) {
       if (!e.moving || e === driving) continue;
       const b = e.o.b;
@@ -411,10 +414,11 @@ export function startPlay(world, game, opts) {
     for (const e of ents) if (e.k === "coin" && !e.done && !e.scripted) e.g.quaternion.copy(e.baseQ).premultiply(q.setFromAxisAngle(Y, time * 2.5));
     // touch Switches + parts whose scripts wait for a touch (they fire once each time you step on)
     for (const e of ents) {
-      if (!(e.k === "switch" && e.o.b.how === "touch") && !wantTouch.has(e.o.id)) continue;
+      if (!(e.k === "switch" && e.o.b.how === "touch") && !wantTouch.has(e.o.id) && !(e.o.scare && e.o.scare.when === "touch")) continue;
       const now = !e.off && e.bounds.c.distanceToSquared(pos) < (e.bounds.h.length() + 4) ** 2 && touches(e.bounds, 0.15);
       if (now && !e.touching) { if (e.k === "switch" && e.o.b.how === "touch") flip(e); if (host && wantTouch.has(e.o.id)) host.event("touch", e.o.id); }
       if (!now && e.touching && host && wantTouch.has(e.o.id)) host.event("untouch", e.o.id);
+      if (now && !e.touching && e.o.scare && e.o.scare.when === "touch") scareFrom(e);
       e.touching = now;
     }
     if (host) host.tick(dt, { x: r3(pos.x), y: r3(pos.y), z: r3(pos.z), ry: r3(facing / D2R), coins, health: sc.health }, movedList());
@@ -519,6 +523,56 @@ export function startPlay(world, game, opts) {
   // WALKERS: monsters (and things with "Walls stop it" on) don't go through walls. A script's small moves (follow,
   // moveToward, forward...) become walking: the thing slides along walls, steps up low steps, falls with gravity and
   // stands on whatever is under it. Big jumps (moveTo far away) still teleport. Flying things skip gravity.
+  // 👾 CHASERS (Properties > Monster, obj.chase): anything can hunt the player. It walks at them (walls stop it unless
+  // "Walls stop it" is off), turns to face them, and each hit hurts and knocks them back. With a "starts chasing" distance
+  // it waits until you come close, and gives up once you get far enough away.
+  function chaseStep(e, dt) {
+    const c = e.o.chase, p = e.g.position;
+    e.hitCool = Math.max(0, (e.hitCool || 0) - dt);
+    if (won || lost) return;
+    const dx = pos.x - p.x, dz = pos.z - p.z, d = Math.hypot(dx, dz);
+    e.hunting = !c.r || d < (e.hunting ? c.r * 1.5 : c.r);
+    if (!e.hunting || d < 1e-3) return;
+    const reach = Math.max(e.o.size[0], e.o.size[2]) / 2 + 0.4;
+    if (d > reach) {
+      const step = Math.min(c.sp * dt, d - reach), nx = p.x + (dx / d) * step, nz = p.z + (dz / d) * step;
+      if (e.walker) e.want = new THREE.Vector3(nx, flies(e) ? pos.y : p.y, nz);
+      else { p.x = nx; p.z = nz; e.o.pos = [p.x, p.y, p.z]; refreshBoxes(e); }
+    }
+    if (c.face) { // (its front, -z, turns toward you; any tilt it was placed with stays)
+      if (e.yawNow == null) { e.baseYaw = e.o.rot[1] * D2R; e.yawNow = e.baseYaw; e.tiltQ = new THREE.Quaternion().setFromAxisAngle(Y, -e.baseYaw).multiply(e.baseQ); }
+      e.yawNow += angleDiff(e.yawNow, Math.atan2(-dx, -dz)) * Math.min(1, dt * 6);
+      e.g.quaternion.setFromAxisAngle(Y, e.yawNow).multiply(e.tiltQ);
+      e.o.rot = [e.o.rot[0], e.yawNow / D2R, e.o.rot[2]];
+      refreshBoxes(e);
+    }
+    if (c.dmg > 0 && e.hitCool <= 0 && !mods.god && !driving && touches(e.bounds, 0.3)) {
+      e.hitCool = 1;
+      scareSound(c.snd);
+      vel.x += (dx / d) * 14; vel.z += (dz / d) * 14; vel.y = Math.max(vel.y, 9); grounded = false;
+      sc.health -= c.dmg; sc.showHealth = true;
+      if (sc.health <= 0) { sc.health = 100; respawn("A monster got you!"); } else showMsg("Ouch! -" + c.dmg, 0.8);
+      if (e.o.scare && e.o.scare.when === "touch") scareFrom(e);
+    }
+  }
+  // 😱 JUMP SCARES (Properties > Jump scare, obj.scare): when a player comes close (or touches it) the thing (or a picture)
+  // jumps at the screen (scare.js). Once per game unless "every time" is on.
+  function scareFrom(e) {
+    const s = e.o.scare;
+    if ((e.scared && !s.again) || time < (e.scareAt || 0) || won) return;
+    e.scared = true; e.scareAt = time + s.secs + 3;
+    let thing = null;
+    try { if (!s.pic) thing = buildObject(e.o); } catch {}
+    playScare(thing, e.o, s.pic ? fileUrl(s.pic) : null);
+  }
+  function checkScares() {
+    for (const e of ents) {
+      const s = e.o.scare;
+      if (!s || s.when !== "near" || e.off || (e.scared && !s.again)) continue;
+      const half = Math.max(e.o.size[0], e.o.size[2]) / 2;
+      if (Math.hypot(e.bounds.c.x - pos.x, e.bounds.c.z - pos.z) - half < s.r && Math.abs(e.bounds.c.y - pos.y) < s.r + e.o.size[1]) scareFrom(e);
+    }
+  }
   function flies(e) {
     const mo = withPlay(motionOf(e.o), e.play);
     return !!(mo && (mo.w === "idle" ? mo.i === "fly" : mo.g === "fly" || (mo.w === "move" && mo.i === "fly"))) || !!(e.o.mon && (e.o.mon.float || e.o.mon.ghost));
@@ -716,6 +770,7 @@ export function startPlay(world, game, opts) {
   function stop(again) {
     if (!running) return;
     running = false;
+    stopScare();
     if (host) host.stop();
     if (devPanel) devPanel.remove();
     clearMixers();
