@@ -17,6 +17,7 @@ import { buildAvatar, animateAvatar, loadAvatar } from "./avatar.js";
 import { fileUrl, updateMixers, clearMixers } from "./files.js";
 import { animateThing, motionOf, withPlay } from "./motion.js";
 import { playScare, scareSound, stopScare } from "./scare.js";
+import { sanitize, newObj } from "./game.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -63,7 +64,7 @@ export function startPlay(world, game, opts) {
   let coins = 0, time = 0, won = false, lost = false, driving = null, msgTimer = 0, viewCam = null;
   const mods = { speed: false, jump: false, gravity: false, fly: false, god: false }; // (GUI buttons + dev menu)
   const sc = { speed: 1, jump: 1, frozen: false, health: 100, showHealth: false }; // (set by scripts)
-  const totalCoins = ents.filter((e) => e.k === "coin").reduce((n, e) => n + (Number(e.o.b.points) || 1), 0);
+  let totalCoins = ents.filter((e) => e.k === "coin").reduce((n, e) => n + (Number(e.o.b.points) || 1), 0);
 
   // ---------------------------------------------------------------- input
   const keys = new Set();
@@ -695,7 +696,8 @@ export function startPlay(world, game, opts) {
     return m;
   }
   const NUM = (v, lo, hi) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : null);
-  let clones = 0;
+  let clones = 0, builds = 0;
+  const BUILDABLE = new Set(["block", "ball", "cylinder", "wedge", "plate", "coin", "light", "lamp", "lava", "jumppad", "crate", "barrel", "cone", "rock", "bush", "tree", "pine", "sign", "checkpoint", "door", "stairs", "fence", "wall", "spinner", "mover"]);
   function rebuildEnt(e) {
     const g2 = buildObject(e.o);
     g2.position.copy(e.g.position); g2.quaternion.copy(e.g.quaternion); g2.visible = e.g.visible;
@@ -741,6 +743,14 @@ export function startPlay(world, game, opts) {
         const o = JSON.parse(JSON.stringify(e.o)); o.id = b;
         const n = makeEnt(o); n.g.position.copy(e.g.position); n.g.quaternion.copy(e.g.quaternion); n.base.copy(n.g.position);
         ents.push(n); entById.set(b, n);
+      } else if (k === "build" && typeof a === "string" && /^b\d{1,6}$/.test(a) && !entById.has(a) && builds < 2500 && b && typeof b === "object") {
+        builds++; // (a script's build(): cleaned like a saved game, so only real parts with sensible sizes)
+        const raw = { id: a, type: BUILDABLE.has(b.type) ? b.type : "block", name: b.name, pos: b.pos, rot: [0, b.ry, 0], size: b.size, solid: b.solid, visible: b.visible, mat: b.mat || undefined, tex: b.tex, texS: b.texS, texFit: b.fit, text: b.text || undefined };
+        raw.b = newObj(raw.type).b; // (its normal behavior: coins are collected, lava hurts, lights glow...)
+        if (/^#[0-9a-f]{6}$/i.test(b.color || "")) raw.color = b.color; else if (b.tex) raw.color = "#ffffff";
+        const o = sanitize({ objects: [raw] }).objects[0]; if (!o) continue;
+        const n = makeEnt(o); ents.push(n); entById.set(a, n);
+        if (n.k === "coin") totalCoins += Number(o.b.points) || 1;
       } else if (k === "destroy") {
         if (e) { world.root.remove(e.g); ents.splice(ents.indexOf(e), 1); entById.delete(a); if (e === viewCam) lookThrough(null); if (groundEnt === e) groundEnt = null; }
         else if (g) { gui.splice(gui.indexOf(g), 1); guiById.delete(a); guiDirty = true; }

@@ -28,7 +28,8 @@ export const HELP = [
     ["player.damage(25)", "Hurt the player (health starts at 100)"], ["player.health = 100", "Set the health"],
     ["player.freeze()", "Stop the player from moving (player.unfreeze() lets go)"], ["player.coins", "How many coins they have"], ["player.x", "Where the player is: player.x, player.y, player.z"]]],
   ["Finding things", [
-    ["find(\"Door\")", "Get a part or GUI by its name (the name in the Explorer)"], ["findAll(\"Coin\")", "Get every thing with that name"]]],
+    ["find(\"Door\")", "Get a part or GUI by its name (the name in the Explorer)"], ["findAll(\"Coin\")", "Get every thing with that name"],
+    ["build(\"block\", { x: 0, y: 0, z: 0, width: 4, height: 6, depth: 1, color: \"#ff0000\" })", "Build a new part while the game runs (also: texture, textureSize, stretch, material, solid, name, turn). Types: block, ball, cylinder, wedge, coin, light, lava, crate..."]]],
   ["Time", [
     ["after(2, function () {\n  \n})", "Do something after 2 seconds"], ["every(1, function () {\n  \n})", "Do something every second"],
     ["onUpdate(function (dt) {\n  \n})", "Do something every frame (dt = seconds since the last frame)"], ["await wait(1)", "Wait 1 second, then keep going"]]],
@@ -41,15 +42,104 @@ export const HELP = [
     ["game.time", "Seconds since the game started"], ["random(1, 10)", "A random whole number"], ["shared.score = 0", "\"shared\" is the same for every script (keep scores here)"]]],
 ];
 
-// (the Backrooms starter's game script, also in the Examples list)
-export const BACKROOMS_CODE = `// THE BACKROOMS: the lights buzz and flicker, and you get a warning when the Entity is close.
-game.sky = "backrooms"
-say("You noclipped out of reality... Find the EXIT before the Entity finds you!", 5)
+// (the script in the Backrooms game from create/?new=backrooms, also in the Examples list: it builds the whole maze)
+export const BACKROOMS_CODE = `// THE BACKROOMS MAZE BUILDER
+// This script builds the whole Backrooms when the game starts: a NEW maze every time you play!
+// Change these numbers to change your Backrooms:
+const ROOMS = 19        // how many rooms across (use an odd number: you start in the middle). Bigger = more lost!
+const ROOM = 14         // how wide each room is (studs)
+const HEIGHT = 11       // how high the ceiling is
+const OPEN = 0.35       // how many extra walls get knocked out (0 = a real maze, 0.6 = big open rooms)
+const LIGHTS = 0.6      // how many rooms get a ceiling light (0 = none, 1 = every room)
+const BOTTLES = 12      // how many Almond Water bottles are hidden
 
-const lights = findAll("Ceiling Light")
+const SIZE = ROOMS * ROOM, HALF = SIZE / 2
+function middle(i) { return -HALF + ROOM / 2 + i * ROOM }   // the middle of room number i
+function chance(n) { return Math.random() < n }
+
+// 1. the carpet and the ceiling
+build("block", { name: "Carpet", x: 0, y: -1, z: 0, width: SIZE + 2, height: 1, depth: SIZE + 2, texture: "oldcarpet", textureSize: 6 })
+build("block", { name: "Ceiling", x: 0, y: HEIGHT, z: 0, width: SIZE + 2, height: 1, depth: SIZE + 2, texture: "ceiling", textureSize: 4 })
+
+// 2. carve a maze: start in the middle room and wander around knocking down walls (so every room can be reached)
+const east = [], south = [], seen = []   // east[i][j] = a wall on the east side of room i, j (south = its south side)
+for (let i = 0; i < ROOMS; i++) {
+  east.push([]); south.push([]); seen.push([])
+  for (let j = 0; j < ROOMS; j++) { east[i].push(true); south[i].push(true); seen[i].push(false) }
+}
+const start = Math.floor(ROOMS / 2)
+const path = [[start, start]]
+seen[start][start] = true
+while (path.length > 0) {
+  const [i, j] = path[path.length - 1]
+  const next = [[i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]].filter(function ([a, b]) {
+    return a >= 0 && b >= 0 && a < ROOMS && b < ROOMS && !seen[a][b]
+  })
+  if (next.length === 0) { path.pop(); continue }
+  const [a, b] = next[random(0, next.length - 1)]
+  if (a > i) east[i][j] = false
+  else if (a < i) east[a][b] = false
+  else if (b > j) south[i][j] = false
+  else south[a][b] = false
+  seen[a][b] = true
+  path.push([a, b])
+}
+// knock out some more walls so it feels like big, confusing rooms
+for (let i = 0; i < ROOMS; i++) for (let j = 0; j < ROOMS; j++) {
+  if (chance(OPEN)) east[i][j] = false
+  if (chance(OPEN)) south[i][j] = false
+}
+
+// 3. build the walls (walls in a row become one long wall)
+function wall(x, z, w, d) {
+  build("block", { name: "Wall", x: x, y: 0, z: z, width: w, height: HEIGHT, depth: d, texture: "wallpaper", textureSize: 6 })
+}
+wall(0, -HALF, SIZE + 2, 1); wall(0, HALF, SIZE + 2, 1); wall(-HALF, 0, 1, SIZE); wall(HALF, 0, 1, SIZE)   // the outside
+for (let i = 0; i < ROOMS - 1; i++) {
+  let j = 0
+  while (j < ROOMS) {
+    if (!east[i][j]) { j++; continue }
+    let k = j
+    while (k + 1 < ROOMS && east[i][k + 1]) k++
+    wall(middle(i) + ROOM / 2, (middle(j) + middle(k)) / 2, 1, (k - j + 1) * ROOM + 1)
+    j = k + 1
+  }
+}
+for (let j = 0; j < ROOMS - 1; j++) {
+  let i = 0
+  while (i < ROOMS) {
+    if (!south[i][j]) { i++; continue }
+    let k = i
+    while (k + 1 < ROOMS && south[k + 1][j]) k++
+    wall((middle(i) + middle(k)) / 2, middle(j) + ROOM / 2, (k - i + 1) * ROOM + 1, 1)
+    i = k + 1
+  }
+}
+
+// 4. pillars and buzzing ceiling lights
+const lights = []
+for (let i = 0; i < ROOMS; i++) for (let j = 0; j < ROOMS; j++) {
+  if (chance(0.1) && !(i === start && j === start)) {
+    build("block", { name: "Pillar", x: middle(i), y: 0, z: middle(j), width: 2, height: HEIGHT, depth: 2, texture: "wallpaper", textureSize: 6 })
+  }
+  if (chance(LIGHTS)) {
+    lights.push(build("block", { name: "Ceiling Light", x: middle(i) + 3, y: HEIGHT - 0.15, z: middle(j), width: 3, height: 0.2, depth: 6, color: "#fff8dc", material: "neon", solid: false }))
+  }
+}
+
+// 5. hide the Almond Water
+for (let n = 0; n < BOTTLES; n++) {
+  build("coin", { name: "Almond Water", x: middle(random(0, ROOMS - 1)) - 3, y: 1.5, z: middle(random(0, ROOMS - 1)) - 3 })
+}
+
+// 6. the Entity starts in a far corner... and hunts you
 const entity = find("Entity")
+entity.moveTo(middle(0), 0, middle(0))
 
-// every so often a random light blinks off for a moment
+game.sky = "backrooms"
+say("You noclipped out of reality... Find all the Almond Water. Don't let the Entity find you!", 5)
+
+// a random light blinks off for a moment
 every(0.3, function () {
   const light = lights[random(0, lights.length - 1)]
   if (!light) return
@@ -67,15 +157,19 @@ every(15, function () {
 // a warning when the Entity gets close
 let warned = false
 every(1, function () {
-  if (!entity) return
   const d = entity.distanceTo(player)
   if (d < 25 && !warned) { warned = true; say("You hear something behind you...", 2); sound("alarm") }
   if (d > 40) warned = false
 })
+
+// drink all the Almond Water to wake up (delete this part if you want it to never end!)
+every(0.5, function () {
+  if (player.coins >= BOTTLES) win("You found all the Almond Water... and woke up!")
+})
 `;
 
 export const EXAMPLES = [
-  { name: "Flickering lights (Backrooms)", for: "game", code: BACKROOMS_CODE },
+  { name: "Backrooms maze builder", for: "game", code: BACKROOMS_CODE },
   { name: "Open / close a panel", for: "gui", code: '// When this button is clicked, open (or close) the panel named "Shop".\n// (Change "Shop" to the name of YOUR panel.)\nme.onClick(function () {\n  find("Shop").toggle()\n  sound("click")\n})\n' },
   { name: "Click to open a door", for: "part", code: '// Click this part to open and close the part named "Door".\nconst door = find("Door")\n\nme.onClick(function () {\n  door.toggle()   // hidden = open, showing = closed\n  sound("door")\n})\n' },
   { name: "Chase the player", for: "part", code: '// This thing chases the player! (Great for an imported monster.)\nme.follow(player, 6)   // 6 = how fast\nme.play("Walk")        // imported characters: play a walk animation (if it has one)\n\nme.onTouch(function () {\n  sound("scream")\n  player.respawn()\n  say("It got you!")\n})\n' },
@@ -97,7 +191,7 @@ function RUNTIME(send) {
   const things = new Map();
   const H = { click: new Map(), touch: new Map(), untouch: new Map(), key: new Map() };
   const updates = [], timers = [], follows = new Map(), spins = new Map(), errs = new Map();
-  let out = [], now = 0, cur = null, nclone = 1, ended = false;
+  let out = [], now = 0, cur = null, nclone = 1, nbuild = 1, ended = false;
   const P = { x: 0, y: 0, z: 0, ry: 0, coins: 0, health: 100, speed: 1, jump: 1 };
   const shared = {}, missing = new Set();
   const R2D = 180 / Math.PI;
@@ -210,6 +304,17 @@ function RUNTIME(send) {
       return new Thing({ id: "", name, kind: "part", type: "", x: 0, y: 0, z: 0, ry: 0, sx: 1, sy: 1, sz: 1, color: "#ffffff", visible: false, solid: false, text: "" });
     },
     findAll(name) { name = String(name); return [...things.values()].filter((s) => s.name === name).map((s) => get(s.id)); },
+    // build("block", {x, y, z, width, height, depth, color, texture, textureSize, stretch, material, solid, name, turn}): a new part (play.js checks it)
+    build(type, o) {
+      o = o && typeof o === "object" ? o : {};
+      const n = (v, d) => (Number.isFinite(+v) && v !== null && v !== "" ? +v : d);
+      const s = { id: "b" + nbuild++, kind: "part", type: String(type || "block"), name: String(o.name || type || "Part").slice(0, 40), x: n(o.x, P.x), y: n(o.y, 0), z: n(o.z, P.z), ry: n(o.turn, 0),
+        sx: n(o.width, 4), sy: n(o.height, 1), sz: n(o.depth, 4), color: String(o.color || ""), visible: o.visible !== false, solid: o.solid !== false, text: String(o.text || "") };
+      things.set(s.id, s);
+      cmd("build", s.id, { type: s.type, name: s.name, pos: [s.x, s.y, s.z], ry: s.ry, size: [s.sx, s.sy, s.sz], color: s.color, tex: String(o.texture || ""), texS: n(o.textureSize, 0),
+        fit: o.stretch ? "stretch" : "", mat: String(o.material || ""), solid: s.solid, visible: s.visible, text: s.text });
+      return get(s.id);
+    },
     all() { return [...things.keys()].map(get); },
     say(text, secs) { cmd("msg", String(text).slice(0, 200), Math.max(0.5, Math.min(30, +secs || 2.2))); },
     print(...a) { cmd("print", a.map((v) => (v && typeof v === "object" && !(v instanceof Thing) ? JSON.stringify(v) : String(v))).join(" ").slice(0, 500)); },

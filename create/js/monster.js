@@ -11,7 +11,7 @@ import * as THREE from "../vendor/three.module.js";
 import { animateRig, motionOf } from "./motion.js";
 
 export const MON_KEYS = { // recipe: key -> [kind, ...]  (game.js + the relay keep only these)
-  body: ["pick", "round", "tall", "long", "box", "blob", "spider", "ghost"], color: ["color"], color2: ["color"], eyeColor: ["color"],
+  body: ["pick", "round", "tall", "long", "box", "blob", "spider", "ghost", "lanky"], color: ["color"], color2: ["color"], eyeColor: ["color"],
   pattern: ["pick", "none", "spots", "stripes", "scales", "patches"],
   hat: ["pick", "none", "tophat", "crown", "cap", "party", "wizard", "witch", "cowboy", "helmet", "bow", "halo", "chef", "headphones"],
   eyes: ["num", 0, 9], legs: ["num", 0, 8], arms: ["num", 0, 6], heads: ["num", 1, 3], horns: ["num", 0, 6], tentacles: ["num", 0, 8],
@@ -258,11 +258,18 @@ export function buildMonster(mon) {
   // a joint at point `at`: things built in it use points measured from the joint, so turning the joint swings them
   const pivot = (parent, at) => { const j = new THREE.Group(); j.position.set(...at); parent.add(j); return { j, rel: (q) => [q[0] - at[0], q[1] - at[1], q[2] - at[2]] }; };
   // ---- body shapes (sizes before the whole thing is scaled to its Size)
-  const legLen = m.legs ? ({ tall: 1.1, box: 1.1, spider: 0.5, ghost: 0 }[m.body] ?? 0.75) : 0;
+  const legLen = m.legs ? ({ tall: 1.1, box: 1.1, spider: 0.5, ghost: 0, lanky: 2.3 }[m.body] ?? 0.75) : 0;
+  const lanky = m.body === "lanky";
   const lift = m.float ? 1.0 : m.tentacles && !m.legs ? 0.8 : legLen;
   const body = new THREE.Group(); g.add(body);
   let headAt, headR, neck = null, top, tailFrom, legRing; // (where things attach)
-  if (m.body === "tall") {
+  if (lanky) { // (a very tall, very thin creature: long legs, a skinny hunched body, a small head poking forward)
+    body.position.y = lift + 1.0;
+    ball(body, 0.36, skin, 0, -0.35, 0, W, 1.9, 0.75); ball(body, 0.34, skin, 0, 0.45, -0.1, W * 1.25, 1.2, 0.75); // hips + chest
+    headR = 0.3; headAt = new THREE.Vector3(0, 1.05, -0.32); top = 1.05 + headR; tailFrom = [0, -0.9, 0.25];
+    neck = null; chain(body, [[0, 0.7, -0.12], [0, 0.85, -0.22], [0, 0.98, -0.3]], 0.1, 0.09, skin, 6);
+    legRing = { y: -1.05, x: 0.17 * W, z: 0 };
+  } else if (m.body === "tall") {
     body.position.y = lift + 1.15;
     ball(body, 0.62, skin, 0, -0.2, 0, W, 1.5, 0.85); ball(body, 0.5, skin, 0, 0.55, 0, W * 1.15, 0.8, 0.85); // belly + chest
     headR = 0.52; headAt = new THREE.Vector3(0, 1.25, -0.05); top = 1.25 + headR; tailFrom = [0, -0.6, 0.45];
@@ -398,9 +405,10 @@ export function buildMonster(mon) {
   const footAt = (par, rel, fx, fz, r) => { ball(par, r * 1.3, limbM, ...rel([fx, r * 0.9, fz - r * 0.4]), 1, 0.65, 1.4); if (m.claws) for (let c = -1; c <= 1; c++) { const k = add(par, new THREE.ConeGeometry(r * 0.28, r * 0.9, 6), horn, ...rel([fx + c * r * 0.55, r * 0.5, fz - r * 1.9])); k.rotation.x = -Math.PI / 2 - 0.3; } };
   if (m.legs) {
     const by = body.position.y;
-    if (m.legs <= 2 && ["tall", "box", "ghost"].includes(m.body)) for (const s of [-1, 1]) {
+    if (m.legs <= 2 && ["tall", "box", "ghost", "lanky"].includes(m.body)) for (const s of [-1, 1]) {
       const x = s * legRing.x, hip = [x, by + legRing.y, 0], { j, rel } = pivot(g, hip);
-      chain(j, [hip, [x * 1.05, (by + legRing.y) * 0.5, -0.08], [x * 1.08, 0.25, 0]].map(rel), 0.24 * W, 0.18, limbM, 12); footAt(j, rel, x * 1.08, 0, 0.2);
+      if (lanky) { chain(j, [hip, [x * 1.1, (by + legRing.y) * 0.5, -0.18], [x * 1.15, 0.12, 0]].map(rel), 0.1 * W, 0.05, limbM, 14); footAt(j, rel, x * 1.15, 0, 0.09); }
+      else { chain(j, [hip, [x * 1.05, (by + legRing.y) * 0.5, -0.08], [x * 1.08, 0.25, 0]].map(rel), 0.24 * W, 0.18, limbM, 12); footAt(j, rel, x * 1.08, 0, 0.2); }
       rig.legs.push({ j, phase: s > 0 ? Math.PI : 0, side: s, spidery: false });
     }
     else for (let i = 0; i < m.legs; i++) {
@@ -417,12 +425,16 @@ export function buildMonster(mon) {
   for (let i = 0; i < m.arms; i++) {
     const side = i % 2 ? 1 : -1, k = Math.floor(i / 2), by = body.position.y;
     const sy = by + (["long", "spider", "round", "blob"].includes(m.body) ? 0.1 : 0.75) - k * 0.38;
-    const sx = side * (m.body === "long" ? 0.55 * W : m.body === "box" ? 0.85 * W : 0.66 * W), sz = m.body === "long" ? -0.85 : 0;
-    const hand = [sx + side * 0.55, sy - (m.body === "long" ? 0.15 : 0.95), sz - 0.75];
+    const sx = side * (m.body === "long" ? 0.55 * W : m.body === "box" ? 0.85 * W : lanky ? 0.42 * W : 0.66 * W), sz = m.body === "long" ? -0.85 : lanky ? -0.1 : 0;
+    const hand = lanky ? [sx + side * 0.3, sy - 2.6, sz - 0.25] : [sx + side * 0.55, sy - (m.body === "long" ? 0.15 : 0.95), sz - 0.75];
     const { j, rel } = pivot(g, [sx, sy, sz]);
-    chain(j, [[sx, sy, sz], [sx + side * 0.5, sy - 0.45, sz - 0.1], hand].map(rel), 0.17 * W, 0.12, limbM, 12);
+    if (lanky) chain(j, [[sx, sy, sz], [sx + side * 0.22, sy - 1.3, sz - 0.12], hand].map(rel), 0.08 * W, 0.045, limbM, 16); // (arms that hang down past its knees)
+    else chain(j, [[sx, sy, sz], [sx + side * 0.5, sy - 0.45, sz - 0.1], hand].map(rel), 0.17 * W, 0.12, limbM, 12);
     const hr = rel(hand);
-    if (m.pincers) {
+    if (lanky && !m.pincers) { // long thin fingers
+      ball(j, 0.07, limbM, ...hr);
+      for (let f = 0; f < 4; f++) chain(j, [hr, [hr[0] + side * (f - 1.5) * 0.05, hr[1] - 0.25, hr[2] - 0.04 * f], [hr[0] + side * (f - 1.5) * 0.08, hr[1] - 0.55, hr[2] - 0.08 * f + 0.05]], 0.022, 0.012, m.claws ? horn : limbM, 6);
+    } else if (m.pincers) {
       ball(j, 0.26, accent, hr[0], hr[1], hr[2] - 0.15, 1, 0.8, 1.4);
       for (const t of [-1, 1]) { const p = add(j, new THREE.ConeGeometry(0.1, 0.45, 8), accent, hr[0] + t * 0.08, hr[1], hr[2] - 0.55); p.rotation.x = -Math.PI / 2; p.rotation.z = t * 0.25; }
     } else {
