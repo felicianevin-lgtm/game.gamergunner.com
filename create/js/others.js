@@ -19,7 +19,8 @@ export function nameTag(text, color) {
 }
 
 // me() -> {p: THREE.Vector3, r: facing, air: true when not on the ground, look: avatar}; say(text) shows a message.
-export function startOthers(scene, key, me, say) {
+// server = {code, create} for a private server (play with friends, net.js joinLive); a code nobody is on falls back to public.
+export function startOthers(scene, key, me, say, server) {
   const list = new Map(); // id -> {g, tag, at, r, from}
   let sendT = 0, count = 1;
   function add(id, name, look) {
@@ -35,21 +36,24 @@ export function startOthers(scene, key, me, say) {
     o.at.set(s.p[0], s.p[1], s.p[2]); o.r = s.r || 0; o.air = s.a === "air";
     if (!o.seen) { o.g.position.copy(o.at); o.g.rotation.y = o.r; o.seen = true; o.g.visible = true; }
   }
-  const net = joinLive(key, (m) => {
+  const onMsg = (m) => {
+    if (m.t === "error") { if (m.e === "notfound") { say("Nobody is on server " + server.code + ". You're on a public server."); server = null; net = joinLive(key, onMsg); } return; }
     if (m.t === "welcome") {
       for (const id of [...list.keys()]) remove(id);
       for (const p of m.players) { add(p.id, p.n, p.k); state(list.get(p.id), p.s); }
       count = m.players.length + 1;
       net.send({ t: "look", k: me().look });
-      if (m.players.length) say(m.players.length === 1 ? "1 other player is here!" : m.players.length + " other players are here!");
+      if (m.code && !m.players.length) say("🔒 Private server " + m.code + ". Tell your friends this code!"); else if (m.players.length) say(m.players.length === 1 ? "1 other player is here!" : m.players.length + " other players are here!");
     } else if (m.t === "join") { add(m.id, m.n, null); count++; say(m.n + " joined"); }
     else if (m.t === "leave") { const o = list.get(m.id); if (o) { say(o.name + " left"); remove(m.id); count--; } }
     else if (m.t === "look") { const o = list.get(m.id); if (o) { const keep = { at: o.at.clone(), r: o.r, seen: o.seen }; add(m.id, o.name, m.k); const n = list.get(m.id); if (keep.seen) state(n, { p: keep.at.toArray(), r: keep.r }); } }
     else if (m.t === "s") { const o = list.get(m.id); if (o) state(o, m); }
     else if (m.t === "reset") { for (const id of [...list.keys()]) remove(id); count = 1; }
-  });
+  };
+  let net = joinLive(key, onMsg, server);
   return {
     get count() { return count; },
+    get code() { return net.code; }, // (a private server's code, "" on a public one)
     update(dt) {
       sendT -= dt;
       if (sendT <= 0) {

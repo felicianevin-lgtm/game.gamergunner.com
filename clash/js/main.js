@@ -3,7 +3,7 @@
 // somewhere random, fight; when you're KO'd you pick again. Alone on a server? Two practice bots fight you.
 // Each game moves its own fighter and decides its own hits (moves.js); the player who gets hit takes the damage.
 import * as THREE from "/create/vendor/three.module.js";
-import { joinLive } from "/create/js/net.js";
+import { joinLive, newCode } from "/create/js/net.js";
 import { FIGHTERS, FIGHTER_IDS, buildFighter, animateFighter, fighterPicture } from "./fighters.js";
 import { buildArena } from "./arena.js";
 import { castMove, castData, hitFx, fwdOf, aimTarget, burst, wave } from "./moves.js";
@@ -253,10 +253,14 @@ function cast(f, key) {
 }
 
 // ---------------------------------------------------------------- the network (relay live.js)
-let net = null;
+let net = null, server = null; // server = {code, create} on a private server (play with friends)
 const send = (e) => { if (net) net.send({ t: "ev", e }); };
 function startNet() {
+  if (net) net.close();
+  for (const f of remotes.values()) removeFighter(f);
+  remotes.clear(); myId = 0;
   net = joinLive("clash", (m) => {
+    if (m.t === "error") { if (m.e === "notfound") { $("menuNote").textContent = "Nobody is on server " + server.code + ". Check the code with your friend."; server = null; startNet(); } return; }
     if (m.t === "welcome") {
       myId = m.id; myName = m.n;
       for (const f of remotes.values()) removeFighter(f);
@@ -268,8 +272,17 @@ function startNet() {
     else if (m.t === "s") { const f = remotes.get(m.id); if (f) remoteState(f, m, false); }
     else if (m.t === "ev") onEvent(remotes.get(m.id), m.e || {});
     else if (m.t === "reset") { for (const f of remotes.values()) removeFighter(f); remotes.clear(); myId = 0; updateBots(); refreshOnline(); }
-  });
+  }, server);
+  refreshOnline();
 }
+$("srvMake").onclick = () => { server = { code: newCode(), create: true }; $("menuNote").textContent = ""; startNet(); };
+$("srvJoin").onsubmit = (e) => {
+  e.preventDefault();
+  const c = $("srvCode").value.replace(/\D/g, "");
+  if (c.length !== 5) { $("srvCode").value = ""; $("srvCode").placeholder = "5 numbers"; return; }
+  server = { code: c }; $("menuNote").textContent = ""; startNet();
+};
+$("srvPublic").onclick = () => { server = null; $("menuNote").textContent = ""; startNet(); };
 function remoteState(f, s, snap) {
   const c = FIGHTERS[s.c] ? s.c : "";
   if (c !== f.char) { if (c) setChar(f, c); else { removeFighter(f); f.char = ""; } snap = true; }
@@ -306,7 +319,11 @@ function spawnBots() {
   bots = [0, 1].map((i) => { const b = makeFighter("bot", "b" + (i + 1), "Practice Bot " + (i + 1), pool[(start + i) % pool.length]); placeNear(b); return b; });
 }
 function placeNear(b) { const a = Math.random() * Math.PI * 2, at = (me ? me.pos : V()).clone().add(V(Math.cos(a) * 28, 0, Math.sin(a) * 28)); at.y = 0; arena.collide(at, 1, 5, false); at.y = arena.floorAt(at.x, at.z, 20); b.pos.copy(at); b.iframes = 1.5; }
-function refreshOnline() { const n = [...remotes.values()].length + 1; $("online").textContent = "👥 " + n + (n === 1 ? " player here (you + practice bots)" : " players here"); }
+function refreshOnline() {
+  const n = [...remotes.values()].length + 1, code = net && net.code;
+  $("online").innerHTML = (code ? "🔒 Private server <b>" + code + "</b> (tell your friends this code) · " : "🌍 Public server · ") + "👥 " + n + (n === 1 ? " player here (you + practice bots)" : " players here");
+  $("srvPublic").classList.toggle("hidden", !code);
+}
 
 // ---------------------------------------------------------------- practice bots (only when you're alone)
 function botThink(b, dt) {

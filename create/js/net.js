@@ -21,16 +21,25 @@ export function thumbUrl(t) { return t && t[0] === "@" ? RELAY + t.slice(1) : t;
 
 // A live server (relay live.js): everyone playing the same game (key = game id, or "clash") is put together. A full
 // server sends the game to the next one; a dropped connection comes back by itself (on({t:"reset"}) first, so the
-// game can forget the old players). Returns {send(obj), id, close()}.
-export function joinLive(key, on) {
-  let ws = null, sn = 1, closed = false, id = 0, tries = 0, full = false;
+// game can forget the old players). Returns {send(obj), id, code, close()}.
+// Private servers (play with friends): opts = {code: "12345", create: true} makes one (a taken code tries another),
+// {code} joins one. If nobody is on that code: on({t:"error", e:"notfound"}) and nothing more happens.
+export function newCode() { return String(10000 + Math.floor(Math.random() * 90000)); }
+export function joinLive(key, on, opts) {
+  let ws = null, sn = 1, closed = false, id = 0, tries = 0, full = false, joined = false;
+  let code = opts && /^\d{5}$/.test(opts.code || "") ? opts.code : "", mode = opts && opts.create ? "create" : "join";
   function connect() {
     const a = account();
-    ws = new WebSocket(RELAY.replace(/^http/, "ws") + "/live/" + key + "?s=" + sn + (a ? "&t=" + a.t : ""));
+    ws = new WebSocket(RELAY.replace(/^http/, "ws") + "/live/" + key + "?s=" + sn + (code ? "&p=" + code + "&m=" + mode : "") + (a ? "&t=" + a.t : ""));
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.t === "error") { if (m.e === "full" && sn < 40) { sn++; full = true; } else if (m.e !== "full") closed = true; return; }
-      if (m.t === "welcome") { id = m.id; tries = 0; }
+      if (m.t === "error") {
+        if (m.e === "full" && !code && sn < 40) { sn++; full = true; }
+        else if (m.e === "taken" && mode === "create") { code = newCode(); full = true; } // (try another code)
+        else { closed = true; on(m); }
+        return;
+      }
+      if (m.t === "welcome") { id = m.id; tries = 0; joined = true; if (code) mode = "rejoin"; m.code = code; }
       on(m);
     };
     ws.onclose = () => {
@@ -44,6 +53,7 @@ export function joinLive(key, on) {
   return {
     send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); },
     get id() { return id; },
+    get code() { return code; },
     close() { closed = true; try { ws.close(); } catch {} },
   };
 }

@@ -4,11 +4,13 @@
 import { createWorld } from "./world.js";
 import { sanitize } from "./game.js";
 import { startPlay } from "./play.js";
-import { api } from "./net.js";
+import { api, newCode } from "./net.js";
 import { useFiles } from "./files.js";
 
 const $ = (id) => document.getElementById(id);
 const id = new URLSearchParams(location.search).get("g") || "";
+// A friend's private server from a shared link (?code=12345), or picked under "Play with friends"
+let server = /^\d{5}$/.test(new URLSearchParams(location.search).get("code") || "") ? { code: new URLSearchParams(location.search).get("code") } : null;
 const back = "../#/game/" + encodeURIComponent(id);
 $("backLink").href = back;
 
@@ -26,16 +28,27 @@ else api("/hub/game/" + id).then((r) => {
   document.title = r.card.title + " | GunnerVerse";
   $("loadTitle").textContent = r.card.title;
   $("loadBy").textContent = "by @" + r.card.by;
-  $("btnStart").classList.remove("hidden");
+  $("btnStart").classList.remove("hidden"); $("friends").classList.remove("hidden");
+  if (server) $("btnStart").textContent = "▶ Join your friend's server (" + server.code + ")";
   $("btnStart").focus();
 }).catch(() => fail("Couldn't reach GunnerVerse. Check your internet."));
 
 function start() {
   if (!game || playing) return;
   $("loading").classList.add("hidden");
-  playing = startPlay(world, sanitize(JSON.parse(JSON.stringify(game))), { onStop(again) { playing = null; if (again) start(); else location.href = back; }, live: id }); // (live: play together, others.js) // (again: "Try again" after losing)
+  playing = startPlay(world, sanitize(JSON.parse(JSON.stringify(game))), { onStop(again) { playing = null; if (again) start(); else location.href = back; }, live: id, server }); // (live: play together, others.js)
+  if (server && server.create) server = { code: playing.code || server.code }; // ("Try again" goes back to the same private server) // (again: "Try again" after losing)
 }
 $("btnStart").onclick = start;
+// Play with friends: make a private server (a new code) or join one by its code
+$("btnFriends").onclick = () => { $("friendsBox").classList.toggle("hidden"); $("codeIn").focus(); };
+$("btnMake").onclick = () => { server = { code: newCode(), create: true }; start(); };
+$("joinForm").onsubmit = (e) => {
+  e.preventDefault();
+  const c = $("codeIn").value.replace(/\D/g, "");
+  if (c.length !== 5) { $("codeIn").value = ""; $("codeIn").placeholder = "Codes have 5 numbers"; return; }
+  server = { code: c }; start();
+};
 
 const clock = { last: performance.now() };
 function frame(now) {
