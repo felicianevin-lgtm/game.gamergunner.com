@@ -146,7 +146,8 @@ if (touch) {
 
 // ---------------------------------------------------------------- levels
 async function startLevel(n) {
-  loading = true; playing = false; dying = 0;
+  loading = true; playing = false; dying = 0; dyingLook = null;
+  $("jump").classList.remove("on"); $("dead").classList.add("hidden"); // (the caught screen goes away)
   $("loadMsg").textContent = "Loading " + LEVELS[n].name + "…"; $("loadMsg").classList.remove("hidden");
   if (L) { scene.remove(L.group); L.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
   for (const m of mons) scene.remove(m.c.g);
