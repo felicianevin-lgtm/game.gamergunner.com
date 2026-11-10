@@ -8,6 +8,8 @@
 // Toolbox's "My imports".
 // Mouse: left click selects, RIGHT CLICK opens a menu (delete, copy, add script...), right-drag looks around,
 // middle-drag pans, wheel zooms; W A S D Q E fly (Shift = faster).
+// SHARED STUDIOS (collab.js, relay studio.js): 👥 Share lets friends build the same game live; every change saves on
+// GunnerVerse by itself, and the people bar + colored boxes / name tags show who's in and what they're doing.
 // Games save in this browser by themselves (game.js). Play test lives in play.js; script errors show in the Output box.
 import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/OrbitControls.js";
@@ -21,6 +23,7 @@ import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI,
 import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
 import { api, account, RELAY } from "./net.js";
+import { connectStudio, shareStudio, inviteTo, removeFrom, stopSharing, myStudios, SHARE_ERR as STUDIO_ERR } from "./collab.js";
 import { describe, buildMonster, monsterSize, sanitizeMonster, SURPRISE } from "./monster.js";
 import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount, LIMBS } from "./motion.js";
 import { TEXTURES, texturePicture } from "./textures.js";
@@ -44,6 +47,7 @@ let category = "All";
 const SHARED = "🌍 Shared"; // (Toolbox tab: things players shared, drawShared)
 const TEX_CAT = "🧱 Textures"; // (Toolbox tab: textures to drag onto parts, drawTextures)
 let shared = null, sharedAt = 0;
+let collab = null, presT = 0, uploading = false; // (a shared studio, collab.js)
 let myFiles = [];              // imported files in this browser (files.js listFiles)
 let selScript = null;          // the script open in the script editor
 const lastErr = new Map();     // script id -> the line its error was on in the last Play
@@ -120,6 +124,7 @@ function changed(skipTree) {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 1200);
   if (!skipTree) drawTree();
+  if (collab) collabPush();
 }
 function saveNow(force) {
   clearTimeout(saveTimer);
@@ -1428,7 +1433,15 @@ function openGames(first) {
     (list.length ? '<div class="game-list">' + list.map((g) => '<div class="game-item' + (game && g.id === game.id ? " on" : "") + '"><b>' + esc(g.name) + "</b><small>" + new Date(g.updated).toLocaleDateString() +
       ((loadGame(g.id) || {}).pub ? ' · <span class="pub-tag">🌐 On GunnerVerse</span>' : "") + "</small>" +
       '<button class="btn go" data-open="' + g.id + '">Open</button><button class="btn danger" data-del="' + g.id + '">Delete</button></div>').join("") + "</div>" : "") +
+    '<div id="sharedList"></div>' +
     (game ? '<div class="modal-actions"><button class="btn" id="mClose">Close</button></div>' : ""));
+  if (account()) myStudios().then((r) => { // (👥 games shared with me)
+    const box = $("sharedList"); if (!box || !r.ok || !r.items.length) return;
+    const mine = account().u.toLowerCase();
+    box.innerHTML = '<h3>👥 Shared games</h3><div class="game-list">' + r.items.map((m) => '<div class="game-item' + (game && game.shared === m.sid ? " on" : "") + '"><b>' + esc(m.name) + "</b><small>" +
+      (m.owner === mine ? "You shared it with " + m.members.length + (m.members.length === 1 ? " person" : " people") : "From @" + esc(m.ownerU)) + " · " + new Date(m.updated).toLocaleDateString() + '</small><button class="btn go" data-sh="' + m.sid + '">Open</button></div>').join("") + "</div>";
+    box.querySelectorAll("[data-sh]").forEach((b) => (b.onclick = () => { const m = r.items.find((x) => x.sid === b.dataset.sh); if (m) { openSharedGame(m); closeModal(); } }));
+  }).catch(() => {});
   $("modalBox").querySelectorAll(".template").forEach((t) => (t.onclick = t.onkeydown = (e) => { if (e.type === "keydown" && e.key !== "Enter") return; openGame(makeGame(t.dataset.t)); dirty = true; saveNow(); closeModal(); }));
   $("modalBox").querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => { const g = loadGame(b.dataset.open); if (g) { openGame(g); closeModal(); } }));
   // Delete = gone for good: from this computer AND off GunnerVerse if it was published.
@@ -1455,6 +1468,7 @@ function openGames(first) {
 }
 function openGame(g) {
   closeScript();
+  if (collab) { collab.close(); collab = null; drawPeople([], null); }
   game = sanitize(g);
   useFiles(game.files);
   loadPictures(game.files).then(() => { drawGui(); for (const o of game.objects) if (o.type === "picture") rebuild(o); });
@@ -1469,6 +1483,162 @@ function openGame(g) {
   drawTree(); drawProps(); updateButtons();
   $("savedNote").textContent = "Saved ✓";
   try { localStorage.setItem("gv_studio_last", game.id); } catch {}
+  if (game.shared) startCollab();
+}
+
+// ---------------------------------------------------------------- shared studios (collab.js)
+function startCollab() {
+  const sid = game.shared;
+  collab = connectStudio(sid, {
+    scene, camera,
+    nameOf: (id) => thingName(id) || "something",
+    boundsOf(id) {
+      const o = obj(id), g = groups.get(id);
+      if (!o || !g) return null;
+      const b = boundsBox(o, g.position, g.quaternion);
+      return { c: b.c, q: b.q, s: new THREE.Vector3(o.size[0] * g.scale.x, o.size[1] * g.scale.y, o.size[2] * g.scale.z) };
+    },
+    onWelcome(sg) { // (what GunnerVerse has is the real game: it goes on screen)
+      if (!game || game.shared !== sid) return;
+      for (const k of ["name", "settings", "objects", "gui", "files", "scripts"]) game[k] = sg[k];
+      if (scriptOpen() && !game.scripts.some((x) => x.id === scriptOpen())) closeScript();
+      useFiles(game.files);
+      loadPictures(game.files).then(() => { drawGui(); for (const o of game.objects) if (o.type === "picture") rebuild(o); });
+      undoStack = []; redoStack = []; updateButtons();
+      $("gameName").value = game.name;
+      if (!playing) { world.setSky(game.settings.sky, true); rebuildAll(); }
+      drawTree(); drawProps(); drawGui();
+      dirty = true; saveNow();
+    },
+    onEdit(m) {
+      if (!game || game.shared !== sid) return;
+      const r = collab.absorb(game, m);
+      if (r.base.includes("files")) { useFiles(game.files); loadPictures(game.files).then(() => { drawGui(); for (const o of game.objects) if (o.type === "picture") rebuild(o); }); }
+      if (r.base.includes("name")) $("gameName").value = game.name;
+      if (!playing) {
+        if (r.base.includes("settings")) world.setSky(game.settings.sky, true);
+        for (const id of r.gone) { const g = groups.get(id); if (g) { if (transform.object === g) transform.detach(); world.root.remove(g); disposeGroup(g); groups.delete(id); } extra.delete(id); }
+        for (const id of r.ids) { const o = obj(id); if (o && !(transform.dragging && (selected === id || extra.has(id)))) rebuild(o); }
+        if (selected && !obj(selected) && !guiItem(selected)) select(null);
+        else { drawTree(); if (selected && (r.ids.includes(selected) || r.scripts) && !transform.dragging) drawProps(); }
+        if (r.base.includes("gui")) drawGui();
+      }
+      dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 1200); // (this browser's copy too)
+    },
+    onPeople: drawPeople,
+    onError(e) {
+      if (["removed", "stopped", "nostudio", "notinvited"].includes(e)) { // (you keep your own copy of the game)
+        toast(e === "removed" ? "You were taken out of this shared game. You keep your own copy." : e === "stopped" ? "The owner stopped sharing this game. You keep your own copy." : "This shared game isn't there anymore. You keep your own copy.", 6);
+        if (collab) { collab.close(); collab = null; }
+        delete game.shared; dirty = true; saveNow(); drawPeople([], null);
+      } else if (e === "signin") { toast("Sign in on the GunnerVerse home page to build this shared game with your friends.", 6); if (collab) { collab.close(); collab = null; } drawPeople([], null); }
+    },
+    onStatus(t) { $("savedNote").textContent = t; },
+  });
+}
+// Things I imported go up to GunnerVerse first, so the others see them too.
+async function collabPush() {
+  if (!collab) return;
+  const need = Object.keys(game.files || {}).filter((id) => !game.files[id].sid);
+  if (need.length && !uploading) {
+    const me = account();
+    if (me) {
+      uploading = true;
+      try { await uploadFiles(game, me, need, (t) => toast(t)); toast(""); } catch (err) { toast(String(err.message || err), 6); }
+      uploading = false;
+      dirty = true; saveNow();
+    }
+  }
+  if (collab) collab.push(game);
+}
+// The people bar: who this game is shared with, who's here right now (colored) and what they're doing.
+let peopleNow = [];
+function drawPeople(list, meta) {
+  if (list) peopleNow = list;
+  const bar = $("collabBar");
+  meta = meta || (collab && collab.meta);
+  if (!collab || !meta) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
+  const me = account(), mine = me ? me.u.toLowerCase() : "";
+  const everyone = [{ u: meta.owner, n: meta.ownerU, owner: true }, ...meta.members].filter((p) => p.u !== mine);
+  const chips = everyone.map((p) => {
+    const here = peopleNow.find((x) => x.u === p.u);
+    return '<span class="pchip' + (here ? " on" : "") + '" title="' + esc(here ? (p.n || p.u) + " is " + here.doing : (p.n || p.u) + " isn't here right now") + '"' + (here ? ' style="--pc:' + here.c + '"' : "") + "><i></i>" + esc(p.n || p.u) + (p.owner ? " 👑" : "") +
+      (here ? "<small>" + esc(here.doing) + "</small>" : "") + "</span>";
+  }).join("");
+  bar.innerHTML = '<button class="pchip share-open" type="button" title="Who this game is shared with">👥 Shared with</button>' + (chips || '<span class="pchip">nobody yet: tap 👥 Share to invite</span>');
+  bar.classList.remove("hidden");
+  bar.querySelector(".share-open").onclick = openSharing;
+}
+// 👥 Share: start sharing, invite people by @username, take people out, leave / stop sharing.
+async function openSharing() {
+  if (!game) return;
+  const me = account();
+  if (!me) { openModal('<h2>👥 Build together</h2><p>Sign in on the GunnerVerse home page first. Then you can share this game and build it with friends, live.</p><div class="modal-actions"><a class="btn go" href="../#/">Go sign in</a><button class="btn" id="mClose">Close</button></div>'); $("mClose").onclick = closeModal; return; }
+  const mine = me.u.toLowerCase();
+  if (!game.shared) {
+    openModal('<h2>👥 Build together</h2><p>Share <b>' + esc(game.name) + "</b> and invite friends by their @username. Everyone builds the same game at the same time: you see what they change right away, a colored box around what they're working on, and their name.</p>" +
+      "<p>It saves on GunnerVerse by itself after every change, so you can open it on any computer.</p>" +
+      '<p class="share-err" id="shErr"></p><div class="modal-actions"><button class="btn" id="mClose">Not now</button><button class="btn go" id="shGo">👥 Start sharing</button></div>');
+    $("mClose").onclick = closeModal;
+    $("shGo").onclick = async () => {
+      const b = $("shGo"); b.disabled = true; b.textContent = "Sharing…";
+      try {
+        const need = Object.keys(game.files || {}).filter((id) => !game.files[id].sid);
+        if (need.length) await uploadFiles(game, me, need, (t) => { b.textContent = t; });
+      } catch (err) { $("shErr").textContent = String(err.message || err); b.disabled = false; b.textContent = "👥 Start sharing"; return; }
+      flushScript();
+      const r = await shareStudio(game);
+      if (!r.ok) { $("shErr").textContent = STUDIO_ERR[r.e] || "Couldn't share it."; b.disabled = false; b.textContent = "👥 Start sharing"; return; }
+      game.shared = r.sid; dirty = true; saveNow();
+      startCollab();
+      openSharing();
+    };
+    return;
+  }
+  const meta = (collab && collab.meta) || (await myStudios().then((r) => (r.items || []).find((x) => x.sid === game.shared)).catch(() => null));
+  if (!meta) { openModal('<h2>👥 Build together</h2><p>Connecting to the shared game…</p><div class="modal-actions"><button class="btn" id="mClose">Close</button></div>'); $("mClose").onclick = closeModal; return; }
+  const owner = meta.owner === mine;
+  const row2 = (p, isOwner) => '<div class="game-item"><b>' + esc(p.n || p.u) + " <small>@" + esc(p.u) + "</small>" + (isOwner ? " 👑" : "") + (p.u === mine ? " (you)" : "") + "</b>" +
+    (peopleNow.some((x) => x.u === p.u) ? '<small class="here">● here now</small>' : "") +
+    (owner && !isOwner ? '<button class="btn danger" data-rm="' + esc(p.u) + '">Take out</button>' : "") + "</div>";
+  const quick = [["gamergunner", "@GamerGunner"]].filter(([u]) => u !== mine && meta.owner !== u && !meta.members.some((x) => x.u === u));
+  openModal("<h2>👥 Shared with</h2><p>Everyone here can build this game with you. Changes save by themselves.</p>" +
+    '<div class="game-list">' + row2({ u: meta.owner, n: meta.ownerU }, true) + meta.members.map((p) => row2(p, false)).join("") + "</div>" +
+    (owner ? '<form class="share-add" id="shAdd"><input id="shUser" maxlength="17" placeholder="@username" autocomplete="off" spellcheck="false" aria-label="Username to invite"><button class="btn go" type="submit">＋ Invite</button></form>' +
+      (quick.length ? '<div class="share-quick">Quick add: ' + quick.map(([u, n]) => '<button class="btn" type="button" data-q="' + u + '">＋ ' + n + "</button>").join("") + "</div>" : "") : "") +
+    '<p class="share-err" id="shErr"></p><div class="modal-actions">' + (owner ? '<button class="btn danger" id="shStop">Stop sharing</button>' : '<button class="btn danger" id="shLeave">Leave this game</button>') + '<button class="btn" id="mClose">Close</button></div>');
+  $("mClose").onclick = closeModal;
+  const invite = async (u) => {
+    const r = await inviteTo(game.shared, u);
+    if (!r.ok) { $("shErr").textContent = STUDIO_ERR[r.e] || "Couldn't invite them."; return; }
+    toast("Invited @" + u.replace(/^@/, "") + "! It shows up in their My games.", 5);
+    openSharing();
+  };
+  if (owner) {
+    $("shAdd").onsubmit = (e) => { e.preventDefault(); const u = $("shUser").value.trim(); if (u) invite(u); };
+    $("modalBox").querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => invite(b.dataset.q)));
+    $("modalBox").querySelectorAll("[data-rm]").forEach((b) => (b.onclick = async () => { const r = await removeFrom(game.shared, b.dataset.rm); if (!r.ok) $("shErr").textContent = STUDIO_ERR[r.e] || "Couldn't do that."; else openSharing(); }));
+    $("shStop").onclick = async () => {
+      if (!confirm("Stop sharing? Everyone else is taken out (they keep their own copy). Your game stays here.")) return;
+      const r = await stopSharing(game.shared);
+      if (!r.ok) { $("shErr").textContent = STUDIO_ERR[r.e] || "Couldn't do that."; return; }
+      if (collab) { collab.close(); collab = null; }
+      delete game.shared; dirty = true; saveNow(); drawPeople([], null); closeModal(); toast("Not shared anymore. It's just yours again.");
+    };
+  } else $("shLeave").onclick = async () => {
+    if (!confirm("Leave this shared game? You keep your own copy, but you won't see the others' changes anymore.")) return;
+    const r = await removeFrom(game.shared, mine);
+    if (!r.ok) { $("shErr").textContent = STUDIO_ERR[r.e] || "Couldn't do that."; return; }
+    if (collab) { collab.close(); collab = null; }
+    delete game.shared; dirty = true; saveNow(); drawPeople([], null); closeModal();
+  };
+}
+// A shared game someone invited me to: open my copy of it (or make one).
+function openSharedGame(meta) {
+  const have = listGames().map((x) => loadGame(x.id)).find((g) => g && g.shared === meta.sid);
+  if (have) { openGame(have); return; }
+  const g = makeGame("baseplate", meta.name); g.objects = []; g.shared = meta.sid;
+  openGame(g); dirty = true; saveNow();
 }
 $("gameName").onchange = (e) => { if (!game) return; game.name = e.target.value.trim() || "My Game"; e.target.value = game.name; changed(true); if (!selected) drawProps(); };
 
@@ -1517,7 +1687,7 @@ $("outClear").onclick = () => { $("outList").innerHTML = ""; };
 document.querySelectorAll(".tool").forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
 $("btnSnap").onclick = () => { snapIndex = (snapIndex + 1) % SNAPS.length; applySnap(); };
 $("btnUndo").onclick = undo; $("btnRedo").onclick = redo; $("btnDup").onclick = duplicate; $("btnDel").onclick = remove;
-$("btnPlay").onclick = play; $("btnGames").onclick = () => openGames(false);
+$("btnPlay").onclick = play; $("btnGames").onclick = () => openGames(false); $("btnShare").onclick = openSharing;
 $("btnPublish").onclick = () => {
   if (!game) return;
   saveNow();
@@ -1607,8 +1777,18 @@ function frame() {
   }
   for (; bi < extraBoxes.length; bi++) extraBoxes[bi].visible = false;
   world.follow(orbit.target);
+  if (collab) { collab.update(); sendPresence(); }
   renderer.render(scene, camera);
 }
+function sendPresence() {
+  const now = performance.now(); if (now - presT < 250) return; presT = now;
+  const half = (v) => Math.round(v * 2) / 2;
+  const h2 = (($("modal").classList.contains("hidden") ? null : $("modalBox").querySelector("h2")) || {}).textContent || "";
+  const a = document.hidden ? "away" : playing ? "play" : transform.dragging ? { translate: "move", rotate: "rotate", scale: "scale" }[tool] : scriptOpen() ? "script" : /monster/i.test(h2) ? "monster" : selected && guiItem(selected) ? "gui" : selected ? "select" : "look";
+  const ids = selIds(), sc = scriptOpen() && (game.scripts || []).find((x) => x.id === scriptOpen());
+  collab.presence({ s: ids.slice(0, 20), c: camera.position.toArray().map(half), f: orbit.target.toArray().map(half), a, o: sc ? sc.on || "" : selected || "" });
+}
+setInterval(() => { if (collab) sendPresence(); }, 1000); // (also while play testing / in another tab, when the frame above isn't drawn)
 
 // ---------------------------------------------------------------- start
 drawCats(); drawAssets(); drawAddMenu(); applySnap(); updateButtons();

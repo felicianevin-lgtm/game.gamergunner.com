@@ -1,5 +1,6 @@
 // THE BACKROOMS: the monsters and how they look and move.
-//   entity    Level 0: a tall, thin, faceless thing with long dangly strands (original design, made of shapes)
+//   bacteria  Level 0: the Bacteria model (models/bacteria.glb, "Bacteria Lifeform (Backrooms)" by VHSvince, CC-BY-4.0)
+//   entity    stand-in for the Bacteria if its file can't load: a tall, thin, faceless thing with long dangly strands (original design, made of shapes)
 //   crawler   the Poolrooms: a pale thing that crawls along the bottom of the pool (original design)
 //   partygoer Level Fun: the Partygoer model (models/partygoer.glb, "Partygoer from Backrooms (Updated)" by FilinMinv, CC-BY-4.0)
 //   clark     the final level: Captain Clark (models/captain-clark.glb, Gamer Gunner's model)
@@ -65,7 +66,7 @@ function crawler() {
 // ---------------------------------------------------------------- models made from files (the Partygoer, Captain Clark)
 const loader = new GLTFLoader(), loaded = {};
 export function preload(kind) {
-  const file = { partygoer: "models/partygoer.glb", clark: "models/captain-clark.glb" }[kind];
+  const file = { partygoer: "models/partygoer.glb", clark: "models/captain-clark.glb", bacteria: "models/bacteria.glb" }[kind];
   if (!file) return Promise.resolve(null);
   if (!loaded[kind]) loaded[kind] = new Promise((res) => loader.load(file, (g) => res(g.scene), undefined, () => res(null)));
   return loaded[kind];
@@ -120,6 +121,28 @@ function fromModel(kind, scene, height) {
     holder.position.y = Math.abs(Math.cos(t)) * 0.04 * w;
   } };
 }
+// The Bacteria has no bones: the whole thing sways, twitches and leans in when it runs.
+function bacteria(scene) {
+  const raw = scene.clone(true);
+  raw.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.material = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.3, metalness: 0, side: THREE.DoubleSide }); } });
+  raw.updateMatrixWorld(true);
+  const height = 3.0, bb = new THREE.Box3().setFromObject(raw), s = height / (bb.max.y - bb.min.y || 1);
+  const g = new THREE.Group(), holder = new THREE.Group();
+  raw.scale.multiplyScalar(s); raw.position.set(-(bb.min.x + bb.max.x) / 2 * s, -bb.min.y * s, -(bb.min.z + bb.max.z) / 2 * s);
+  holder.add(raw); g.add(holder);
+  let t = 0, jerk = 0, jx = 0, jz = 0;
+  return { g, height, animate(dt, sp) {
+    if (!(sp >= 0)) sp = 0;
+    t += dt * (1.5 + sp * 1.5);
+    const w = Math.min(1, sp / 4);
+    jerk -= dt; if (jerk <= 0) { jerk = 0.3 + Math.random() * 1.4; jx = (Math.random() - 0.5) * 0.25; jz = (Math.random() - 0.5) * 0.25; } // (sudden twitches)
+    holder.rotation.x += ((0.28 * w + Math.sin(t * 0.9) * 0.06 + jx) - holder.rotation.x) * Math.min(1, dt * 10);
+    holder.rotation.z += ((Math.sin(t * 1.3) * 0.08 + jz) - holder.rotation.z) * Math.min(1, dt * 10);
+    holder.rotation.y = Math.sin(t * 0.5) * 0.3;
+    holder.position.y = Math.abs(Math.sin(t * 2)) * 0.1 * w;
+    holder.scale.set(1 - Math.sin(t * 2) * 0.03, 1 + Math.sin(t * 2) * 0.04, 1);
+  } };
+}
 // Stand-ins if a model file can't load: a yellow smiling partygoer, a tall captain.
 function standIn(kind) {
   if (kind === "partygoer") {
@@ -137,6 +160,7 @@ export async function make(kind) {
   if (kind === "entity") return entity();
   if (kind === "crawler") return crawler();
   const scene = await preload(kind);
+  if (kind === "bacteria") return scene ? bacteria(scene) : entity();
   if (!scene) return standIn(kind);
   return fromModel(kind, scene, kind === "clark" ? 2.7 : 2.1);
 }

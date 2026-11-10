@@ -1,5 +1,5 @@
 // THE BACKROOMS (game.gamergunner.com/backrooms/): a first-person escape through four levels.
-//   Level 0 the Lobby (maze + the Entity) -> the Poolrooms (platforms over water + the Crawler, throw rocks to distract it)
+//   Level 0 the Lobby (maze + the Bacteria) -> the Poolrooms (platforms over water + the Crawler, throw rocks to distract it)
 //   -> Level Fun (party rooms + Partygoers) -> the Deep Lobby (big maze + Captain Clark) -> ESCAPE: you win the
 //   Backrooms hazmat suit and the Backrooms monster suit for your GunnerVerse avatar (avatar.js unlockSuit).
 // A new maze every time you play a level. Caught = try that level again. Progress is saved in this browser.
@@ -108,7 +108,7 @@ const keys = new Set();
 let wantJump = false, wantGrab = false, wantThrow = false;
 addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
-  if ([" ", "w", "a", "s", "d", "shift", "e", "f"].includes(k)) e.preventDefault();
+  if ([" ", "w", "a", "s", "d", "shift", "e", "f", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(k)) e.preventDefault();
   if (e.repeat) return;
   keys.add(k);
   if (k === " ") wantJump = true;
@@ -167,7 +167,7 @@ async function startLevel(n) {
   for (const m of L.monsters) {
     const c = await make(m.kind);
     scene.add(c.g);
-    const S = { entity: [1.6, 4.6, 20, "the Entity"], crawler: [2.6, 10.5, 0, "the Crawler"], partygoer: [1.5, 4.7, 16, "a Partygoer"], clark: [2.0, 5.3, 24, "Captain Clark"] }[m.kind];
+    const S = { bacteria: [1.6, 4.6, 20, "the Bacteria"], entity: [1.6, 4.6, 20, "the Entity"], crawler: [2.6, 10.5, 0, "the Crawler"], partygoer: [1.5, 4.7, 16, "a Partygoer"], clark: [2.0, 5.3, 24, "Captain Clark"] }[m.kind];
     const y = m.kind === "crawler" ? L.pool.FLOOR : 0;
     mons.push({ kind: m.kind, c, pos: V(m.x, y, m.z), yaw: Math.random() * 6, walk: S[0], chase: S[1], seeR: S[2], name: S[3], state: "wander", goal: null, path: null, pathT: 0, seeT: 0, lastSeen: null, searchT: 0, distract: null, alarm: 0, giggleT: 3 + Math.random() * 5 });
   }
@@ -188,10 +188,15 @@ function addRock(at) {
 // ---------------------------------------------------------------- the player
 function updatePlayer(dt) {
   let fx = 0, fz = 0;
-  if (keys.has("w") || keys.has("arrowup")) fz += 1;
-  if (keys.has("s") || keys.has("arrowdown")) fz -= 1;
-  if (keys.has("d") || keys.has("arrowright")) fx += 1;
-  if (keys.has("a") || keys.has("arrowleft")) fx -= 1;
+  if (keys.has("w")) fz += 1;
+  if (keys.has("s")) fz -= 1;
+  if (keys.has("d")) fx += 1;
+  if (keys.has("a")) fx -= 1;
+  // arrow keys look around (the mouse does too)
+  if (!dying) {
+    if (keys.has("arrowleft")) P.yaw += dt * 2.4; if (keys.has("arrowright")) P.yaw -= dt * 2.4;
+    if (keys.has("arrowup")) P.pitch = Math.min(1.45, P.pitch + dt * 1.6); if (keys.has("arrowdown")) P.pitch = Math.max(-1.45, P.pitch - dt * 1.6);
+  }
   if (stick.id !== null) { fx = stick.dx / 55; fz = -stick.dy / 55; }
   const f = V(-Math.sin(P.yaw), 0, -Math.cos(P.yaw)), r = V(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
   const want = f.multiplyScalar(fz).add(r.multiplyScalar(fx));
@@ -400,8 +405,8 @@ $("cont").onclick = () => { audio(); $("menu").classList.add("hidden"); startLev
 $("playAgain").onclick = () => { $("done").classList.add("hidden"); startLevel(0); };
 if (save.get() > 0) { $("cont").classList.remove("hidden"); $("cont").textContent = "▶ Continue: " + LEVELS[save.get()].sub; }
 $("controls").innerHTML = touch ? "Left side: walk · Right side: look · 🏃 run · ⤒ jump · ✋ pick up rock · 🪨 throw"
-  : "<b>WASD</b> walk · <b>Mouse</b> look · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> pick up a rock · <b>F</b> or <b>click</b> throw it · <b>Esc</b> pause";
-preload("partygoer"); preload("clark");
+  : "<b>WASD</b> walk · <b>Mouse</b> or <b>arrow keys</b> look · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> pick up a rock · <b>F</b> or <b>click</b> throw it · <b>Esc</b> pause";
+preload("bacteria"); preload("partygoer"); preload("clark");
 
 // ---------------------------------------------------------------- every frame
 const clock = new THREE.Clock();

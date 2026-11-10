@@ -358,7 +358,7 @@ const typing = (e) => e.target && (e.target.tagName === "INPUT" || e.target.tagN
 addEventListener("keydown", (e) => {
   if (typing(e)) return;
   const k = e.key.toLowerCase();
-  if (["w", "a", "s", "d", " ", "q", "f", "r", "g", "1", "2", "3", "4", "shift", "tab"].includes(k)) e.preventDefault();
+  if (["w", "a", "s", "d", " ", "q", "f", "r", "g", "1", "2", "3", "4", "shift", "tab", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(k)) e.preventDefault();
   if (e.repeat) return;
   keys.add(k);
   if (!me || menuOpen) return;
@@ -408,10 +408,10 @@ addEventListener("pointercancel", (e) => { if (e.pointerId === stick.id) { stick
 function showStick(on) { const s = $("stick"); s.classList.toggle("hidden", !on); if (on) { s.style.left = stick.x + "px"; s.style.top = stick.y + "px"; s.firstElementChild.style.transform = "translate(" + stick.dx + "px," + stick.dy + "px)"; } }
 function moveInput() {
   let fx = 0, fz = 0;
-  if (keys.has("w") || keys.has("arrowup")) fz += 1;
-  if (keys.has("s") || keys.has("arrowdown")) fz -= 1;
-  if (keys.has("d") || keys.has("arrowright")) fx += 1;
-  if (keys.has("a") || keys.has("arrowleft")) fx -= 1;
+  if (keys.has("w")) fz += 1;
+  if (keys.has("s")) fz -= 1;
+  if (keys.has("d")) fx += 1;
+  if (keys.has("a")) fx -= 1;
   if (stick.id !== null) { fx = stick.dx / 60; fz = -stick.dy / 60; }
   const f = V(-Math.sin(camYaw), 0, -Math.cos(camYaw)), r = V(Math.cos(camYaw), 0, -Math.sin(camYaw));
   const m = f.multiplyScalar(fz).add(r.multiplyScalar(fx));
@@ -606,6 +606,11 @@ function frame() {
   renderer.render(scene, camera);
 }
 function tick(dt) {
+  // arrow keys turn the camera (so does the mouse)
+  if (!menuOpen) {
+    if (keys.has("arrowleft")) camYaw += dt * 2.4; if (keys.has("arrowright")) camYaw -= dt * 2.4;
+    if (keys.has("arrowup")) camPitch = Math.min(1.2, camPitch + dt * 1.3); if (keys.has("arrowdown")) camPitch = Math.max(-0.45, camPitch - dt * 1.3);
+  }
   // me
   if (me) {
     const holdBlock = keys.has("f") || [...$("slots").querySelectorAll('.slot[data-k="f"]')].some((b) => b.held);
@@ -647,7 +652,7 @@ function tick(dt) {
 // ---------------------------------------------------------------- start
 $("controls").innerHTML = touch
   ? "Left side: move · Right side: drag to look · Tap the buttons to punch, use moves, dash and block"
-  : "<b>WASD</b> move · <b>Space</b> jump · <b>Click</b> punch (4-hit combo) · <b>1 2 3 4</b> moves · <b>R</b> ultimate · <b>G</b> domain expansion · <b>Q</b> dash (hold A / D to dodge sideways) · <b>F</b> block · <b>Shift</b> Shift Lock · <b>Right-drag</b> look · <b>Wheel</b> zoom";
+  : "<b>WASD</b> move · <b>Space</b> jump · <b>Click</b> punch (4-hit combo) · <b>1 2 3 4</b> moves · <b>R</b> ultimate · <b>G</b> domain expansion · <b>Q</b> dash (hold A / D to dodge sideways) · <b>F</b> block · <b>Shift</b> Shift Lock · <b>Right-drag</b> or <b>arrow keys</b> look · <b>Wheel</b> zoom";
 if (touch) document.body.classList.add("touch");
 buildMenu();
 openMenu("");

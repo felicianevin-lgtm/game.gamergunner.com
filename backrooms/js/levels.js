@@ -188,7 +188,7 @@ export const LEVELS = [
     const exit = exitDoor(L, ...L.exitCell);
     const [mc] = farCells(L, 9, 1), m = L.cellPos(...(mc || L.exitCell));
     return { group: L.group, boxes: L.boxes, floorY: 0, water: [], grid: L.grid, flicker: L.flicker, start: { ...L.cellPos(0, 0), yaw: -Math.PI * 0.75 }, exit,
-      monsters: [{ kind: "entity", ...m }], rocks: [], fog: [0xb8a75a, 3, 34], bg: 0xb8a75a, hemi: [0xfff3c0, 0x6a5a28, 1.6], ceilingH: L.Hh };
+      monsters: [{ kind: "bacteria", ...m }], rocks: [], fog: [0xb8a75a, 3, 34], bg: 0xb8a75a, hemi: [0xfff3c0, 0x6a5a28, 1.6], ceilingH: L.Hh };
   } },
   { name: "Level 37", sub: "The Poolrooms", goal: "Cross on the platforms. DON'T touch the water unless you have to. Throw rocks to distract it.", build(seed) {
     const r = rng(seed), group = new THREE.Group(), B = builder();

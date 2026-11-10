@@ -44,6 +44,7 @@ export function sanitize(g) {
   const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
   const out = { v: 1, id: String(g.id || uid()).slice(0, 20), name: String(g.name || "My Game").slice(0, 40), created: g.created || Date.now(), updated: g.updated || Date.now(),
     settings: { ...DEFAULT_SETTINGS }, objects: [] };
+  if (/^[a-z0-9]{12}$/.test(g.shared || "")) out.shared = g.shared; // (👥 a shared studio: its id on the relay, collab.js)
   if (/^[a-z0-9]{8,16}$/.test(g.pub || "")) out.pub = g.pub; // (published: the game's id on the GunnerVerse home page)
   if (g.desc) out.desc = String(g.desc).slice(0, 300);
   out.gui = sanitizeGui(g.gui); // (screen GUI: labels, buttons, panels, pictures, the dev menu button)
