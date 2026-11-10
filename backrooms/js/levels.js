@@ -262,7 +262,7 @@ export const LEVELS = [
       }
       if (L.r() < 0.15) { const ban = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({ map: tex("birthday"), side: THREE.DoubleSide })); ban.position.set(p.x, 3.4, p.z); ban.rotation.y = L.r() * 3; L.group.add(ban); }
     }
-    const spots = farCells(L, 4, 5);
+    const spots = farCells(L, 5, 2); // (just two of them)
     return { group: L.group, boxes: L.boxes, floorY: 0, water: [], grid: L.grid, flicker: L.flicker, start: { ...L.cellPos(0, 0), yaw: -Math.PI * 0.75 }, exit,
       monsters: spots.map(([i, j]) => ({ kind: "partygoer", ...L.cellPos(i, j) })), rocks: [], fog: [0x2a1030, 4, 40], bg: 0x2a1030, hemi: [0xffd8f0, 0x40204a, 1.5], ceilingH: L.Hh };
   } },

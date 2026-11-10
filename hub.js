@@ -649,7 +649,7 @@
       }).join("");
       main.innerHTML = '<h1 class="page-title">🛠 Dev menu</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +
         (rows ? '<div class="people">' + rows + "</div>" : '<p class="empty">No reports. 🎉</p>') +
-        '<h2 class="row-title">Ban a player</h2><form class="add-friend" id="bnForm"><label for="bnUser">Username (blocks the account from GunnerVerse and the game, and the internet connection it last played from)</label><div class="add-row"><input id="bnUser" maxlength="17" placeholder="@username">' +
+        '<h2 class="row-title">Ban a player</h2><form class="add-friend" id="bnForm"><label for="bnUser">Username (blocks just that account from GunnerVerse and the game, not the Wi-Fi it plays on)</label><div class="add-row"><input id="bnUser" maxlength="17" placeholder="@username">' +
         '<button class="btn danger">Ban</button></div><p class="add-msg" id="bnMsg"></p></form>' +
         '<h2 class="row-title">Banned players</h2><div id="banList"><p class="empty">Loading…</p></div>' +
         '<h2 class="row-title">Reset a password</h2><form class="add-friend" id="rpForm"><label for="rpUser">Username (for a player who forgot their password: they add a new one on a device that\'s still logged in)</label><div class="add-row"><input id="rpUser" maxlength="17">' +

@@ -1526,6 +1526,7 @@ function startCollab() {
       dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 1200); // (this browser's copy too)
     },
     onPeople: drawPeople,
+    onChat: drawChat,
     onError(e) {
       if (["removed", "stopped", "nostudio", "notinvited"].includes(e)) { // (you keep your own copy of the game)
         toast(e === "removed" ? "You were taken out of this shared game. You keep your own copy." : e === "stopped" ? "The owner stopped sharing this game. You keep your own copy." : "This shared game isn't there anymore. You keep your own copy.", 6);
@@ -1557,7 +1558,8 @@ function drawPeople(list, meta) {
   if (list) peopleNow = list;
   const bar = $("collabBar");
   meta = meta || (collab && collab.meta);
-  if (!collab || !meta) { bar.classList.add("hidden"); bar.innerHTML = ""; return; }
+  if (!collab || !meta) { bar.classList.add("hidden"); bar.innerHTML = ""; $("chatBox").classList.add("hidden"); return; }
+  $("chatBox").classList.remove("hidden");
   const me = account(), mine = me ? me.u.toLowerCase() : "";
   const everyone = [{ u: meta.owner, n: meta.ownerU, owner: true }, ...meta.members].filter((p) => p.u !== mine);
   const chips = everyone.map((p) => {
@@ -1569,6 +1571,31 @@ function drawPeople(list, meta) {
   bar.classList.remove("hidden");
   bar.querySelector(".share-open").onclick = openSharing;
 }
+// 💬 Chat with the people in a shared game (bottom right; click the top to fold it away).
+let chatUnread = 0;
+function drawChat(lines, fresh) {
+  const list = $("chatList");
+  if (fresh) list.innerHTML = "";
+  const me = account(), mine = me ? me.u.toLowerCase() : "";
+  for (const l of lines) {
+    const row = document.createElement("p");
+    row.innerHTML = '<b style="color:' + esc(l.c || "#fff") + '">' + esc(l.n || l.u) + ":</b> " + esc(l.m);
+    list.appendChild(row);
+    if (!fresh && l.u !== mine && $("chatBox").classList.contains("closed")) chatUnread++;
+  }
+  while (list.children.length > 60) list.firstChild.remove();
+  list.scrollTop = list.scrollHeight;
+  $("chatNew").textContent = chatUnread; $("chatNew").classList.toggle("hidden", !chatUnread);
+  if (fresh && !lines.length) list.innerHTML = '<p class="chat-empty">Say hi to the people building with you!</p>';
+  else { const e = list.querySelector(".chat-empty"); if (e) e.remove(); }
+}
+$("chatHead").onclick = () => { const b = $("chatBox"); b.classList.toggle("closed"); if (!b.classList.contains("closed")) { chatUnread = 0; $("chatNew").classList.add("hidden"); $("chatIn").focus(); } };
+$("chatForm").onsubmit = (e) => {
+  e.preventDefault();
+  const t = $("chatIn").value.trim();
+  if (!t || !collab) return;
+  if (collab.say(t)) $("chatIn").value = ""; else toast("Not connected yet. Try again in a second.");
+};
 // 👥 Share: start sharing, invite people by @username, take people out, leave / stop sharing.
 async function openSharing() {
   if (!game) return;

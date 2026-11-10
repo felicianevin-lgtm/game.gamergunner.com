@@ -162,5 +162,5 @@ export async function make(kind) {
   const scene = await preload(kind);
   if (kind === "bacteria") return scene ? bacteria(scene) : entity();
   if (!scene) return standIn(kind);
-  return fromModel(kind, scene, kind === "clark" ? 2.7 : 2.1);
+  return fromModel(kind, scene, kind === "clark" ? 2.7 : 2.9);
 }

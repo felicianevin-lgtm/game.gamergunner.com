@@ -3,7 +3,7 @@
 // right away and passes it to everyone else in the studio. What others change comes back here, goes into the game,
 // and the editor rebuilds just those things. Each person also sends where they're looking from, what they have
 // selected and what they're doing; they show as a colored box around their selection and a name tag in the world,
-// and in the people bar at the top.
+// and in the people bar at the top. They can chat too (say(); the relay filters it and keeps the last 40).
 import * as THREE from "../vendor/three.module.js";
 import { RELAY, account } from "./net.js";
 import { sanitize } from "./game.js";
@@ -15,7 +15,7 @@ const J = (v) => JSON.stringify(v == null ? null : v);
 const BASE = ["name", "settings", "gui", "files"];
 
 // hooks: {scene, camera, boundsOf(id) -> {c, q, s} | null, nameOf(id), onWelcome(game, meta, you),
-//         onEdit({ids, gone, scripts, base}), onPeople(list, meta), onError(e), onStatus(text)}
+//         onEdit({ids, gone, scripts, base}), onPeople(list, meta), onChat(lines, fresh), onError(e), onStatus(text)}
 export function connectStudio(sid, hooks) {
   let ws = null, closed = false, tries = 0, meId = 0, meta = null, you = null, lastP = "", lastPAt = 0, timer = 0, pending = null, ready = false;
   const people = new Map(); // id -> {id, u, n, c, p, box, tag, tagText}
@@ -101,10 +101,12 @@ export function connectStudio(sid, hooks) {
         hooks.onWelcome(game, meta, you);
         hooks.onStatus("Saved ✓ (shared)");
         lastP = ""; drawPeople();
+        if (hooks.onChat) hooks.onChat(m.chat || [], true);
         return;
       }
       if (m.t === "join") { addPerson(m); drawPeople(); return; }
       if (m.t === "leave") { removePerson(m.id); drawPeople(); return; }
+      if (m.t === "chat") { if (hooks.onChat) hooks.onChat([m], false); return; }
       if (m.t === "meta") { meta = m.meta; drawPeople(); return; }
       if (m.t === "p") { const p = people.get(m.id); if (p) { p.p = m; drawPeople(); } return; }
       if (m.t === "ed") { const p = people.get(m.id); if (p) p.lastEdit = Date.now(); hooks.onEdit(m); return; }
@@ -162,6 +164,7 @@ export function connectStudio(sid, hooks) {
   connect();
   return {
     sid, push, flush, absorb, update, presence, doing,
+    say(text) { if (!ready || !ws || ws.readyState !== 1) return false; ws.send(JSON.stringify({ t: "chat", m: String(text).slice(0, 200) })); return true; },
     get meta() { return meta; }, get you() { return you; }, get ready() { return ready; },
     redraw: drawPeople,
     close() { closed = true; flush(); clearPeople(); try { ws && ws.close(); } catch {} },

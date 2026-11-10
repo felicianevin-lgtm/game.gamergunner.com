@@ -62,3 +62,5 @@ button.big:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a7a2a; }
 .suits img { width: 200px; height: 200px; object-fit: contain; }
 .suits figcaption { font-weight: 800; margin: 6px 0 10px; color: #ffd25a; }
 #wornMsg { color: #7dff9a; font-weight: 700; min-height: 1em; }
+#map { position: absolute; right: 14px; top: 14px; border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 10px; pointer-events: auto; cursor: pointer; image-rendering: pixelated; }
+#map.big { right: 50%; top: 50%; transform: translate(50%, -50%); z-index: 5; }

@@ -108,12 +108,13 @@ const keys = new Set();
 let wantJump = false, wantGrab = false, wantThrow = false;
 addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
-  if ([" ", "w", "a", "s", "d", "shift", "e", "f", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(k)) e.preventDefault();
+  if ([" ", "w", "a", "s", "d", "shift", "e", "f", "m", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(k)) e.preventDefault();
   if (e.repeat) return;
   keys.add(k);
   if (k === " ") wantJump = true;
   if (k === "e") wantGrab = true;
   if (k === "f") wantThrow = true;
+  if (k === "m") bigMap = !bigMap;
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 addEventListener("blur", () => keys.clear());
@@ -167,10 +168,11 @@ async function startLevel(n) {
   for (const m of L.monsters) {
     const c = await make(m.kind);
     scene.add(c.g);
-    const S = { bacteria: [1.6, 4.6, 20, "the Bacteria"], entity: [1.6, 4.6, 20, "the Entity"], crawler: [2.6, 10.5, 0, "the Crawler"], partygoer: [1.5, 4.7, 16, "a Partygoer"], clark: [2.0, 5.3, 24, "Captain Clark"] }[m.kind];
+    const S = { bacteria: [1.6, 4.6, 20, "the Bacteria"], entity: [1.6, 4.6, 20, "the Entity"], crawler: [4, 19, 0, "the Crawler"], partygoer: [1.5, 4.7, 16, "a Partygoer"], clark: [2.0, 5.3, 24, "Captain Clark"] }[m.kind];
     const y = m.kind === "crawler" ? L.pool.FLOOR : 0;
     mons.push({ kind: m.kind, c, pos: V(m.x, y, m.z), yaw: Math.random() * 6, walk: S[0], chase: S[1], seeR: S[2], name: S[3], state: "wander", goal: null, path: null, pathT: 0, seeT: 0, lastSeen: null, searchT: 0, distract: null, alarm: 0, giggleT: 3 + Math.random() * 5 });
   }
+  drawLayout();
   startHum(L.pool ? "pool" : n === 2 ? "party" : "lobby");
   $("loadMsg").classList.add("hidden");
   $("lvlName").textContent = def.name; $("lvlSub").textContent = def.sub; $("goal").textContent = def.goal;
@@ -299,7 +301,7 @@ function updateMonsters(dt) {
     const d = Math.hypot(P.pos.x - m.pos.x, P.pos.z - m.pos.z);
     if (m.kind === "crawler") {
       // It lives in the water. Touch the water and it races at you. Splashes (thrown rocks) pull it away.
-      if (m.distract && (m.distract.t -= dt) > 0) { goal = m.distract.pos; speed = 7; m.state = "distracted"; }
+      if (m.distract && (m.distract.t -= dt) > 0) { goal = m.distract.pos; speed = 14; m.state = "distracted"; }
       else if (P.inWater) { goal = P.pos; speed = m.chase; if (m.state !== "chase") SFX.chase(); m.state = "chase"; m.alarm = 2; }
       else { m.alarm -= dt; if (!m.goal || Math.hypot(m.goal.x - m.pos.x, m.goal.z - m.pos.z) < 1.5 || m.pathT < -6) { const w = L.water[0]; m.goal = V(w.x0 + 2 + Math.random() * (w.x1 - w.x0 - 4), 0, Math.max(w.z0 + 3, Math.min(w.z1 - 3, P.pos.z + (Math.random() - 0.5) * 50))); m.pathT = 0; } goal = m.goal; m.state = "wander"; }
       move(m, goal, speed, dt, 0.5);
@@ -365,6 +367,56 @@ function caught(m) {
 }
 let dyingLook = null;
 
+// ---------------------------------------------------------------- the map (top right; M or a tap makes it big)
+// The level's layout is drawn once from above (walls, platforms, water, the exit); every frame the part around you
+// is copied in, then the monsters (red dots) and you (the yellow arrow).
+const MAP_PX = 4; // pixels per meter on the layout picture
+let layout = null, bigMap = false;
+const mapC = $("map"), mapX = mapC.getContext("2d");
+mapC.addEventListener("pointerdown", (e) => { e.stopPropagation(); bigMap = !bigMap; });
+function drawLayout() {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const b of L.boxes) { x0 = Math.min(x0, b.x0); z0 = Math.min(z0, b.z0); x1 = Math.max(x1, b.x1); z1 = Math.max(z1, b.z1); }
+  const c = document.createElement("canvas"); c.width = Math.ceil((x1 - x0) * MAP_PX); c.height = Math.ceil((z1 - z0) * MAP_PX);
+  const x = c.getContext("2d"), X = (v) => (v - x0) * MAP_PX, Z = (v) => (v - z0) * MAP_PX;
+  x.fillStyle = L.pool ? "#d9eef2" : L.bg === 0x2a1030 ? "#3a1a40" : "#5a5130"; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = "rgba(60,170,210,0.75)"; for (const w of L.water) x.fillRect(X(w.x0), Z(w.z0), (w.x1 - w.x0) * MAP_PX, (w.z1 - w.z0) * MAP_PX);
+  const top = L.ceilingH ? L.ceilingH - 1.5 : 99;
+  for (const b of L.boxes) { // walls, platforms, pillars (not the floor, the ceiling or the arches overhead)
+    if (b.y1 <= L.floorY + 0.1 || b.y0 >= top) continue;
+    x.fillStyle = b.y1 - b.y0 < 2 && L.pool ? "#ffffff" : L.pool ? "#9fb7bd" : "#e8d88a";
+    x.fillRect(X(b.x0), Z(b.z0), Math.max(1.5, (b.x1 - b.x0) * MAP_PX), Math.max(1.5, (b.z1 - b.z0) * MAP_PX));
+  }
+  x.fillStyle = "#4dff7a"; x.beginPath(); x.arc(X(L.exit.x), Z(L.exit.z), 7, 0, 7); x.fill();
+  x.fillStyle = "#003310"; x.font = "bold 9px sans-serif"; x.textAlign = "center"; x.fillText("EXIT", X(L.exit.x), Z(L.exit.z) + 3);
+  layout = { c, x0, z0 };
+}
+function drawMap() {
+  if (!layout) return;
+  const big = bigMap, S = big ? Math.min(innerWidth, innerHeight) * 0.86 : (touch ? 120 : 170);
+  if (mapC.width !== Math.round(S)) { mapC.width = mapC.height = Math.round(S); mapC.style.width = mapC.style.height = Math.round(S) + "px"; }
+  mapC.classList.toggle("big", big);
+  const x = mapX, W = mapC.width;
+  x.clearRect(0, 0, W, W);
+  // what part of the layout: everything (big map) or 44 m around you
+  let k, ox, oz;
+  if (big) { k = W / Math.max(layout.c.width, layout.c.height); ox = (W - layout.c.width * k) / 2; oz = (W - layout.c.height * k) / 2; }
+  else { k = W / (44 * MAP_PX); ox = W / 2 - (P.pos.x - layout.x0) * MAP_PX * k; oz = W / 2 - (P.pos.z - layout.z0) * MAP_PX * k; }
+  x.fillStyle = "rgba(0,0,0,0.55)"; x.fillRect(0, 0, W, W);
+  x.drawImage(layout.c, ox, oz, layout.c.width * k, layout.c.height * k);
+  const at = (p) => [ox + (p.x - layout.x0) * MAP_PX * k, oz + (p.z - layout.z0) * MAP_PX * k];
+  // the monsters
+  for (const m of mons) {
+    const [mx, my] = at(m.pos), r = big ? 7 : 5;
+    x.fillStyle = m.state === "chase" ? "#ff2020" : "#ff7a7a"; x.strokeStyle = "#000"; x.lineWidth = 2;
+    x.beginPath(); x.arc(Math.max(r, Math.min(W - r, mx)), Math.max(r, Math.min(W - r, my)), r + (m.state === "chase" ? Math.sin(time * 12) * 1.5 : 0), 0, 7); x.fill(); x.stroke();
+  }
+  // you
+  const [px, py] = at(P.pos), fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), s = big ? 10 : 8;
+  x.fillStyle = "#ffd531"; x.strokeStyle = "#000"; x.lineWidth = 2;
+  x.beginPath(); x.moveTo(px + fx * s, py + fz * s); x.lineTo(px - fx * s * 0.6 + fz * s * 0.6, py - fz * s * 0.6 - fx * s * 0.6); x.lineTo(px - fx * s * 0.6 - fz * s * 0.6, py - fz * s * 0.6 + fx * s * 0.6); x.closePath(); x.fill(); x.stroke();
+}
+
 // ---------------------------------------------------------------- winning
 function levelDone() {
   if (!playing) return;
@@ -406,8 +458,8 @@ $("start").onclick = () => { audio(); $("menu").classList.add("hidden"); save.se
 $("cont").onclick = () => { audio(); $("menu").classList.add("hidden"); startLevel(save.get()); };
 $("playAgain").onclick = () => { $("done").classList.add("hidden"); startLevel(0); };
 if (save.get() > 0) { $("cont").classList.remove("hidden"); $("cont").textContent = "▶ Continue: " + LEVELS[save.get()].sub; }
-$("controls").innerHTML = touch ? "Left side: walk · Right side: look · 🏃 run · ⤒ jump · ✋ pick up rock · 🪨 throw"
-  : "<b>WASD</b> walk · <b>Mouse</b> or <b>arrow keys</b> look · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> pick up a rock · <b>F</b> or <b>click</b> throw it · <b>Esc</b> pause";
+$("controls").innerHTML = touch ? "Left side: walk · Right side: look · 🏃 run · ⤒ jump · ✋ pick up rock · 🪨 throw · tap the map to make it big"
+  : "<b>WASD</b> walk · <b>Mouse</b> or <b>arrow keys</b> look · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> pick up a rock · <b>F</b> or <b>click</b> throw it · <b>M</b> big map · <b>Esc</b> pause";
 preload("bacteria"); preload("partygoer"); preload("clark");
 
 // ---------------------------------------------------------------- every frame
@@ -428,6 +480,7 @@ function tick(dt) {
   if (!playing) return;
   updateMonsters(dt);
   updateRocks(dt);
+  drawMap();
   if (L.pool && Math.random() < dt * 0.4) SFX.drip();
   if (lvl === 2 && Math.random() < dt * 0.08) SFX.party();
 }
