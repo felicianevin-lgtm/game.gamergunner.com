@@ -2,16 +2,18 @@
 // black outlines) and their moves. The moves themselves happen in moves.js; this file is what they are and how they move.
 import * as THREE from "/create/vendor/three.module.js";
 
-// key: 1 and 2 are normal moves (cooldown), 3 is the ULTIMATE (charges up), 4 is the DOMAIN (charges from ultimates).
+// key: 1-4 are normal moves (cooldowns), R is the ULTIMATE (charges up), G is the DOMAIN EXPANSION (charges from ultimates).
 export const FIGHTERS = {
   nova: {
     name: "Nova", title: "The Gravity Sorcerer", color: "#8b6cff", bg: ["#120d33", "#5a3fd0"],
     look: { skin: "#f3d6bd", hair: "#c9b8ff", hairStyle: "swept", coat: "#1c2140", trim: "#ffd25a", pants: "#141729", shoes: "#0b0c14", eyes: "#7fe8ff", extra: "visor" },
     moves: [
-      { key: "1", name: "Pull Orb", icon: "🔵", cd: 6, desc: "A blue orb flies out and drags enemies into it" },
-      { key: "2", name: "Push Burst", icon: "🔴", cd: 8, desc: "A red blast that sends enemies flying" },
-      { key: "3", name: "Void Beam", icon: "🟣", ult: true, desc: "Smash red and blue together: a giant purple sphere that wipes out everything in its path" },
-      { key: "4", name: "Infinite Starfield", icon: "🌌", dom: true, desc: "DOMAIN: enemies inside freeze, then crawl, and keep taking damage" },
+      { key: "1", name: "Blue Pull", icon: "🔵", cd: 6, desc: "Shoot BLUE: an orb that drags enemies into it" },
+      { key: "2", name: "Red Push", icon: "🔴", cd: 8, desc: "Shoot RED: a blast that sends enemies flying" },
+      { key: "3", name: "Blink", icon: "🌀", cd: 5, desc: "Teleport forward in a flash" },
+      { key: "4", name: "Infinity Wall", icon: "♾️", cd: 14, desc: "For 2.5 seconds attacks can't touch you" },
+      { key: "r", name: "Purple Void", icon: "🟣", ult: true, desc: "ULTIMATE: smash red and blue together and fire a giant purple sphere" },
+      { key: "g", name: "Infinite Starfield", icon: "🌌", dom: true, desc: "DOMAIN EXPANSION: everyone inside is trapped, frozen, then slowed and hurt" },
     ],
   },
   rend: {
@@ -20,8 +22,10 @@ export const FIGHTERS = {
     moves: [
       { key: "1", name: "Cleave Flurry", icon: "🗡️", cd: 5, desc: "Six invisible slashes in front of you" },
       { key: "2", name: "Rift Slash", icon: "🌙", cd: 7, desc: "A huge flying slash that knocks enemies away" },
-      { key: "3", name: "Hellfire Arrow", icon: "🏹", ult: true, desc: "Draw a bow of fire: the arrow explodes in a firestorm" },
-      { key: "4", name: "Blood Shrine", icon: "⛩️", dom: true, desc: "DOMAIN: a shrine rises and slashes never stop for anyone inside" },
+      { key: "3", name: "Demon Grab", icon: "✋", cd: 9, desc: "Grab the closest enemy and smash them into the ground" },
+      { key: "4", name: "Crimson Rain", icon: "🩸", cd: 12, desc: "Slashes rain down on the area in front of you" },
+      { key: "r", name: "Hellfire Arrow", icon: "🏹", ult: true, desc: "ULTIMATE: draw a bow of fire; the arrow explodes in a firestorm" },
+      { key: "g", name: "Blood Shrine", icon: "⛩️", dom: true, desc: "DOMAIN EXPANSION: a shrine rises, everyone inside is trapped and slashed nonstop" },
     ],
   },
   rook: {
@@ -30,8 +34,10 @@ export const FIGHTERS = {
     moves: [
       { key: "1", name: "Rush Punch", icon: "👊", cd: 5, desc: "Dash in with a punch. Sometimes it SPARKS for 2.5x damage" },
       { key: "2", name: "Quake Slam", icon: "💥", cd: 8, desc: "Slam the ground: a shockwave launches everyone near you" },
-      { key: "3", name: "Meteor Drop", icon: "☄️", ult: true, desc: "Leap into the sky and crash down like a meteor" },
-      { key: "4", name: "Titan Awakening", icon: "🗿", dom: true, desc: "AWAKEN: grow huge, hit harder and take less damage" },
+      { key: "3", name: "Rising Uppercut", icon: "⬆️", cd: 7, desc: "Launch an enemy straight into the sky" },
+      { key: "4", name: "Iron Guard", icon: "🛡️", cd: 15, desc: "4 seconds: nothing knocks you down and you take half damage" },
+      { key: "r", name: "Meteor Drop", icon: "☄️", ult: true, desc: "ULTIMATE: leap into the sky and crash down like a meteor" },
+      { key: "g", name: "Titan Awakening", icon: "🗿", dom: true, desc: "AWAKENING: grow huge, hit harder and take less damage" },
     ],
   },
   shade: {
@@ -40,8 +46,10 @@ export const FIGHTERS = {
     moves: [
       { key: "1", name: "Shadow Hounds", icon: "🐺", cd: 7, desc: "Two shadow wolves hunt down the nearest enemy" },
       { key: "2", name: "Shadow Step", icon: "👤", cd: 6, desc: "Sink into the shadows and kick an enemy from behind" },
-      { key: "3", name: "Great Serpent", icon: "🐍", ult: true, desc: "A giant shadow serpent bursts out of the ground under them" },
-      { key: "4", name: "Shadow Garden", icon: "🌑", dom: true, desc: "DOMAIN: the floor turns to shadow, tendrils grab enemies, your moves recharge twice as fast" },
+      { key: "3", name: "Shadow Toad", icon: "🐸", cd: 10, desc: "A toad's tongue grabs an enemy and yanks them to you" },
+      { key: "4", name: "Bat Swarm", icon: "🦇", cd: 9, desc: "A swarm of shadow bats rips through everyone in front" },
+      { key: "r", name: "Great Serpent", icon: "🐍", ult: true, desc: "ULTIMATE: a giant shadow serpent bursts out of the ground under them" },
+      { key: "g", name: "Shadow Garden", icon: "🌑", dom: true, desc: "DOMAIN EXPANSION: the floor turns to shadow, everyone inside is trapped, your moves recharge twice as fast" },
     ],
   },
 };
@@ -74,64 +82,82 @@ function part(parent, geo, color, x, y, z, glow, outline = 0.06) {
 const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 const pivot = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 
+const cap = (r, len) => new THREE.CapsuleGeometry(r, len, 4, 12);
+const sph = (r) => new THREE.SphereGeometry(r, 18, 14);
 // The fighter: root at the feet (turn it with rotation.y), body at the hips (tips over when knocked flying).
+// Round, anime-style shapes: a big head with big eyes, capsule arms and legs, coat tails that fly back when running.
 export function buildFighter(id) {
   const F = FIGHTERS[id] || FIGHTERS.nova, L = F.look, W = L.wide || 1;
   const root = new THREE.Group(), body = pivot(root, 0, 2.3, 0);
   const torso = pivot(body, 0, 0, 0);
-  part(torso, box(1.15 * W, 0.7, 0.75), L.pants, 0, 0.1, 0); // hips
-  part(torso, box(1.5 * W, 1.6, 0.85), L.coat, 0, 1.15, 0); // chest
-  part(torso, box(1.52 * W, 0.18, 0.87), L.trim, 0, 0.42, 0, false, 0.02); // belt
-  if (L.extra !== "wraps") part(torso, box(0.18, 1.3, 0.05), L.trim, 0, 1.15, 0.44, false, 0); // zip
-  if (id === "nova") { part(torso, box(1.6, 0.5, 0.95), L.coat, 0, 2.0, 0); part(torso, box(1.62, 0.08, 0.97), L.trim, 0, 2.2, 0, false, 0); } // high collar
-  if (L.extra === "scarf") { part(torso, box(1.35, 0.4, 1.0), L.trim, 0, 1.95, 0); part(torso, box(0.35, 1.1, 0.12), L.trim, 0.35, 1.3, -0.5).rotation.x = 0.2; }
-  if (id === "rend") for (const s of [-1, 1]) { const p = part(torso, box(0.7, 0.35, 0.9), "#2a0c10", s * 0.95, 1.9, 0); p.rotation.z = s * -0.35; part(p, new THREE.ConeGeometry(0.12, 0.45, 5), "#ff3b4e", 0, 0.3, 0, true); }
-  // coat tails
-  if (id !== "rook") for (const s of [-1, 1]) part(torso, box(0.62 * W, 1.3, 0.12), L.coat, s * 0.38, -0.55, -0.38).rotation.x = 0.12;
-  // head
-  const neck = pivot(torso, 0, 2.0, 0);
-  const head = pivot(neck, 0, 0.62, 0);
-  part(head, box(1.0, 1.08, 0.95), L.skin, 0, 0, 0);
-  const eyeM = toon(L.eyes, true);
-  for (const s of [-1, 1]) { const e = new THREE.Mesh(box(0.2, 0.12, 0.05), eyeM); e.position.set(s * 0.22, 0.04, 0.48); head.add(e); }
-  part(head, box(0.32, 0.05, 0.04), "#3a2018", 0, -0.28, 0.48, false, 0); // mouth
-  if (L.extra === "visor") { const v = new THREE.Mesh(box(1.04, 0.22, 0.1), toon("#7fe8ff", true)); v.position.set(0, 0.06, 0.47); head.add(v); }
-  if (id === "rend") { for (const s of [-1, 1]) { part(head, box(0.06, 0.32, 0.03), "#120406", s * 0.4, -0.05, 0.48, false, 0); } part(head, box(0.5, 0.05, 0.03), "#120406", 0, 0.3, 0.48, false, 0); }
-  // hair
-  const H = L.hair, hairTop = part(head, box(1.1, 0.35, 1.05), H, 0, 0.6, -0.02);
-  if (L.hairStyle === "buzz") { hairTop.scale.set(1, 0.6, 1); hairTop.position.y = 0.52; }
-  else {
-    part(head, box(1.1, 0.75, 0.3), H, 0, 0.2, -0.42); // back
-    for (const s of [-1, 1]) part(head, box(0.15, 0.55, 0.9), H, s * 0.55, 0.3, -0.05, false, 0.03);
-    const spikes = L.hairStyle === "swept" ? [[-0.3, 0.85, 0.2, 0.6], [0, 0.95, 0.25, 0.3], [0.32, 0.88, 0.15, -0.2], [0, 0.8, -0.35, 0]] :
-      L.hairStyle === "spikes" ? [[-0.38, 0.95, 0, 0.5], [-0.12, 1.08, 0.1, 0.15], [0.14, 1.05, 0, -0.15], [0.4, 0.92, -0.05, -0.5], [0, 0.95, -0.35, 0]] :
-      [[-0.4, 0.98, 0.05, 0.7], [-0.15, 1.12, -0.1, 0.25], [0.15, 1.1, 0.05, -0.25], [0.42, 0.95, -0.1, -0.7], [0, 1.0, -0.4, 0], [0.25, 0.85, 0.35, -0.4]];
-    for (const [x, y, z, r] of spikes) { const c = part(head, new THREE.ConeGeometry(0.28, 0.75, 4), H, x, y, z, false, 0.04); c.rotation.z = r; }
-    if (L.hairStyle === "swept") { const f = part(head, box(1.0, 0.25, 0.25), H, 0.12, 0.5, 0.45); f.rotation.z = -0.25; }
+  part(torso, sph(0.62), L.pants, 0, 0.1, 0).scale.set(1.0 * W, 0.62, 0.7); // hips
+  part(torso, cap(0.64, 0.55), L.coat, 0, 1.12, 0).scale.set(1.08 * W, 1, 0.66); // chest
+  for (const s of [-1, 1]) part(torso, sph(0.36), L.coat, s * 0.78 * W, 1.62, 0).scale.set(1, 0.85, 0.9); // shoulders
+  const belt = part(torso, new THREE.CylinderGeometry(0.66, 0.66, 0.17, 20), L.trim, 0, 0.5, 0, false, 0.02); belt.scale.set(1.04 * W, 1, 0.68);
+  if (L.extra !== "wraps") part(torso, box(0.12, 1.15, 0.05), L.trim, 0, 1.12, 0.43, false, 0); // zip
+  if (id === "nova") { const c = part(torso, new THREE.CylinderGeometry(0.5, 0.58, 0.55, 18, 1, true), L.coat, 0, 1.98, 0); c.material.side = THREE.DoubleSide; part(torso, new THREE.TorusGeometry(0.5, 0.05, 6, 20), L.trim, 0, 2.25, 0, false, 0).rotation.x = Math.PI / 2; }
+  if (L.extra === "scarf") { part(torso, new THREE.TorusGeometry(0.42, 0.2, 8, 18), L.trim, 0, 1.92, 0).rotation.x = Math.PI / 2; }
+  if (id === "rend") for (const s of [-1, 1]) { const p = part(torso, sph(0.42), "#2a0c10", s * 0.82, 1.78, 0); p.scale.set(1, 0.6, 1); for (let i = 0; i < 3; i++) { const sp = part(p, new THREE.ConeGeometry(0.1, 0.45, 6), "#ff3b4e", s * 0.15 * i - s * 0.1, 0.45, -0.1 + i * 0.1, true); sp.rotation.z = s * -0.4; } }
+  if (id === "rook") part(torso, new THREE.TorusGeometry(0.56, 0.07, 6, 20), "#1b1b1b", 0, 1.55, 0, false, 0).rotation.x = Math.PI / 2;
+  // coat tails (they flow back when moving)
+  const tails = [];
+  if (id !== "rook") for (const s of [-1, 1]) {
+    const t = pivot(torso, s * 0.32, 0.45, -0.28);
+    part(t, box(0.6 * W, 1.6, 0.08), L.coat, 0, -0.8, 0, false, 0.08);
+    part(t, box(0.62 * W, 0.08, 0.1), L.trim, 0, -1.58, 0, false, 0);
+    tails.push(t);
   }
-  if (L.extra === "horns") for (const s of [-1, 1]) { const h = part(head, new THREE.ConeGeometry(0.12, 0.6, 6), "#f2e6d0", s * 0.42, 0.9, 0.1); h.rotation.z = s * -0.5; }
+  if (L.extra === "scarf") { const t = pivot(torso, 0.3, 1.9, -0.35); part(t, box(0.32, 1.3, 0.06), L.trim, 0, -0.65, 0, false, 0.08); tails.push(t); }
+  // head: big and round, anime eyes
+  const neck = pivot(torso, 0, 1.95, 0);
+  part(neck, cap(0.2, 0.25), L.skin, 0, 0.15, 0, false, 0.04);
+  const head = pivot(neck, 0, 0.72, 0);
+  part(head, sph(0.6), L.skin, 0, 0, 0).scale.set(1, 1.04, 0.96);
+  const white = toon("#ffffff", true), iris = toon(L.eyes, true), dark = toon("#120a08", true);
+  if (L.extra !== "visor") for (const s of [-1, 1]) {
+    const e = new THREE.Mesh(sph(0.15), white); e.scale.set(1, 1.15, 0.35); e.position.set(s * 0.22, 0.02, 0.53); head.add(e);
+    const i = new THREE.Mesh(sph(0.09), iris); i.scale.set(1, 1.3, 0.4); i.position.set(s * 0.22, 0.0, 0.58); head.add(i);
+    const p = new THREE.Mesh(sph(0.04), dark); p.scale.set(1, 1.3, 0.4); p.position.set(s * 0.22, 0.0, 0.6); head.add(p);
+    const b = new THREE.Mesh(box(0.26, 0.05, 0.04), dark); b.position.set(s * 0.22, 0.24, 0.55); b.rotation.z = s * (id === "rend" || id === "rook" ? 0.25 : -0.08); head.add(b);
+  }
+  if (L.extra === "visor") { const v = new THREE.Mesh(new THREE.CylinderGeometry(0.61, 0.61, 0.24, 24, 1, true, -1.3, 2.6), toon("#7fe8ff", true)); v.position.y = 0.04; v.material.side = THREE.DoubleSide; head.add(v); }
+  const mouth = new THREE.Mesh(box(0.2, 0.035, 0.03), dark); mouth.position.set(0, -0.3, 0.55); head.add(mouth);
+  if (id === "rend") for (const s of [-1, 1]) { const m = new THREE.Mesh(box(0.05, 0.25, 0.03), dark); m.position.set(s * 0.42, -0.12, 0.42); m.rotation.y = s * 0.6; head.add(m); }
+  // hair
+  const H = L.hair;
+  const cap0 = part(head, sph(0.66), H, 0, 0.22, -0.06); cap0.scale.set(1, L.hairStyle === "buzz" ? 0.62 : 0.78, 1);
+  if (L.hairStyle !== "buzz") {
+    part(head, sph(0.6), H, 0, -0.05, -0.18).scale.set(1.05, 0.9, 0.8); // back
+    const spikes = L.hairStyle === "swept" ? [[-0.35, 0.72, 0.25, 0.7, 0.3], [-0.1, 0.85, 0.3, 0.3, 0.35], [0.2, 0.82, 0.25, -0.3, 0.3], [0.42, 0.66, 0.15, -0.8, 0.25], [0, 0.8, -0.35, 0, -0.4], [-0.3, 0.7, -0.3, 0.6, -0.4], [0.3, 0.7, -0.3, -0.6, -0.4]] :
+      L.hairStyle === "spikes" ? [[-0.42, 0.75, 0.05, 0.75, 0], [-0.16, 0.92, 0.12, 0.25, 0.15], [0.14, 0.92, 0.05, -0.25, 0.1], [0.42, 0.75, 0, -0.75, 0], [0, 0.85, -0.35, 0, -0.5], [-0.3, 0.75, -0.3, 0.5, -0.5], [0.3, 0.75, -0.3, -0.5, -0.5]] :
+      [[-0.45, 0.8, 0.05, 0.9, 0.1], [-0.18, 0.98, -0.05, 0.3, 0], [0.18, 0.98, 0.05, -0.3, 0.1], [0.45, 0.8, -0.05, -0.9, 0], [0, 0.9, -0.4, 0, -0.6], [0.3, 0.7, 0.35, -0.5, 0.5], [-0.32, 0.75, -0.35, 0.6, -0.5], [0.32, 0.75, -0.35, -0.6, -0.5]];
+    for (const [x, y, z, rz, rx] of spikes) { const c = part(head, new THREE.ConeGeometry(0.24, 0.85, 6), H, x, y, z, false, 0.05); c.rotation.set(rx, 0, rz); }
+    // bangs over the forehead
+    for (const s of [-1, 0, 1]) { const b = part(head, new THREE.ConeGeometry(0.15, 0.5, 5), H, s * 0.22, 0.32, 0.5, false, 0.05); b.rotation.set(2.6, 0, s * 0.3); }
+  }
+  if (L.extra === "horns") for (const s of [-1, 1]) { const h = part(head, new THREE.ConeGeometry(0.11, 0.65, 8), "#f2e6d0", s * 0.42, 0.72, 0.1); h.rotation.z = s * -0.55; }
   // arms
   const arms = [];
   for (const s of [-1, 1]) {
-    const a = pivot(torso, s * (0.95 * W), 1.75, 0);
-    part(a, box(0.5 * W, 1.0, 0.5), L.coat, 0, -0.45, 0); // upper arm
-    const fore = pivot(a, 0, -0.95, 0);
-    part(fore, box(0.46 * W, 0.9, 0.46), L.extra === "wraps" ? L.skin : L.coat, 0, -0.4, 0);
-    part(fore, box(0.5 * W, 0.42, 0.5), L.extra === "wraps" ? "#c8202a" : L.skin, 0, -0.95, 0); // hand
-    if (L.extra === "wraps") part(a, box(0.52 * W, 0.12, 0.52), L.trim, 0, -0.05, 0, false, 0);
+    const a = pivot(torso, s * (0.86 * W), 1.6, 0);
+    part(a, cap(0.21 * W, 0.55), L.coat, 0, -0.45, 0);
+    const fore = pivot(a, 0, -0.92, 0);
+    part(fore, cap(0.19 * W, 0.5), L.extra === "wraps" ? L.skin : L.coat, 0, -0.38, 0);
+    part(fore, new THREE.CylinderGeometry(0.22 * W, 0.22 * W, 0.1, 14), L.trim, 0, -0.62, 0, false, 0); // cuff
+    part(fore, sph(0.24 * W), L.extra === "wraps" ? "#c8202a" : L.skin, 0, -0.88, 0); // fist
     arms.push({ a, fore });
   }
   // legs
   const legs = [];
   for (const s of [-1, 1]) {
-    const l = pivot(body, s * 0.33 * W, -0.15, 0);
-    part(l, box(0.55 * W, 1.1, 0.6), L.pants, 0, -0.5, 0);
-    const shin = pivot(l, 0, -1.05, 0);
-    part(shin, box(0.5 * W, 0.95, 0.55), L.pants, 0, -0.4, 0);
-    part(shin, box(0.58 * W, 0.3, 0.85), L.shoes, 0, -0.95, 0.12);
+    const l = pivot(body, s * 0.3 * W, -0.12, 0);
+    part(l, cap(0.26 * W, 0.6), L.pants, 0, -0.5, 0);
+    const shin = pivot(l, 0, -1.02, 0);
+    part(shin, cap(0.23 * W, 0.55), L.pants, 0, -0.4, 0);
+    const shoe = part(shin, cap(0.22 * W, 0.4), L.shoes, 0, -0.93, 0.12); shoe.rotation.x = Math.PI / 2; shoe.scale.set(1.1, 1, 0.75);
     legs.push({ l, shin });
   }
-  root.userData = { id, body, torso, neck, head, armL: arms[0], armR: arms[1], legL: legs[0], legR: legs[1], t: Math.random() * 10, tilt: new THREE.Euler(), spin: 0 };
+  root.userData = { id, body, torso, neck, head, tails, armL: arms[0], armR: arms[1], legL: legs[0], legR: legs[1], t: Math.random() * 10, spin: 0 };
   return root;
 }
 
@@ -194,6 +220,8 @@ export function animateFighter(g, st, dt) {
     return;
   }
   U.spin = 0;
+  const flow = st.mode === "dash" ? 1.3 : Math.min(1.1, (st.speed || 0) / 18) + (st.mode === "air" ? 0.5 : 0);
+  for (const [i, tl] of (U.tails || []).entries()) tl.rotation.x = lerp(tl.rotation.x, -0.08 - flow + Math.sin(t * 9 + i) * 0.08 * (0.3 + flow), k);
   U.body.rotation.x = lerp(U.body.rotation.x, lean, k);
   U.body.rotation.z = lerp(U.body.rotation.z, 0, k);
   U.body.position.y = lerp(U.body.position.y, bodyY, k);

@@ -1,4 +1,4 @@
-// CLASH moves: what each fighter's 1 / 2 / ULTIMATE (3) / DOMAIN (4) does. Every game shows every move (the effects),
+// CLASH moves: what each fighter's 1 / 2 / 3 / 4 / ULTIMATE (R) / DOMAIN (G) does. Every game shows every move (the effects),
 // but only the game of whoever used it decides who got hit (owner = the caster is me or one of my practice bots):
 // G.hit(caster, target, hit) sends the hit to that player's game, which takes the damage (main.js applyHit).
 // hit = {dmg, kb: [x, y, z] push, rag: seconds knocked flying, stun, slow, frz (frozen), set: 1 = push replaces speed,
@@ -120,12 +120,146 @@ function domainTick(G, caster, owner, pos, every, hit, st) {
 }
 
 // ---------------------------------------------------------------- the moves
-// data = {p: where it started [x,y,z], d: facing, x: aimed point, t: target id, f: effect number}
+// key: "1"-"4" moves, "r" ULTIMATE, "g" DOMAIN. data = {p: where it started [x,y,z], d: facing, x: aimed point, t: target id, f: effect number}
 export function castMove(G, caster, key, data, owner) {
   const c = caster.char, p0 = V(...data.p), d = data.d, fwd = fwdOf(d), hand = p0.clone().add(V(0, 3.2, 0)).addScaledVector(fwd, 1.6);
   const keyed = (e) => { e.key = caster.id + ":" + data.f; return e; };
   const pose = (name, secs) => { caster.pose = name; caster.poseT = secs; };
   const M = c + key;
+
+  // ===== the newer moves (3 and 4) =====
+  if (M === "nova3") { // Blink: teleport forward
+    pose("point", 0.2); G.sound("dash", p0);
+    const flash = (at) => { boom(G, at.clone().add(V(0, 2.5, 0)), 0x7fe8ff, 3, 0.35); burst(G, at.clone().add(V(0, 2.5, 0)), 0xbfe6ff, 10, 9, 0.4, 0.25); };
+    flash(p0);
+    const e = keyed(effect(G, 0.6, () => !e.ended));
+    e.pop = (p) => { e.ended = true; flash(V(...(p.toArray ? p.toArray() : p))); };
+    if (owner) {
+      const to = caster.pos.clone().addScaledVector(fwd, 18);
+      for (let i = 0; i < 18 && G.arena.inside(to.clone().setY(to.y + 1)); i++) to.addScaledVector(fwd, -1);
+      caster.pos.copy(to); G.arena.collide(caster.pos, 0.9, 5, true); caster.vel.set(0, 0, 0); caster.iframes = Math.max(caster.iframes, 0.25);
+      G.pop(caster, data.f, caster.pos); e.pop(caster.pos.clone());
+    }
+    return;
+  }
+  if (M === "nova4") { // Infinity Wall: nothing touches you for 2.5 s
+    pose("sign", 0.4); G.sound("orb", p0);
+    caster.infinity = 2.5;
+    const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2, 1), mat(0x7fe8ff, 0.25, true)); shell.material.wireframe = true; G.scene.add(shell);
+    const glow = ball(G, 0x4060ff, 3.1, 0.12);
+    effect(G, 2.5, (dt, age) => {
+      if (!caster.g || caster.dead) return false;
+      shell.position.copy(caster.pos).add(V(0, 2.6, 0)); glow.position.copy(shell.position);
+      shell.rotation.y += dt * 1.5; shell.rotation.x += dt * 0.7;
+      shell.material.opacity = (0.22 + Math.sin(age * 12) * 0.06) * (age > 2.2 ? (2.5 - age) / 0.3 : 1);
+    }, [shell, glow]);
+    return;
+  }
+  if (M === "rend3") { // Demon Grab: grab the closest enemy and smash them down
+    pose("slam", 0.6);
+    if (owner) caster.lockT = 0.55;
+    const target = owner ? aimTarget(G, caster, 9, Math.PI) : null;
+    const claw = ball(G, 0xff2040, 0.8, 0.8); claw.position.copy(hand);
+    let done = false;
+    effect(G, 0.7, (dt, age) => {
+      claw.position.copy(caster.pos).add(V(0, 3, 0)).addScaledVector(fwdOf(caster.facing), 2 + Math.sin(Math.min(1, age / 0.3) * Math.PI) * 2);
+      claw.material.opacity = 0.8 * (1 - age / 0.7);
+      if (done || age < 0.3) return;
+      done = true;
+      const at = caster.pos.clone().addScaledVector(fwdOf(caster.facing), 3);
+      wave(G, at, 0xff2040, 1, 7, 0.4); G.sound("slam", at); G.shake(0.7, at);
+      if (owner && target && !target.dead && target.pos.distanceTo(caster.pos) < 11) G.hit(caster, target, { dmg: 16, kb: [0, 9, 0], set: 1, rag: 1.5, fx: "big" });
+    }, [claw]);
+    return;
+  }
+  if (M === "rend4") { // Crimson Rain: slashes fall on the area in front
+    pose("up", 0.6); G.sound("crescent", p0);
+    const at = V(...data.x), floor = flatRing(G, 0xff2040, at.clone().setY(at.y + 0.12), 0.5); floor.scale.setScalar(9);
+    const st = {};
+    effect(G, 1.8, (dt, age) => {
+      floor.material.opacity = 0.5 * (1 - age / 1.8);
+      for (let i = 0; i < 3; i++) slashLine(G, at.clone().add(V((Math.random() - 0.5) * 16, 1 + Math.random() * 8, (Math.random() - 0.5) * 16)), 0xff2040, 6, 0.18);
+      if (Math.random() < 0.3) G.sound("slash", at);
+      st.dt = dt;
+      if (owner) { st.tick = (st.tick ?? 0) - dt; if (st.tick <= 0) { st.tick = 0.25; for (const t of targetsNear(G, caster, at, 9)) G.hit(caster, t, { dmg: 3, stun: 0.3, slow: 0.5, fx: "slash" }); } }
+    }, [floor]);
+    return;
+  }
+  if (M === "rook3") { // Rising Uppercut
+    pose("up", 0.5); G.sound("swing", p0);
+    if (owner) { caster.dashT = 0.12; caster.dashV = fwd.clone().multiplyScalar(40); caster.lockT = 0.4; }
+    let done = false;
+    effect(G, 0.45, (dt, age) => {
+      if (done || age < 0.12 || !owner) return;
+      done = true;
+      const t = targetsNear(G, caster, caster.pos.clone().addScaledVector(fwdOf(caster.facing), 2.2), 3)[0];
+      if (t) { G.hit(caster, t, { dmg: 13, kb: [fwd.x * 3, 46, fwd.z * 3], rag: 1.8, fx: "big" }); caster.vel.y = 20; caster.grounded = false; }
+    });
+    return;
+  }
+  if (M === "rook4") { // Iron Guard: 4 seconds of armor
+    pose("flex", 0.5); G.sound("block", p0); G.text(p0, "IRON GUARD", "#c0c4cc", 1);
+    caster.armor = 4;
+    const shell = ball(G, 0xc0c4cc, 3, 0.18);
+    effect(G, 4, (dt, age) => {
+      if (!caster.g || caster.dead) return false;
+      shell.position.copy(caster.pos).add(V(0, 2.6, 0)); shell.scale.setScalar(3 * (caster.titan > 0 ? 1.6 : 1));
+      shell.material.opacity = 0.14 + Math.sin(age * 10) * 0.05;
+    }, [shell]);
+    return;
+  }
+  if (M === "shade3") { // Shadow Toad: its tongue yanks someone to you
+    pose("sign", 0.5); G.sound("shadow", p0);
+    const target = G.byId(data.t), side = V(Math.cos(d), 0, -Math.sin(d));
+    const toad = new THREE.Group(), bodyM = toon("#07090b");
+    const b = new THREE.Mesh(new THREE.SphereGeometry(1.4, 14, 10), bodyM); b.scale.set(1, 0.75, 1.1); b.position.y = 1; toad.add(b);
+    for (const ex of [-0.6, 0.6]) { const e2 = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), toon("#3fe0b0", true)); e2.position.set(ex, 1.8, 0.8); toad.add(e2); }
+    toad.position.copy(p0).addScaledVector(side, 2.6); toad.rotation.y = d; G.scene.add(toad);
+    const tongue = new THREE.Mesh(CUBE, mat(0xff5a8a, 1, false)); G.scene.add(tongue);
+    burst(G, toad.position.clone().add(V(0, 1, 0)), 0x3fe0b0, 10, 7, 0.5);
+    let grabbed = false;
+    effect(G, 1.0, (dt, age) => {
+      const from = toad.position.clone().add(V(0, 1.2, 0)).addScaledVector(fwdOf(d), 1.4);
+      const goal = target && !target.dead ? target.pos.clone().add(V(0, 2.5, 0)) : from.clone().addScaledVector(fwd, 25);
+      const k = age < 0.3 ? age / 0.3 : Math.max(0, 1 - (age - 0.3) / 0.4);
+      const tip = from.clone().lerp(goal, k), len = from.distanceTo(tip);
+      tongue.scale.set(0.25, 0.25, Math.max(0.01, len)); tongue.position.copy(from).lerp(tip, 0.5); tongue.lookAt(tip);
+      if (!grabbed && age >= 0.3) {
+        grabbed = true;
+        if (owner && target && !target.dead && target.pos.distanceTo(caster.pos) < 32) {
+          const to = V(caster.pos.x - target.pos.x, 0, caster.pos.z - target.pos.z), dist = Math.max(0, to.length() - 3);
+          to.normalize().multiplyScalar(Math.min(70, dist / 0.42));
+          G.hit(caster, target, { dmg: 6, kb: [to.x, 13, to.z], set: 1, rag: 0.45, stun: 0.6, fx: "shadow" });
+        }
+      }
+      if (age > 0.85) toad.scale.setScalar(Math.max(0.01, (1 - age) / 0.15));
+    }, [toad, tongue]);
+    return;
+  }
+  if (M === "shade4") { // Bat Swarm
+    pose("both", 0.5); G.sound("howl", p0);
+    const bats = [], batM = toon("#07090b"), eyeM = toon("#3fe0b0", true);
+    for (let i = 0; i < 12; i++) {
+      const g = new THREE.Group(), body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), batM); g.add(body);
+      const wings = [];
+      for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.1, 3), batM); w.rotation.z = s * Math.PI / 2; w.position.x = s * 0.55; g.add(w); wings.push(w); }
+      const e2 = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), eyeM); e2.position.set(0.1, 0.1, 0.27); g.add(e2);
+      g.position.copy(hand).add(V((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2));
+      const dir = fwd.clone().applyAxisAngle(V(0, 1, 0), (Math.random() - 0.5) * 0.9).add(V(0, (Math.random() - 0.5) * 0.25, 0)).normalize();
+      g.lookAt(g.position.clone().add(dir)); G.scene.add(g);
+      bats.push({ g, wings, dir, sp: 38 + Math.random() * 14, alive: true, ph: Math.random() * 6 });
+    }
+    effect(G, 0.9, (dt, age) => {
+      for (const b of bats) {
+        if (!b.alive) continue;
+        b.g.position.addScaledVector(b.dir, b.sp * dt); b.g.position.y += Math.sin(age * 20 + b.ph) * 0.05;
+        b.wings.forEach((w, i) => (w.rotation.x = Math.sin(age * 40 + b.ph + i * Math.PI) * 0.8));
+        if (owner) { const t = targetsNear(G, caster, b.g.position.clone().setY(b.g.position.y - 2.5), 1.6)[0]; if (t) { b.alive = false; b.g.visible = false; G.hit(caster, t, { dmg: 2.5, slow: 0.6, stun: 0.15, kb: [b.dir.x * 3, 1, b.dir.z * 3], fx: "shadow" }); } }
+        if (G.arena.inside(b.g.position)) { b.alive = false; b.g.visible = false; burst(G, b.g.position, 0x05080a, 4, 5, 0.3, 0.3); }
+      }
+    }, bats.map((b) => b.g));
+    return;
+  }
 
   // ===== NOVA =====
   if (M === "nova1") { // Pull Orb: flies out, then hovers and drags everyone into it
@@ -166,8 +300,8 @@ export function castMove(G, caster, key, data, owner) {
     e.pop = (p) => { e.ended = true; const q = V(...(p.toArray ? p.toArray() : p)); boom(G, q, 0xff3020, 6, 0.45); wave(G, q.clone().setY(Math.max(0, q.y - 3)), 0xff5040, 1, 9, 0.4); G.sound("boom", q); };
     return;
   }
-  if (M === "nova3") { // Void Beam (ULTIMATE): red + blue -> a giant purple sphere
-    pose("charge", 1.0); G.sound("charge", p0);
+  if (M === "novar") { // Void Beam (ULTIMATE): red + blue -> a giant purple sphere
+    pose("charge", 1.0); G.sound("charge", p0); G.cine(caster, 1.0);
     if (owner) caster.lockT = 1.0;
     const red = ball(G, 0xff2a2a, 0.7, 1), blue = ball(G, 0x3d7bff, 0.7, 1), purple = ball(G, 0xa040ff, 0.1, 0.9), white = ball(G, 0xffffff, 0.1, 0.9);
     const trail = [], at = p0.clone().add(V(0, 3.4, 0)).addScaledVector(fwd, 2.5), hitAlready = new Set();
@@ -191,8 +325,8 @@ export function castMove(G, caster, key, data, owner) {
     }, [red, blue, purple, white]).objsLater = trail;
     return;
   }
-  if (M === "nova4") { // Infinite Starfield (DOMAIN)
-    pose("sign", 1.0); G.banner("DOMAIN EXPANSION", "Infinite Starfield", "#8b6cff", p0); G.sound("domain", p0);
+  if (M === "novag") { // Infinite Starfield (DOMAIN)
+    pose("sign", 1.0); G.domainIntro(caster, p0, "Infinite Starfield", "#8b6cff", 8);
     const starsG = new THREE.BufferGeometry(), pts = [];
     for (let i = 0; i < 500; i++) { const v = V(Math.random() - 0.5, Math.random() - 0.2, Math.random() - 0.5).normalize().multiplyScalar(DOMAIN_R * (0.3 + Math.random() * 0.65)); pts.push(v.x, Math.abs(v.y), v.z); }
     starsG.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
@@ -236,8 +370,8 @@ export function castMove(G, caster, key, data, owner) {
     }, [cres]);
     return;
   }
-  if (M === "rend3") { // Hellfire Arrow (ULTIMATE)
-    pose("bow", 1.0); G.sound("fire", p0);
+  if (M === "rendr") { // Hellfire Arrow (ULTIMATE)
+    pose("bow", 1.0); G.sound("fire", p0); G.cine(caster, 0.8);
     if (owner) caster.lockT = 0.75;
     const bowM = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.12, 6, 24, Math.PI), mat(0xff7a1a, 1));
     const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.35, 3, 8), mat(0xffd060, 1)); arrow.rotation.x = Math.PI / 2;
@@ -271,8 +405,8 @@ export function castMove(G, caster, key, data, owner) {
     };
     return;
   }
-  if (M === "rend4") { // Blood Shrine (DOMAIN)
-    pose("sign", 1.0); G.banner("DOMAIN EXPANSION", "Blood Shrine", "#ff3b4e", p0); G.sound("domain", p0);
+  if (M === "rendg") { // Blood Shrine (DOMAIN)
+    pose("sign", 1.0); G.domainIntro(caster, p0, "Blood Shrine", "#ff3b4e", 8);
     const shrine = new THREE.Group(), red = toon("#8a0f1c"), black = toon("#140406");
     for (const [x, z] of [[-4, -3], [4, -3], [-4, 3], [4, 3]]) { const pl = new THREE.Mesh(new THREE.BoxGeometry(1.2, 9, 1.2), red); pl.position.set(x, 4.5, z); shrine.add(pl); }
     const roof = new THREE.Mesh(new THREE.ConeGeometry(8, 4, 4), black); roof.position.y = 11; roof.rotation.y = Math.PI / 4; shrine.add(roof);
@@ -319,8 +453,8 @@ export function castMove(G, caster, key, data, owner) {
     });
     return;
   }
-  if (M === "rook3") { // Meteor Drop (ULTIMATE)
-    pose("slam", 3); G.sound("jump", p0); G.text(p0, "METEOR DROP", "#ff8a1f", 1.1);
+  if (M === "rookr") { // Meteor Drop (ULTIMATE)
+    pose("slam", 3); G.sound("jump", p0); G.text(p0, "METEOR DROP", "#ff8a1f", 1.1); G.cine(caster, 0.6);
     if (owner) { caster.vel.set(fwd.x * 20, 46, fwd.z * 20); caster.grounded = false; caster.meteor = true; }
     const fireBall = ball(G, 0xff5a10, 2.2, 0.55);
     const e = keyed(effect(G, 4, (dt, age) => {
@@ -338,8 +472,8 @@ export function castMove(G, caster, key, data, owner) {
     };
     return;
   }
-  if (M === "rook4") { // Titan Awakening: grow huge for 10 seconds
-    pose("flex", 1.0); G.banner("AWAKENING", "Titan", "#ff8a1f", p0); G.sound("domain", p0); G.shake(1, p0);
+  if (M === "rookg") { // Titan Awakening: grow huge for 10 seconds
+    pose("flex", 1.0); G.banner("AWAKENING", "Titan", "#ff8a1f", p0); G.sound("domain", p0); G.shake(1, p0); G.cine(caster, 1.0);
     const aura = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 3.5, 9, 16, 1, true), mat(0xff8a1f, 0.35, true, THREE.DoubleSide)); G.scene.add(aura);
     caster.titan = 10;
     if (owner) { caster.dmgMul = 1.5; caster.takeMul = 0.5; }
@@ -398,7 +532,7 @@ export function castMove(G, caster, key, data, owner) {
     }
     return;
   }
-  if (M === "shade3") { // Great Serpent (ULTIMATE)
+  if (M === "shader") { // Great Serpent (ULTIMATE)
     pose("sign", 0.8); G.sound("shadow", p0);
     const at = V(...data.x), pool = new THREE.Mesh(new THREE.CircleGeometry(7, 32), mat(0x020304, 0, false)); pool.rotation.x = -Math.PI / 2; pool.position.copy(at).setY(at.y + 0.08); G.scene.add(pool);
     const rim = flatRing(G, 0x3fe0b0, at.clone().setY(at.y + 0.1), 0); rim.scale.setScalar(7);
@@ -418,8 +552,8 @@ export function castMove(G, caster, key, data, owner) {
     }, [pool, rim, snake]);
     return;
   }
-  if (M === "shade4") { // Shadow Garden (DOMAIN)
-    pose("sign", 1.0); G.banner("DOMAIN EXPANSION", "Shadow Garden", "#3fe0b0", p0); G.sound("domain", p0);
+  if (M === "shadeg") { // Shadow Garden (DOMAIN)
+    pose("sign", 1.0); G.domainIntro(caster, p0, "Shadow Garden", "#3fe0b0", 9);
     const floor = new THREE.Mesh(new THREE.CircleGeometry(DOMAIN_R, 48), mat(0x010203, 0, false)); floor.rotation.x = -Math.PI / 2; floor.position.copy(p0).setY(p0.y + 0.1); G.scene.add(floor);
     const tendrils = [];
     for (let i = 0; i < 26; i++) { const t = new THREE.Mesh(new THREE.ConeGeometry(0.45, 6 + Math.random() * 5, 5), toon("#07090b")); const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * (DOMAIN_R - 6); t.position.copy(p0).add(V(Math.cos(a) * r, 0, Math.sin(a) * r)); t.userData.ph = Math.random() * 6; G.scene.add(t); tendrils.push(t); }
@@ -439,7 +573,9 @@ export function castMove(G, caster, key, data, owner) {
 export function castData(G, caster, key) {
   const data = { p: caster.pos.toArray().map((v) => Math.round(v * 100) / 100), d: Math.round(caster.facing * 1000) / 1000 };
   if (caster.char === "shade" && key === "1") { const t = aimTarget(G, caster, 70, 1.2); if (t) data.t = t.id; }
-  if (caster.char === "shade" && key === "3") {
+  if (caster.char === "shade" && key === "3") { const t = aimTarget(G, caster, 30, 0.9); if (t) data.t = t.id; }
+  if (caster.char === "rend" && key === "4") { const x = caster.pos.clone().addScaledVector(fwdOf(caster.facing), 14); x.y = G.arena.floorAt(x.x, x.z, x.y + 0.5); data.x = x.toArray().map((v) => Math.round(v * 100) / 100); }
+  if (caster.char === "shade" && key === "r") {
     const t = aimTarget(G, caster, 55, 0.9), x = t ? t.pos.clone() : caster.pos.clone().addScaledVector(fwdOf(caster.facing), 20);
     x.y = G.arena.floorAt(x.x, x.z, x.y + 0.5); data.x = x.toArray().map((v) => Math.round(v * 100) / 100);
   }

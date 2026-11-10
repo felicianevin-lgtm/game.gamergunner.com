@@ -35,7 +35,7 @@ const effects = [];
 function makeFighter(kind, id, name, char) {
   const f = { kind, id, name, char, g: null, pos: V(), vel: V(), facing: 0, hp: MAX_HP, grounded: true, mode: "idle", rag: 0, ragging: false, stun: 0, slow: 0, frz: 0, iframes: 0,
     lockT: 0, poseT: 0, pose: "", dashT: 0, dashV: V(), dashCd: 0, block: false, dead: false, deadT: 0, punchT: 0, punchSide: 0, punchKick: false, combo: 0, comboT: 0, m1cd: 0,
-    cds: { 1: 0, 2: 0 }, ult: 0, dom: 0, dmgMul: 1, takeMul: 1, titan: 0, garden: 0, meteor: false, fxn: 0, kills: 0, lastBy: null, hurtT: 99, tag: null, tagKey: "", tpos: V(), tface: 0 };
+    cds: { 1: 0, 2: 0, 3: 0, 4: 0 }, ult: 0, dom: 0, infinity: 0, armor: 0, trapT: 0, trapC: null, dmgMul: 1, takeMul: 1, titan: 0, garden: 0, meteor: false, fxn: 0, kills: 0, lastBy: null, hurtT: 99, tag: null, tagKey: "", tpos: V(), tface: 0 };
   if (char) setChar(f, char);
   return f;
 }
@@ -85,17 +85,40 @@ const G = {
   shake(a, pos) { const d = pos ? camera.position.distanceTo(pos) : 0; shakeAmt = Math.max(shakeAmt, a * Math.max(0, 1 - d / 90)); },
   text(pos, str, color, scale) { floatText(pos, str, color, scale); },
   banner(title, sub, color) { showBanner(title, sub, color); },
+  // the camera swings around to watch the caster (only on the caster's own screen), the world goes dim
+  cine(caster, secs) { if (caster === me) cine = { t: secs, total: secs }; dim(Math.min(1.4, secs + 0.3), caster.pos); },
+  // DOMAIN EXPANSION: blackout, the name, the caster's hand sign up close, and everyone inside is trapped until it ends
+  domainIntro(caster, pos, name, color, secs) {
+    showBanner("DOMAIN EXPANSION", name, color); G.sound("domain", pos); G.shake(0.8, pos);
+    if (!me || caster === me || me.pos.distanceTo(pos) < 70) { const b = $("black"); b.classList.remove("on"); void b.offsetWidth; b.classList.add("on"); }
+    if (caster === me) cine = { t: 1.1, total: 1.1 };
+    for (const f of [me, ...bots]) if (f && f !== caster && !f.dead && Math.hypot(f.pos.x - pos.x, f.pos.z - pos.z) < 24) {
+      f.trapT = secs; f.trapC = pos.clone();
+      if (f === me) setTimeout(() => showToast("You're trapped in the domain!", color), 900);
+    }
+  },
 };
+let cine = null; // {t, total} while the camera is doing a cinematic
+function dim(secs, pos) { if (me && pos && me.pos.distanceTo(pos) > 80) return; const d = $("dim"); d.style.animationDuration = secs + "s"; d.classList.remove("on"); void d.offsetWidth; d.classList.add("on"); }
+// Hit-stop: big hits freeze the action for a split second (and flash an impact frame)
+let hitStop = 0;
+function impact(h, mine) {
+  if (!(h.rag >= 1 || h.dmg >= 14 || h.fx === "spark")) return;
+  hitStop = Math.max(hitStop, h.ub || h.fx === "spark" ? 0.13 : 0.08);
+  if (h.ub || h.fx === "spark" || h.dmg >= 30) { const x = $("impact"); x.classList.remove("on"); void x.offsetWidth; x.classList.add("on"); }
+}
 
 // ---------------------------------------------------------------- hits
 function dealHit(caster, target, hit) {
   if (!target || target.dead) return;
   const h = { ...hit, dmg: Math.round(hit.dmg * (caster.dmgMul || 1) * (caster.kind === "bot" ? 0.6 : 1) * 10) / 10 };
   if (target.kind === "remote") {
+    if (target.infinity > 0 && !h.ub) { floatText(target.pos.clone().add(V(0, 5, 0)), "∞", "#7fe8ff", 1.1); return; } // (their Infinity Wall is up)
     send({ k: "hit", to: target.id, dmg: h.dmg, kb: h.kb, rag: h.rag, stun: h.stun, slow: h.slow, frz: h.frz, set: h.set, ub: h.ub, fx: h.fx });
     if (h.fx !== "") hitFx(G, target.pos, h.fx || "hit");
     if (h.dmg >= 1) floatText(target.pos.clone().add(V(0, 5, 0)), String(Math.round(h.dmg)), "#ffffff", 0.8);
   } else applyHit(target, h, caster);
+  if (caster === me && target.kind === "remote") impact(h);
   if (caster === me) { me.ult = Math.min(100, me.ult + h.dmg * ULT_PER_DMG); me.dom = Math.min(100, me.dom + h.dmg * DOM_PER_DMG); }
 }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, Number(v) || 0));
@@ -104,10 +127,13 @@ function applyHit(f, h, by) {
   let dmg = clamp(h.dmg, 0, 80) * f.takeMul;
   let kb = Array.isArray(h.kb) ? V(clamp(h.kb[0], -80, 80), clamp(h.kb[1], -80, 80), clamp(h.kb[2], -80, 80)) : V();
   let rag = clamp(h.rag, 0, 3), stun = clamp(h.stun, 0, 2);
+  if (f.infinity > 0 && !h.ub) { floatText(f.pos.clone().add(V(0, 5, 0)), "∞", "#7fe8ff", 1.1); G.sound("block", f.pos); return; } // (Infinity Wall: nothing reaches you)
+  if (f.armor > 0) { dmg *= 0.5; kb.multiplyScalar(0.2); rag = 0; stun = 0; }
   const blocked = f.block && !h.ub && by && (() => { const d = V(by.pos.x - f.pos.x, 0, by.pos.z - f.pos.z).normalize(); return d.dot(fwdOf(f.facing)) > 0.1; })();
   if (blocked) { dmg *= 0.2; kb.multiplyScalar(0.25); rag = 0; stun = 0; G.sound("block", f.pos); floatText(f.pos.clone().add(V(0, 5, 0)), "BLOCKED", "#9fd0ff", 0.8); }
   else if (h.fx !== "") hitFx(G, f.pos, h.fx || "hit");
   f.hp = Math.max(0, f.hp - dmg); f.hurtT = 0;
+  if (!blocked && (f === me || by === me)) impact({ ...h, dmg, rag });
   f.lastBy = by ? { id: by.kind === "remote" ? by.id : 0, name: by.name, me: by === me } : null;
   if (f.titan > 0) { kb.multiplyScalar(0.4); rag = 0; }
   if (h.set) { f.vel.x = kb.x; f.vel.z = kb.z; f.vel.y = Math.max(f.vel.y, kb.y); } else f.vel.add(kb);
@@ -137,7 +163,7 @@ function gotKill(name) { myKills++; if (me) me.kills = myKills; showToast("💥 
 // ---------------------------------------------------------------- the fighter's body (me + bots move here)
 const L = (k, dt) => 1 - Math.exp(-k * dt);
 function stepBody(f, dt, input) {
-  for (const k of ["stun", "slow", "frz", "iframes", "rag", "lockT", "poseT", "comboT", "m1cd", "dashCd", "garden"]) f[k] = Math.max(0, f[k] - dt);
+  for (const k of ["stun", "slow", "frz", "iframes", "rag", "lockT", "poseT", "comboT", "m1cd", "dashCd", "garden", "infinity", "armor", "trapT"]) f[k] = Math.max(0, f[k] - dt);
   f.hurtT += dt;
   const cdRate = f.garden > 0 ? 2 : 1;
   for (const k in f.cds) f.cds[k] = Math.max(0, f.cds[k] - dt * cdRate);
@@ -166,6 +192,10 @@ function stepBody(f, dt, input) {
   const prevY = f.pos.y;
   f.pos.x += f.vel.x * dt; f.pos.z += f.vel.z * dt;
   arena.collide(f.pos, 0.9 * (f.titan > 0 ? 1.4 : 1), 5, f.grounded);
+  if (f.trapT > 0 && f.trapC) { // (trapped in a domain: you can't get out until it ends)
+    const dx = f.pos.x - f.trapC.x, dz = f.pos.z - f.trapC.z, d = Math.hypot(dx, dz), R = 22.5;
+    if (d > R) { f.pos.x = f.trapC.x + dx * R / d; f.pos.z = f.trapC.z + dz * R / d; const out = (f.vel.x * dx + f.vel.z * dz) / d; if (out > 0) { f.vel.x -= dx / d * out; f.vel.z -= dz / d * out; } }
+  }
   f.pos.y += f.vel.y * dt;
   const floor = arena.floorAt(f.pos.x, f.pos.z, Math.max(prevY, f.pos.y));
   if (f.pos.y <= floor) {
@@ -209,7 +239,8 @@ function dash(f, dir) {
 }
 function cast(f, key) {
   if (busyNow(f) || f.block || f.dashT > 0 || f.meteor) return false;
-  const mv = FIGHTERS[f.char].moves[key - 1];
+  const mv = FIGHTERS[f.char].moves.find((m) => m.key === key);
+  if (!mv) return false;
   if (mv.ult) { if (f.ult < 100) { if (f === me) showToast("Ultimate is charging: " + Math.floor(f.ult) + "%", "#aaa"); return false; } f.ult = 0; f.dom = Math.min(100, f.dom + DOM_PER_ULT); }
   else if (mv.dom) { if (f.dom < 100) { if (f === me) showToast((f.char === "rook" ? "Awakening" : "Domain") + " is charging: " + Math.floor(f.dom) + "%", "#aaa"); return false; } if (f.titan > 0) return false; f.dom = 0; }
   else { if (f.cds[key] > 0) return false; f.cds[key] = mv.cd; }
@@ -252,7 +283,7 @@ function remoteState(f, s, snap) {
 }
 function onEvent(f, e) {
   if (!f || typeof e.k !== "string") return;
-  if (e.k === "cast" && f.g && /^[1-4]$/.test(e.m) && Array.isArray(e.p)) { f.pos.set(e.p[0], e.p[1], e.p[2]); f.facing = Number(e.d) || 0; castMove(G, f, e.m, e, false); }
+  if (e.k === "cast" && f.g && /^[1-4rg]$/.test(e.m) && Array.isArray(e.p)) { f.pos.set(e.p[0], e.p[1], e.p[2]); f.facing = Number(e.d) || 0; castMove(G, f, e.m, e, false); }
   else if (e.k === "m1" && f.g) { f.punchT = 0.001; f.punchSide = e.n % 2; f.punchKick = e.n === 4; G.sound("swing", f.pos); }
   else if (e.k === "pop") { const x = effects.find((x) => x.key === f.id + ":" + e.f); if (x && x.pop && Array.isArray(e.p)) x.pop(e.p); }
   else if (e.k === "hit") {
@@ -293,8 +324,8 @@ function botThink(b, dt) {
     b.strafe = Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : 0;
     if (t.punchT > 0 && d < 6 && Math.random() < 0.35) { b.block = true; b.blockT = 0.7; }
     else if (d < 5 && Math.random() < 0.8) m1(b);
-    else if (b.ult >= 100 && d < 26) cast(b, "3");
-    else if (d < 22 && Math.random() < 0.25) cast(b, Math.random() < 0.5 ? "1" : "2");
+    else if (b.ult >= 100 && d < 26) cast(b, "r");
+    else if (d < 22 && Math.random() < 0.25) cast(b, "1234"[(Math.random() * 4) | 0]);
     else if (d > 10 && d < 40 && Math.random() < 0.2) dash(b, to.clone().normalize());
     if (t.pos.y > b.pos.y + 2 && Math.random() < 0.5) input.jump = true;
   }
@@ -310,14 +341,14 @@ const typing = (e) => e.target && (e.target.tagName === "INPUT" || e.target.tagN
 addEventListener("keydown", (e) => {
   if (typing(e)) return;
   const k = e.key.toLowerCase();
-  if (["w", "a", "s", "d", " ", "q", "f", "1", "2", "3", "4", "shift", "tab"].includes(k)) e.preventDefault();
+  if (["w", "a", "s", "d", " ", "q", "f", "r", "g", "1", "2", "3", "4", "shift", "tab"].includes(k)) e.preventDefault();
   if (e.repeat) return;
   keys.add(k);
   if (!me || menuOpen) return;
   if (k === "shift") setShiftLock(!shiftLock);
   else if (k === " ") wantJump = true;
   else if (k === "q") dash(me, moveInput());
-  else if (/^[1-4]$/.test(k)) cast(me, k);
+  else if (/^[1-4rg]$/.test(k)) cast(me, k);
 });
 addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 addEventListener("blur", () => keys.clear());
@@ -374,17 +405,17 @@ function moveInput() {
 // ---------------------------------------------------------------- HUD
 const SLOTS = [
   { k: "m1", key: touch ? "TAP" : "🖱", name: "Punch", icon: "👊" },
-  { k: "1" }, { k: "2" }, { k: "3" }, { k: "4" },
+  { k: "1" }, { k: "2" }, { k: "3" }, { k: "4" }, { k: "r" }, { k: "g" },
   { k: "q", key: "Q", name: "Dash", icon: "💨" },
   { k: "f", key: "F", name: "Block", icon: "🛡️" },
 ];
 function buildSlots() {
   const F = FIGHTERS[me.char];
   $("slots").innerHTML = SLOTS.map((s) => {
-    const mv = /^[1-4]$/.test(s.k) ? F.moves[s.k - 1] : null, name = mv ? mv.name : s.name, icon = mv ? mv.icon : s.icon;
+    const mv = F.moves.find((m) => m.key === s.k) || null, name = mv ? mv.name : s.name, icon = mv ? mv.icon : s.icon;
     const tag = mv && mv.ult ? '<em class="tagu">ULTIMATE</em>' : mv && mv.dom ? '<em class="tagd">' + (me.char === "rook" ? "AWAKEN" : "DOMAIN") + "</em>" : "";
     return '<button type="button" class="slot' + (mv && (mv.ult || mv.dom) ? " big" : "") + '" data-k="' + s.k + '" title="' + esc(mv ? mv.desc : name) + '">' + tag +
-      '<span class="key">' + (mv ? s.k : s.key) + '</span><span class="ico">' + icon + '</span><span class="nm">' + esc(name) + "</span>" +
+      '<span class="key">' + (mv ? s.k.toUpperCase() : s.key) + '</span><span class="ico">' + icon + '</span><span class="nm">' + esc(name) + "</span>" +
       '<span class="cd"></span><span class="cdt"></span>' + (mv && (mv.ult || mv.dom) ? '<span class="meter"><i></i></span><span class="pct"></span>' : "") + "</button>";
   }).join("");
   $("slots").querySelectorAll(".slot").forEach((b) => {
@@ -411,7 +442,7 @@ function updateHud() {
     else if (k === "q") { left = me.dashCd; total = DASH_CD; }
     else if (k === "f") { ready = true; b.classList.toggle("active", me.block); }
     else {
-      const mv = F.moves[k - 1];
+      const mv = F.moves.find((m) => m.key === k);
       if (mv.ult || mv.dom) {
         const v = mv.ult ? me.ult : me.dom;
         b.querySelector(".meter i").style.width = v + "%";
@@ -476,7 +507,7 @@ function buildMenu() {
     const F = FIGHTERS[id];
     return '<button type="button" class="card" data-id="' + id + '" style="--c:' + F.color + ";--b1:" + F.bg[0] + ";--b2:" + F.bg[1] + '">' +
       '<span class="pic"><img alt="" src="' + fighterPicture(id, 360, 420) + '"></span><span class="who"><b>' + esc(F.name) + "</b><small>" + esc(F.title) + "</small></span>" +
-      '<span class="mv">' + F.moves.map((m) => '<span title="' + esc(m.desc) + '"><kbd>' + m.key + "</kbd>" + m.icon + " " + esc(m.name) + (m.ult ? " <em>ULT</em>" : m.dom ? " <em>" + (id === "rook" ? "AWAKEN" : "DOMAIN") + "</em>" : "") + "</span>").join("") + "</span></button>";
+      '<span class="mv">' + F.moves.map((m) => '<span title="' + esc(m.desc) + '"><kbd>' + m.key.toUpperCase() + "</kbd>" + m.icon + " " + esc(m.name) + (m.ult ? " <em>ULT</em>" : m.dom ? " <em>" + (id === "rook" ? "AWAKEN" : "DOMAIN") + "</em>" : "") + "</span>").join("") + "</span></button>";
   }).join("");
   $("cards").querySelectorAll(".card").forEach((c) => (c.onclick = () => { unlockSound(); sfx("pick"); spawn(c.dataset.id); }));
 }
@@ -523,6 +554,15 @@ function updateCamera(dt) {
   camera.position.copy(camTarget).addScaledVector(camOff, dist);
   if (camera.position.y < 0.6) camera.position.y = 0.6;
   camera.lookAt(camTarget);
+  if (cine && cine.t > 0) { // a cinematic: swing around in front of me, close up, then back
+    cine.t -= dt;
+    const u = 1 - cine.t / cine.total, w = Math.min(1, u / 0.2, (1 - u) / 0.25) ** 2, fw = fwdOf(me.facing);
+    const s = me.titan > 0 ? 1.6 : 1, look = me.pos.clone().add(V(0, 3.1 * s, 0));
+    const cp = me.pos.clone().addScaledVector(fw, 6.5 * s).add(V(-fw.z * 3.5 * s, 3.4 * s + u * 0.8, fw.x * 3.5 * s)).lerp(look, u * 0.15);
+    camera.position.lerp(cp, Math.max(0, w));
+    const lk = camTarget.clone().lerp(look, Math.max(0, w)); camera.lookAt(lk);
+    if (cine.t <= 0) cine = null;
+  }
   if (shakeAmt > 0.01) { camera.position.add(V((Math.random() - 0.5) * shakeAmt, (Math.random() - 0.5) * shakeAmt, (Math.random() - 0.5) * shakeAmt)); shakeAmt *= Math.exp(-dt * 7); }
   arena.sun.position.set(me.pos.x - 60, 120, me.pos.z - 70); arena.sun.target.position.copy(me.pos);
 }
@@ -543,7 +583,9 @@ function showFighter(f, dt) {
 const clock = new THREE.Clock();
 function frame() {
   requestAnimationFrame(frame);
-  tick(Math.min(clock.getDelta(), 0.05));
+  let dt = Math.min(clock.getDelta(), 0.05);
+  if (hitStop > 0) { hitStop -= dt; dt *= 0.05; } // (frozen for a split second on a big hit)
+  tick(dt);
   renderer.render(scene, camera);
 }
 function tick(dt) {
@@ -565,7 +607,7 @@ function tick(dt) {
     let d = f.tface - f.facing; d = Math.atan2(Math.sin(d), Math.cos(d)); f.facing += d * L(14, dt);
     f.vel.copy(f.pos).sub(last).divideScalar(Math.max(dt, 1e-4));
     if (f.punchT > 0) { f.punchT += dt * 3.6; if (f.punchT >= 1) f.punchT = 0; }
-    f.poseT = Math.max(0, f.poseT - dt);
+    f.poseT = Math.max(0, f.poseT - dt); f.infinity = Math.max(0, f.infinity - dt); f.armor = Math.max(0, f.armor - dt);
     f.grounded = f.mode !== "air" && f.mode !== "rag";
     showFighter(f, dt);
   }
@@ -588,7 +630,7 @@ function tick(dt) {
 // ---------------------------------------------------------------- start
 $("controls").innerHTML = touch
   ? "Left side: move · Right side: drag to look · Tap the buttons to punch, use moves, dash and block"
-  : "<b>WASD</b> move · <b>Space</b> jump · <b>Click</b> punch (4-hit combo) · <b>1 2</b> moves · <b>3</b> ultimate · <b>4</b> domain · <b>Q</b> dash (hold A / D to dodge sideways) · <b>F</b> block · <b>Shift</b> Shift Lock · <b>Right-drag</b> look · <b>Wheel</b> zoom";
+  : "<b>WASD</b> move · <b>Space</b> jump · <b>Click</b> punch (4-hit combo) · <b>1 2 3 4</b> moves · <b>R</b> ultimate · <b>G</b> domain expansion · <b>Q</b> dash (hold A / D to dodge sideways) · <b>F</b> block · <b>Shift</b> Shift Lock · <b>Right-drag</b> look · <b>Wheel</b> zoom";
 if (touch) document.body.classList.add("touch");
 buildMenu();
 openMenu("");
