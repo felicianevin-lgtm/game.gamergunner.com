@@ -7,7 +7,7 @@ import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/OrbitControls.js";
 import { TransformControls } from "../vendor/TransformControls.js";
 import { buildAvatar, animateAvatar, loadAvatar, saveAvatar, sanitizeAvatar, sanitizeMade, randomAvatar, avatarPicture, DEFAULT_AVATAR, PALETTE,
-  TOPS, FACES, HAIR, HATS, EYES, BACK, HAND, BUILDS, ART, DRAW_COLORS, SHAPES, ATTACH, MAX_WORN, MAX_PIECES } from "./avatar.js";
+  TOPS, FACES, HAIR, HATS, EYES, BACK, HAND, BUILDS, SUITS, SUIT_FROM, suitsUnlocked, ART, DRAW_COLORS, SHAPES, ATTACH, MAX_WORN, MAX_PIECES } from "./avatar.js";
 
 export { avatarPicture, loadAvatar, sanitizeAvatar };
 
@@ -22,6 +22,7 @@ const TABS = [
   { k: "eyes", icon: "🕶️", label: "Face stuff", items: ["eyes", EYES] },
   { k: "back", icon: "🎒", label: "Back", items: ["back", BACK], colors: [["accent", "Color"]] },
   { k: "hand", icon: "🗡️", label: "Hand", items: ["hand", HAND] },
+  { k: "suit", icon: "☣️", label: "Suits", items: ["suit", SUITS] },
   { k: "draw", icon: "🎨", label: "Draw" },
   { k: "make", icon: "🛠️", label: "Build" },
 ];
@@ -150,8 +151,13 @@ export function mountAvatarEditor(box, opts) {
     let html = "";
     if (T.items) {
       const [key, list] = T.items;
-      html += '<div class="av-grid">' + Object.entries(list).filter(([k]) => !(key === "top" && k === "draw" && !av.art)).map(([k, label]) => '<button type="button" data-set="' + key + '" data-v="' + k + '" class="' + (av[key] === k ? "on" : "") + '">' +
-        (thumbs[key] ? '<img alt="" src="' + thumb(key, k) + '">' : "") + "<span>" + esc(label) + "</span></button>").join("") + "</div>";
+      const have = key === "suit" ? suitsUnlocked().concat(["none", av.suit]) : null; // (suits are prizes: locked until you win them)
+      html += '<div class="av-grid">' + Object.entries(list).filter(([k]) => !(key === "top" && k === "draw" && !av.art)).map(([k, label]) => {
+        const locked = have && !have.includes(k);
+        return '<button type="button" ' + (locked ? 'disabled title="' + esc(SUIT_FROM[k] || "Locked") + '" class="locked"' : 'data-set="' + key + '" data-v="' + k + '" class="' + (av[key] === k ? "on" : "") + '"') + '>' +
+          (thumbs[key] ? '<img alt="" src="' + thumb(key, k) + '"' + (locked ? ' style="filter:brightness(0.15)"' : "") + ">" : "") + "<span>" + (locked ? "🔒 " : "") + esc(label) + "</span></button>";
+      }).join("") + "</div>";
+      if (key === "suit") html += '<p class="av-hint">Suits change your whole avatar. Win them in games: escape <a href="backrooms/">The Backrooms</a> to unlock the hazmat suit and the monster.</p>';
       if (key === "top") html += '<p class="av-hint">Want your own design? Paint one in <button type="button" class="linkish" data-go="draw">🎨 Draw</button>.</p>';
     }
     if (tab === "pants" && av.pantsArt) html += '<p class="av-hint">Your pants drawing is on. Change it in <button type="button" class="linkish" data-go="draw">🎨 Draw</button>.</p>';
@@ -395,8 +401,8 @@ export function mountAvatarEditor(box, opts) {
   }
 
   // little pictures of each hat / hair / face / shirt: your avatar wearing it (made once, then remembered)
-  const thumbs = { hat: 1, hair: 1, face: 1, eyes: 1, top: 1, back: 1, build: 1 };
-  function thumb(key, v) { return avatarPicture({ ...av, [key]: v }, 96, key === "top" || key === "back" || key === "build"); }
+  const thumbs = { hat: 1, hair: 1, face: 1, eyes: 1, top: 1, back: 1, build: 1, suit: 1 };
+  function thumb(key, v) { return avatarPicture({ ...av, [key]: v }, 96, key === "top" || key === "back" || key === "build" || key === "suit"); }
   box.querySelector("#avRand").onclick = () => { const keep = { art: av.art, pantsArt: av.pantsArt }; av = randomAvatar(); Object.assign(av, keep); if (!av.art && av.top === "draw") av.top = "plain"; changed(); drawItems(); };
   box.querySelector("#avReset").onclick = () => { if (!confirm("Start over? (Your shirt drawing and the cosmetics you built stay saved, so you can put them back on.)")) return; av = { ...DEFAULT_AVATAR, art: av.art }; changed(); drawItems(); };
   rebuild(); drawTabs(); drawItems();

@@ -3,7 +3,8 @@
 // Saved in this browser (localStorage "gv_avatar") and on your account (relay social.js /social/avatar), so friends see it.
 //   {skin, shirt, pants, shoes, accent (pattern color), top (TOPS), face (FACES), hair (HAIR), hairColor,
 //    hat (HATS), hatColor, eyes (EYES), back (BACK), hand (HAND), build (BUILDS),
-//    art / pantsArt (your own shirt / pants drawing, ART x ART pixels), made (up to MAX_WORN cosmetics you built)}
+//    art / pantsArt (your own shirt / pants drawing, ART x ART pixels), made (up to MAX_WORN cosmetics you built),
+//    suit (SUITS: a whole-body suit that replaces everything; won by beating a game, see unlockSuit)}
 // The body is about 3.3 studs tall, feet at y = 0, facing -z (like cars), with limbs for the walk animation.
 import * as THREE from "../vendor/three.module.js";
 
@@ -16,13 +17,18 @@ export const EYES = { none: "None", visor: "Glowing visor", glasses: "Glasses", 
 export const BACK = { none: "None", backpack: "Backpack", cape: "Cape", wings: "Angel wings", dragon: "Dragon wings", jetpack: "Jetpack", swordback: "Sword", guitar: "Guitar", shell: "Turtle shell" };
 export const HAND = { none: "None", sword: "Sword", icecream: "Ice cream", flag: "Flag", wand: "Magic wand", flashlight: "Flashlight", trophy: "Trophy", balloon: "Balloon" };
 export const BUILDS = { normal: "Normal", small: "Small", tall: "Tall", wide: "Strong" };
+// Suits change your whole avatar. They're prizes: the Backrooms game (site/backrooms) unlocks both when you escape.
+export const SUITS = { none: "No suit", hazmat: "Backrooms hazmat suit", monster: "Backrooms monster" };
+export const SUIT_FROM = { hazmat: "Escape the Backrooms to unlock", monster: "Escape the Backrooms to unlock" };
+export function suitsUnlocked() { try { const l = JSON.parse(localStorage.getItem("gv_unlocks") || "[]"); return Array.isArray(l) ? l.filter((k) => SUITS[k]) : []; } catch { return []; } }
+export function unlockSuit(k) { if (!SUITS[k]) return; const l = suitsUnlocked(); if (!l.includes(k)) { l.push(k); try { localStorage.setItem("gv_unlocks", JSON.stringify(l)); } catch {} } }
 export const PALETTE = ["#f6d7b8", "#e0a878", "#c68a5a", "#8d5a3a", "#5a3a26", "#ffffff", "#a3a8b0", "#2b2f36", "#111111", "#1b2420", "#e8261c", "#ff7a1a", "#ffc531",
   "#1fae45", "#7be03a", "#13c4c4", "#2f7df6", "#1d2a52", "#a64bf4", "#ff4fa3", "#8b5a2b", "#d4af37", "#39ff6a", "#ff9ecb"];
-export const PARTS = { top: TOPS, face: FACES, hair: HAIR, hat: HATS, eyes: EYES, back: BACK, hand: HAND, build: BUILDS };
+export const PARTS = { top: TOPS, face: FACES, hair: HAIR, hat: HATS, eyes: EYES, back: BACK, hand: HAND, build: BUILDS, suit: SUITS };
 const COLORS = ["skin", "shirt", "pants", "shoes", "accent", "hairColor", "hatColor"];
 
 export const DEFAULT_AVATAR = { skin: "#e0a878", shirt: "#1b2420", pants: "#1b2420", shoes: "#111111", accent: "#1fae45", top: "belt", face: "smile", hair: "none", hairColor: "#5a3a26",
-  hat: "helmet", hatColor: "#1fae45", eyes: "visor", back: "none", hand: "none", build: "normal" };
+  hat: "helmet", hatColor: "#1fae45", eyes: "visor", back: "none", hand: "none", build: "normal", suit: "none" };
 
 // Drawings (🎨 Draw on the Avatar page): ART x ART pixels, one hex digit each: 0 = no paint, 1-f = DRAW_COLORS.
 export const ART = 32;
@@ -72,6 +78,7 @@ export function randomAvatar() {
   if (Math.random() < 0.4) a.hat = "none";
   if (Math.random() < 0.5) a.back = "none";
   if (Math.random() < 0.6) a.hand = "none";
+  a.suit = "none";
   if (Math.random() < 0.5) a.eyes = "none";
   a.face = a.face === "none" ? "smile" : a.face;
   return sanitizeAvatar(a);
@@ -161,6 +168,7 @@ const S = (r) => new THREE.SphereGeometry(r, 18, 12);
 
 export function buildAvatar(cfg) {
   const a = sanitizeAvatar(cfg);
+  if (a.suit !== "none") return buildSuit(a.suit);
   const g = new THREE.Group();
   const body = new THREE.Group(); g.add(body);
   const skin = M(a.skin), shirt = M(a.shirt), pants = M(a.pants), shoes = M(a.shoes), acc = M(a.accent), hairM = M(a.hairColor, { roughness: 0.85 }), hatM = M(a.hatColor);
@@ -203,6 +211,54 @@ export function buildAvatar(cfg) {
   g.userData.limbs = { legL, legR, armL, armR };
   g.userData.t = 0;
   return g;
+}
+// A whole-body suit (SUITS): same limbs as a normal avatar, so it walks the same way.
+function buildSuit(kind) {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const legL = new THREE.Group(), legR = new THREE.Group(), armL = new THREE.Group(), armR = new THREE.Group(), head = new THREE.Group();
+  legL.position.set(-0.32, 1.2, 0); legR.position.set(0.32, 1.2, 0); armL.position.set(-0.95, 2.25, 0); armR.position.set(0.95, 2.25, 0); head.position.set(0, 2.85, 0);
+  body.add(legL, legR, armL, armR, head);
+  if (kind === "hazmat") {
+    const suit = M("#e8c21a", { roughness: 0.75 }), rubber = M("#262626", { roughness: 0.95 }), dark = M("#111111");
+    const lens = M("#9fd8ff", { roughness: 0.1, metalness: 0.3, emissive: new THREE.Color("#2a5878"), emissiveIntensity: 0.6 });
+    for (const L of [legL, legR]) { part(L, B(0.62, 1.0, 0.66), suit, 0, -0.5, 0); part(L, B(0.68, 0.34, 0.8), rubber, 0, -1.05, -0.05); }
+    for (const A of [armL, armR]) { part(A, B(0.52, 0.8, 0.56), suit, 0, -0.4, 0); part(A, B(0.48, 0.36, 0.52), rubber, 0, -0.95, 0); }
+    part(body, B(1.52, 1.22, 0.86), suit, 0, 1.78, 0);
+    part(body, B(1.54, 0.14, 0.88), rubber, 0, 1.25, 0);
+    part(body, B(0.08, 1.1, 0.04), dark, 0, 1.8, -0.44);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), new THREE.MeshBasicMaterial({ map: hazardTex(), transparent: true }));
+    sign.position.set(0.38, 2.05, -0.44); sign.rotation.y = Math.PI; body.add(sign);
+    part(body, C(0.24, 0.24, 0.95), M("#b8bcc4", { metalness: 0.6, roughness: 0.3 }), 0, 1.9, 0.6);
+    part(head, S(0.6), suit, 0, 0.02, 0).scale.set(1, 1.08, 1); // hood
+    part(head, S(0.45), dark, 0, -0.06, -0.36).scale.set(1, 0.92, 0.62); // gas mask
+    for (const s of [-1, 1]) { part(head, C(0.14, 0.14, 0.08), lens, s * 0.19, 0.06, -0.64).rotation.x = Math.PI / 2; part(head, new THREE.TorusGeometry(0.15, 0.03, 6, 16), rubber, s * 0.19, 0.06, -0.66); }
+    part(head, C(0.17, 0.2, 0.32), rubber, 0, -0.32, -0.66).rotation.x = Math.PI / 2; // filter
+    part(head, C(0.2, 0.2, 0.05), M("#5a5a5a"), 0, -0.32, -0.83).rotation.x = Math.PI / 2;
+  } else {
+    const skin = M("#15120f", { roughness: 0.95 }), bone = M("#d9d4c6"), eye = M("#f4f4ff", { emissive: new THREE.Color("#f4f4ff"), emissiveIntensity: 1.2 }), mouth = M("#050404");
+    for (const L of [legL, legR]) { part(L, B(0.3, 1.15, 0.32), skin, 0, -0.55, 0); for (let i = -1; i <= 1; i++) part(L, new THREE.ConeGeometry(0.06, 0.3, 5), bone, i * 0.1, -1.12, -0.25).rotation.x = -Math.PI / 2; }
+    for (const A of [armL, armR]) { part(A, B(0.26, 1.45, 0.26), skin, 0, -0.72, 0); for (let i = -1; i <= 1; i++) part(A, new THREE.ConeGeometry(0.05, 0.45, 5), bone, i * 0.08, -1.6, -0.02).rotation.x = Math.PI; }
+    part(body, B(0.95, 1.25, 0.55), skin, 0, 1.85, 0).rotation.x = -0.12;
+    for (let i = 0; i < 4; i++) part(body, new THREE.ConeGeometry(0.08, 0.3, 5), bone, 0, 1.4 + i * 0.3, 0.32).rotation.x = Math.PI / 2; // spine
+    part(head, B(0.62, 0.95, 0.6), skin, 0, 0.05, 0);
+    for (const s of [-1, 1]) part(head, S(0.07), eye, s * 0.15, 0.2, -0.31);
+    part(head, B(0.46, 0.14, 0.05), mouth, 0, -0.2, -0.3);
+    for (let i = 0; i < 6; i++) part(head, B(0.04, 0.07, 0.03), bone, -0.18 + i * 0.072, -0.17, -0.33); // teeth
+    for (let i = 0; i < 9; i++) part(i < 5 ? head : body, B(0.06, 0.9 + (i % 3) * 0.35, 0.06), skin, (i % 5 - 2) * 0.13, i < 5 ? -0.75 : 1.2, i < 5 ? 0.15 : 0.3).rotation.x = 0.1 * (i % 3); // dangly strands
+  }
+  g.userData.limbs = { legL, legR, armL, armR };
+  g.userData.t = 0;
+  return g;
+}
+let hazardPic = null;
+function hazardTex() {
+  if (hazardPic) return hazardPic;
+  const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d");
+  x.fillStyle = "#111"; x.beginPath(); x.moveTo(32, 4); x.lineTo(62, 58); x.lineTo(2, 58); x.closePath(); x.fill();
+  x.fillStyle = "#e8c21a"; x.beginPath(); x.moveTo(32, 14); x.lineTo(54, 53); x.lineTo(10, 53); x.closePath(); x.fill();
+  x.fillStyle = "#111"; x.font = "bold 30px sans-serif"; x.textAlign = "center"; x.fillText("!", 32, 50);
+  hazardPic = new THREE.CanvasTexture(c); hazardPic.colorSpace = THREE.SRGBColorSpace;
+  return hazardPic;
 }
 function buildHair(h, hair, m) {
   if (hair === "none") return;

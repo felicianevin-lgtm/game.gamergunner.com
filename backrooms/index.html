@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>The Backrooms | GunnerVerse</title>
+  <meta name="description" content="Escape the Backrooms: the Lobby, the Poolrooms, the Party Rooms and the Deep Lobby. Escape and win the hazmat suit and the monster suit for your GunnerVerse avatar.">
+  <meta name="theme-color" content="#2a2410">
+  <link rel="icon" type="image/png" href="../img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="br.css?v=1">
+  <!-- module versions (tools/stamp-site.py) -->
+  <script type="importmap">{"imports":{"/create/js/assets.js":"/create/js/assets.js?v=789ca1e0f0","/create/js/avatar-ui.js":"/create/js/avatar-ui.js?v=24675f02a9","/create/js/avatar.js":"/create/js/avatar.js?v=4a25c02909","/create/js/editor.js":"/create/js/editor.js?v=a623c1ef63","/create/js/files.js":"/create/js/files.js?v=7197ff9755","/create/js/filter.js":"/create/js/filter.js?v=7bb46d235b","/create/js/game.js":"/create/js/game.js?v=c0eb86a096","/create/js/gui.js":"/create/js/gui.js?v=b2f9926b5e","/create/js/monster.js":"/create/js/monster.js?v=1fe3f23aa3","/create/js/motion.js":"/create/js/motion.js?v=c67bcaa62c","/create/js/net.js":"/create/js/net.js?v=cf38669195","/create/js/others.js":"/create/js/others.js?v=d5dacb7997","/create/js/play.js":"/create/js/play.js?v=8979217268","/create/js/player.js":"/create/js/player.js?v=039be9367b","/create/js/publish.js":"/create/js/publish.js?v=8bb4fafb84","/create/js/scare.js":"/create/js/scare.js?v=6f16e0ed76","/create/js/script-editor.js":"/create/js/script-editor.js?v=ad684cbaa4","/create/js/scripts.js":"/create/js/scripts.js?v=f683805a93","/create/js/textures.js":"/create/js/textures.js?v=5d0d52e6b3","/create/js/world.js":"/create/js/world.js?v=d269fa5269","/create/vendor/BufferGeometryUtils.js":"/create/vendor/BufferGeometryUtils.js?v=defd1be58f","/create/vendor/FBXLoader.js":"/create/vendor/FBXLoader.js?v=eb348b6248","/create/vendor/GLTFLoader.js":"/create/vendor/GLTFLoader.js?v=0d15e0d65b","/create/vendor/NURBSCurve.js":"/create/vendor/NURBSCurve.js?v=acce859f76","/create/vendor/NURBSUtils.js":"/create/vendor/NURBSUtils.js?v=e5d24dd6d2","/create/vendor/OBJLoader.js":"/create/vendor/OBJLoader.js?v=db8ea76faf","/create/vendor/OrbitControls.js":"/create/vendor/OrbitControls.js?v=81b5fc1a5b","/create/vendor/SkeletonUtils.js":"/create/vendor/SkeletonUtils.js?v=ddf661e463","/create/vendor/TransformControls.js":"/create/vendor/TransformControls.js?v=c8f2ff8410","/create/vendor/fflate.module.js":"/create/vendor/fflate.module.js?v=634a59693a","/create/vendor/three.module.js":"/create/vendor/three.module.js?v=0399d7f2a6","/clash/js/arena.js":"/clash/js/arena.js?v=8865ade977","/clash/js/fighters.js":"/clash/js/fighters.js?v=b29e1b0743","/clash/js/main.js":"/clash/js/main.js?v=35a3217716","/clash/js/moves.js":"/clash/js/moves.js?v=642c224704","/clash/js/sfx.js":"/clash/js/sfx.js?v=27a459b413","/backrooms/js/creatures.js":"/backrooms/js/creatures.js?v=9236f33398","/backrooms/js/levels.js":"/backrooms/js/levels.js?v=171afc810b","/backrooms/js/main.js":"/backrooms/js/main.js?v=4f0551e6d6"}}</script>
+  <!-- /module versions -->
+</head>
+<body>
+  <canvas id="canvas" tabindex="0"></canvas>
+  <div id="danger"></div>
+  <div id="water"></div>
+  <div id="jump"></div>
+  <div id="fade"></div>
+  <p id="loadMsg" class="hidden"></p>
+
+  <div id="hud" class="hidden">
+    <div id="title"><small id="lvlName"></small><b id="lvlSub"></b><span id="goal"></span></div>
+    <div id="cross"></div>
+    <p id="prompt"></p>
+    <p id="rocks" class="hidden"></p>
+    <div id="stamWrap"><span>RUN</span><div><i id="stam"></i></div></div>
+    <div id="touchBtns">
+      <button type="button" id="tRun">🏃</button><button type="button" id="tJump">⤒</button>
+      <button type="button" id="tGrab">✋</button><button type="button" id="tThrow">🪨</button>
+    </div>
+  </div>
+
+  <div id="menu" class="panel">
+    <div class="box">
+      <h1>THE BACKROOMS</h1>
+      <p class="sub">You noclipped out of reality. Get through four levels and <b>escape</b>.</p>
+      <ol class="levels">
+        <li><b>Level 0: The Lobby.</b> An endless yellow maze. Something tall lives here.</li>
+        <li><b>The Poolrooms.</b> Jump across the platforms. Touch the water and the Crawler comes for you. Throw rocks to distract it.</li>
+        <li><b>Level Fun: The Party Rooms.</b> =) Don't let the Partygoers see you.</li>
+        <li><b>The Deep Lobby.</b> The biggest maze. Captain Clark is hunting.</li>
+      </ol>
+      <p class="prize">🏆 Escape and win the <b>Backrooms hazmat suit</b> and the <b>Backrooms monster</b> for your avatar!</p>
+      <div class="btns"><button type="button" id="start" class="big">▶ Start</button><button type="button" id="cont" class="big hidden"></button></div>
+      <p id="controls"></p>
+      <p class="credit">Partygoer model: "Partygoer from Backrooms (Updated)" by <a href="https://sketchfab.com/FilinMinv" target="_blank" rel="noopener">FilinMinv</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a>. Captain Clark by Gamer Gunner.</p>
+      <a class="back" href="../#/">← GunnerVerse</a>
+    </div>
+  </div>
+
+  <div id="pause" class="panel hidden"><div class="box"><h2>Paused</h2><div class="btns"><button type="button" id="resume" class="big">▶ Keep going</button><button type="button" id="quit">Quit to the menu</button></div></div></div>
+  <div id="dead" class="panel hidden"><div class="box"><h2 class="red">CAUGHT</h2><p id="deadBy"></p><div class="btns"><button type="button" id="again" class="big">↻ Try this level again</button></div></div></div>
+  <div id="done" class="panel hidden">
+    <div class="box">
+      <h1>YOU ESCAPED!</h1>
+      <p class="sub">You made it out of the Backrooms. You won two suits for your avatar:</p>
+      <div class="suits">
+        <figure><img id="suitA" alt="Backrooms hazmat suit"><figcaption>Backrooms hazmat suit</figcaption><button type="button" id="wearA" class="big">Wear it</button></figure>
+        <figure><img id="suitB" alt="Backrooms monster"><figcaption>Backrooms monster</figcaption><button type="button" id="wearB" class="big">Wear it</button></figure>
+      </div>
+      <p id="wornMsg"></p>
+      <p class="sub">You can change suits any time on the <a href="../#/avatar">Avatar</a> page (☣️ Suits).</p>
+      <div class="btns"><button type="button" id="playAgain">↻ Play again</button><a class="back" href="../#/">← GunnerVerse</a></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js?v=4f0551e6d6"></script>
+</body>
+</html>
