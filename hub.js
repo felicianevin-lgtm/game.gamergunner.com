@@ -512,7 +512,7 @@
   function pageHome() {
     setNav("home");
     if (!loaded) { main.innerHTML = '<p class="empty">Loading games…</p>'; return; }
-    var feat = games.filter(function (g) { return g.official; })[0] || games[0];
+    var feat = games.filter(function (g) { return g.id === "gunnerverse"; })[0] || games.filter(function (g) { return g.official; })[0] || games[0]; // (GunnerVerse stays the big one on top)
     var html = "";
     if (me) html += '<p class="hello">Hey, ' + esc(shownName()) + "!</p>" + '<p class="hello-sub">What are we playing today?</p>';
     if (banned) html += '<p class="err">This account is banned, so it can\'t like games or play online.</p>';

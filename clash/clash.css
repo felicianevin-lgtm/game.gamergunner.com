@@ -1,0 +1,98 @@
+:root { --me: #8b6cff; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #120d33; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: none; }
+canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+.hidden { display: none !important; }
+button { font: inherit; color: inherit; cursor: pointer; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#hud button { pointer-events: auto; }
+#lb { position: absolute; left: 12px; top: 12px; background: rgba(8, 8, 20, 0.6); border-radius: 12px; padding: 8px 10px; min-width: 190px; font-size: 13px; backdrop-filter: blur(4px); }
+#lb b { font-family: "Russo One", sans-serif; font-size: 12px; letter-spacing: 0.1em; color: #ffd25a; }
+#lb div { display: flex; align-items: center; gap: 7px; padding: 2px 0; }
+#lb div.me span { color: var(--me); font-weight: 800; }
+#lb i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+#lb span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+#lb em { font-style: normal; font-weight: 800; }
+#feed { position: absolute; right: 12px; top: 60px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; font-size: 14px; }
+#feed div { background: rgba(8, 8, 20, 0.65); padding: 4px 10px; border-radius: 8px; animation: pop 0.25s; }
+#feed div.note { color: #aab; font-size: 12px; }
+#topR { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+#topR button { background: rgba(8, 8, 20, 0.65); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 10px; padding: 7px 11px; font-size: 13px; font-weight: 700; }
+#lockBtn.on { background: var(--me); border-color: #fff; color: #000; }
+#cross { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 4px #000; }
+#toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font-family: "Russo One", sans-serif; font-size: 22px; text-shadow: 0 2px 6px #000; opacity: 0; transition: opacity 0.2s; white-space: nowrap; }
+#toast.on { opacity: 1; }
+#banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; opacity: 0; pointer-events: none; }
+#banner small { display: block; font-family: "Russo One", sans-serif; font-size: 20px; letter-spacing: 0.4em; color: #fff; text-shadow: 0 0 12px var(--c); }
+#banner b { display: block; font-family: "Russo One", sans-serif; font-size: clamp(34px, 7vw, 76px); color: var(--c); text-shadow: 0 0 24px var(--c), 0 4px 0 #000; letter-spacing: 0.04em; }
+#banner.on { animation: banner 2.6s ease-out forwards; }
+@keyframes banner { 0% { opacity: 0; transform: scale(1.6); } 10% { opacity: 1; transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: scale(0.96); } }
+#flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; mix-blend-mode: screen; }
+#flash.on { animation: flash 0.7s ease-out; }
+@keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 120px 30px rgba(255, 0, 0, 0.6); }
+#hurt.on { animation: flash 0.45s ease-out; }
+#floats { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+.float { position: absolute; left: 0; top: 0; font-family: "Russo One", sans-serif; text-shadow: 0 2px 0 #000, 0 0 6px #000; white-space: nowrap; will-change: transform; }
+@keyframes pop { from { transform: scale(0.6); opacity: 0; } }
+
+/* bottom: health + move buttons */
+#bottom { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 8px; }
+#hp { width: min(520px, 92vw); }
+#hpName { font-size: 13px; font-weight: 800; color: var(--me); text-shadow: 0 1px 3px #000; }
+#hpBar { position: relative; height: 18px; background: rgba(0, 0, 0, 0.6); border: 2px solid rgba(255, 255, 255, 0.25); border-radius: 9px; overflow: hidden; }
+#hpFill { height: 100%; width: 100%; background: linear-gradient(#5dff86, #1fae45); transition: width 0.15s; }
+#hpText { position: absolute; inset: 0; text-align: center; font-size: 12px; font-weight: 800; line-height: 14px; text-shadow: 0 1px 2px #000; }
+#slots { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.slot { position: relative; width: 74px; height: 78px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, 0.2); background: rgba(10, 10, 24, 0.75); display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; padding: 0; touch-action: none; }
+.slot.big { width: 96px; border-color: var(--me); justify-content: flex-start; padding-top: 13px; }
+.slot.big .ico { font-size: 22px; }
+.slot.big .nm { margin-top: 2px; }
+.slot .key { position: absolute; left: 5px; top: 3px; font-size: 12px; font-weight: 800; color: #ffd25a; }
+.slot .ico { font-size: 26px; line-height: 1; }
+.slot .nm { font-size: 10px; font-weight: 700; margin-top: 4px; text-align: center; line-height: 1.1; padding: 0 3px; }
+.slot .cd { position: absolute; inset: 0; border-radius: 10px; }
+.slot .cdt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: "Russo One", sans-serif; font-size: 22px; text-shadow: 0 2px 4px #000; }
+.slot em { position: absolute; right: 4px; top: 3px; font-style: normal; font-size: 8px; font-weight: 800; letter-spacing: 0.05em; padding: 1px 4px; border-radius: 4px; }
+.slot .tagu { background: #ffd25a; color: #000; }
+.slot .tagd { background: var(--me); color: #000; }
+.slot .meter { position: absolute; left: 6px; right: 6px; bottom: 5px; height: 6px; background: rgba(0, 0, 0, 0.7); border-radius: 3px; overflow: hidden; }
+.slot .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--me), #fff); }
+.slot .pct { position: absolute; left: 0; right: 0; bottom: 11px; font-size: 10px; font-weight: 800; text-align: center; }
+.slot.charging .ico { opacity: 0.45; }
+.slot.ready { box-shadow: 0 0 14px var(--me), inset 0 0 14px var(--me); animation: glow 0.9s infinite alternate; }
+.slot.ready .pct { color: #ffd25a; }
+.slot.active { border-color: #9fd0ff; background: rgba(60, 120, 200, 0.6); }
+@keyframes glow { to { box-shadow: 0 0 24px var(--me), inset 0 0 20px var(--me); } }
+#stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.2); }
+#stick i { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); }
+body.touch .slot { width: 62px; height: 66px; }
+body.touch .slot.big { width: 80px; }
+body.touch #bottom { align-items: flex-end; }
+body.touch #slots { max-width: 300px; justify-content: flex-end; }
+body.touch #hp { position: absolute; left: 50%; transform: translateX(-50%); top: -40px; width: 50vw; }
+
+/* ---------- fighter select ---------- */
+#menu { position: fixed; inset: 0; background: radial-gradient(ellipse at top, rgba(40, 20, 90, 0.75), rgba(5, 4, 15, 0.92)); overflow-y: auto; z-index: 5; touch-action: pan-y; }
+.menu-in { max-width: 1180px; margin: 0 auto; padding: 22px 16px 30px; text-align: center; }
+#menu h1 { font-family: "Russo One", sans-serif; font-size: clamp(48px, 10vw, 96px); margin: 0; letter-spacing: 0.08em; background: linear-gradient(#fff, #c9b8ff 50%, #8b6cff); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 #000); }
+.sub { margin: 4px 0 6px; color: #cfd0ff; }
+#menuNote { font-family: "Russo One", sans-serif; color: #ff6a6a; font-size: 22px; min-height: 0; margin: 6px 0; }
+#menuNote:empty { display: none; }
+#cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 12px; }
+.card { position: relative; border: 3px solid rgba(255, 255, 255, 0.15); border-radius: 18px; padding: 0; overflow: hidden; background: linear-gradient(160deg, var(--b1), var(--b2)); text-align: left; transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; }
+.card:hover, .card:focus-visible { transform: translateY(-4px) scale(1.02); border-color: var(--c); box-shadow: 0 0 30px var(--c); outline: none; }
+.card .pic { display: block; height: 260px; overflow: hidden; background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.25), transparent 60%); }
+.card .pic img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+.card .who { display: block; padding: 8px 12px 0; }
+.card .who b { display: block; font-family: "Russo One", sans-serif; font-size: 30px; color: #fff; text-shadow: 0 0 14px var(--c), 0 3px 0 #000; }
+.card .who small { color: var(--c); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; filter: brightness(1.4); }
+.card .mv { display: flex; flex-direction: column; gap: 3px; padding: 8px 12px 12px; font-size: 13px; }
+.card kbd { display: inline-block; width: 18px; text-align: center; background: rgba(0, 0, 0, 0.5); border-radius: 4px; margin-right: 6px; font-family: inherit; font-weight: 800; color: #ffd25a; }
+.card .mv em { font-style: normal; font-size: 9px; font-weight: 800; background: var(--c); color: #000; border-radius: 4px; padding: 1px 4px; }
+#controls { margin: 16px auto 4px; max-width: 900px; color: #cfd0ff; font-size: 13px; line-height: 1.6; }
+#controls b { color: #ffd25a; }
+#online { color: #9fd0ff; font-weight: 700; }
+.back { color: #aab; font-size: 14px; }

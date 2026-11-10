@@ -33,7 +33,7 @@ else api("/hub/game/" + id).then((r) => {
 function start() {
   if (!game || playing) return;
   $("loading").classList.add("hidden");
-  playing = startPlay(world, sanitize(JSON.parse(JSON.stringify(game))), { onStop(again) { playing = null; if (again) start(); else location.href = back; } }); // (again: "Try again" after losing)
+  playing = startPlay(world, sanitize(JSON.parse(JSON.stringify(game))), { onStop(again) { playing = null; if (again) start(); else location.href = back; }, live: id }); // (live: play together, others.js) // (again: "Try again" after losing)
 }
 $("btnStart").onclick = start;
 

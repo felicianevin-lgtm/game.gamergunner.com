@@ -18,13 +18,15 @@ import { fileUrl, updateMixers, clearMixers } from "./files.js";
 import { animateThing, motionOf, withPlay } from "./motion.js";
 import { playScare, scareSound, stopScare } from "./scare.js";
 import { sanitize, newObj } from "./game.js";
+import { startOthers } from "./others.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const D2R = Math.PI / 180;
 const RADIUS = 0.6, SPHERES = [0.6, 1.5, 2.4]; // the player's body (heights above the feet)
 
-// opts = {onStop(again): again = true when the player pressed "Try again", output(kind, text): the studio's Output box}
+// opts = {onStop(again): again = true when the player pressed "Try again", output(kind, text): the studio's Output box,
+//         live: the published game's id = play together with everyone else playing it (others.js)}
 export function startPlay(world, game, opts) {
   const { scene, camera } = world;
   const S = game.settings;
@@ -429,6 +431,7 @@ export function startPlay(world, game, opts) {
     // the avatar + camera
     player.position.copy(pos); player.rotation.y = facing;
     animateAvatar(player, dt, grounded, Math.hypot(vel.x, vel.z));
+    if (others) { others.update(dt); $("hudPeople").textContent = "👥 " + others.count; }
     const follow = driving ? driving.g.position : pos;
     camTarget.copy(follow); camTarget.y += driving ? 2 : 2.4;
     if (driving) camYaw += angleDiff(camYaw, driving.yaw) * Math.min(1, dt * 2);
@@ -952,6 +955,7 @@ export function startPlay(world, game, opts) {
     running = false;
     stopScare();
     if (host) host.stop();
+    if (others) { others.stop(); $("hudPeople").remove(); }
     if (devPanel) devPanel.remove();
     clearMixers();
     window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKey); window.removeEventListener("blur", blur);
@@ -969,6 +973,10 @@ export function startPlay(world, game, opts) {
     opts.onStop(again === true);
   }
   drawGui();
+  // Playing a published game: everyone else playing it right now is here too (their own copy of the game).
+  const myLook = loadAvatar();
+  const others = opts.live ? startOthers(scene, opts.live, () => ({ p: pos, r: facing, air: !grounded, look: myLook }), (t) => showMsg(t, 2)) : null;
+  if (others) $("hud").querySelector(".hud-top").insertAdjacentHTML("afterbegin", '<span class="hud-chip" id="hudPeople" title="Players here">👥 1</span>');
   return { update, stop, pos, vel, isOn, get health() { return sc.health; }, get lost() { return lost; }, get viewCam() { return viewCam ? viewCam.o.name : ""; }, get host() { return host; }, get coins() { return coins; }, get won() { return won; }, get driving() { return driving ? driving.o.name : ""; }, get checkpoint() { return checkpoint; } }; // (pos / vel etc. for testing)
 }
 
