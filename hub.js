@@ -5,7 +5,8 @@
 // #/avatar (and the avatar pictures) use create/js/avatar-ui.js, loaded when it's needed (it brings the 3D code).
 // Player-made games come from GunnerVerse Studio (create/) through the relay's publish.js: they play at
 // create/play.html?g=<id>, their pictures live on the relay ("@/hub/thumb/..."), anyone signed in can Report one, and
-// #/admin (dev password, not linked anywhere) lists reports and removes games / bans makers.
+// #/admin = the 🛠 Dev menu (dev password; its button shows only on @GamerGunner's profile): reports, remove games,
+// ban / unban players, reset passwords.
 // Friends (relay social.js): requests by @username, who's online / playing, Join a friend's Sandbox room, Block.
 // There are NO private messages on purpose (Felicia, 2026-11-08).
 // Testing on this computer: add ?relay=http://localhost:8788 to use the local relay (it's kept while you click around).
@@ -596,7 +597,8 @@
     main.innerHTML = '<div class="profile-head">' + avatar(shownName(), myColor(), true, myAvatar()) + "<div><h1>" + esc(shownName()) + "</h1><p>@" + esc(me.u) +
       (social ? ' · <a href="#/friends">' + nf + " friend" + (nf === 1 ? "" : "s") + "</a>" : "") + "</p></div></div>" +
       '<div class="actions"><a class="btn" href="#/avatar">☻ Change my avatar</a><button class="btn ghost" id="meEdit" type="button">Edit profile</button>' +
-      '<button class="btn ghost" id="mePw" type="button">' + (hasPass ? "🔒 Change password" : "🔒 Add a password") + '</button><button class="btn ghost" id="meOut" type="button">Log out</button></div>' +
+      '<button class="btn ghost" id="mePw" type="button">' + (hasPass ? "🔒 Change password" : "🔒 Add a password") + '</button><button class="btn ghost" id="meOut" type="button">Log out</button>' +
+      (me.u.toLowerCase() === "gamergunner" ? '<a class="btn dev-btn" href="#/admin">🛠 Dev menu</a>' : "") + "</div>" +
       (hasPass ? "" : '<p class="tip pw-tip">🔒 Add a password so you can log in to @' + esc(me.u) + " on other computers and tablets (and never lose your account).</p>") +
       (banned ? '<p class="err">This account is banned.</p>' : "") +
       '<h2 class="row-title">Games you liked</h2>' + (mine.length ? '<div class="grid">' + mine.map(card).join("") + "</div>" : '<p class="empty">Tap 👍 on a game to save it here.</p>') +
@@ -627,16 +629,16 @@
     setNav("");
     var pw = ""; try { pw = sessionStorage.getItem("gg_admin") || ""; } catch (e) {}
     if (!pw) {
-      main.innerHTML = '<h1 class="page-title">Admin</h1><form class="add-friend" id="adForm"><label for="adPw">Dev password</label><div class="add-row"><input id="adPw" type="password" autocomplete="off">' +
+      main.innerHTML = '<h1 class="page-title">🛠 Dev menu</h1><form class="add-friend" id="adForm"><label for="adPw">Dev password</label><div class="add-row"><input id="adPw" type="password" autocomplete="off">' +
         '<button class="btn">Open</button></div><p class="add-msg err" id="adErr"></p></form>';
       document.getElementById("adForm").onsubmit = function (e) { e.preventDefault(); try { sessionStorage.setItem("gg_admin", document.getElementById("adPw").value); } catch (x) {} pageAdmin(); };
       return;
     }
     var hdr = { "X-GG-Dev": pw, "Content-Type": "application/json" };
     var call = function (path, body) { return fetch(RELAY + path, body ? { method: "POST", headers: hdr, body: JSON.stringify(body) } : { headers: hdr }).then(function (r) { return r.json(); }); };
-    main.innerHTML = '<h1 class="page-title">Admin</h1><p class="empty">Loading reports…</p>';
+    main.innerHTML = '<h1 class="page-title">🛠 Dev menu</h1><p class="empty">Loading reports…</p>';
     call("/hub/admin/reports").then(function (r) {
-      if (!r.ok) { try { sessionStorage.removeItem("gg_admin"); } catch (x) {} main.innerHTML = '<h1 class="page-title">Admin</h1><p class="err">Wrong password.</p><a class="btn" href="#/admin" onclick="location.reload()">Try again</a>'; return; }
+      if (!r.ok) { try { sessionStorage.removeItem("gg_admin"); } catch (x) {} main.innerHTML = '<h1 class="page-title">🛠 Dev menu</h1><p class="err">Wrong password.</p><a class="btn" href="#/admin" onclick="location.reload()">Try again</a>'; return; }
       var rows = (r.reports || []).map(function (x) {
         return '<div class="person"><span class="person-main"><span><b>' + esc(x.title) + "</b><small>by @" + esc(x.maker) + " · reported by @" + esc(x.by) + " · " + new Date(x.at).toLocaleString() + "</small>" +
           '<span class="st">' + esc(x.why || "(no reason)") + "</span></span></span>" +
@@ -645,13 +647,42 @@
             : '<a class="btn small ghost" href="#/game/' + esc(x.g) + '">View</a><button class="btn small danger" data-rm="' + esc(x.g) + '">Remove game</button>') +
           '<button class="btn small danger" data-ban="' + esc(x.maker) + '">Ban @' + esc(x.maker) + '</button><button class="btn small ghost" data-done="' + esc(x.id) + '">Dismiss</button></div></div>';
       }).join("");
-      main.innerHTML = '<h1 class="page-title">Admin</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +
+      main.innerHTML = '<h1 class="page-title">🛠 Dev menu</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +
         (rows ? '<div class="people">' + rows + "</div>" : '<p class="empty">No reports. 🎉</p>') +
+        '<h2 class="row-title">Ban a player</h2><form class="add-friend" id="bnForm"><label for="bnUser">Username (blocks the account from GunnerVerse and the game, and the internet connection it last played from)</label><div class="add-row"><input id="bnUser" maxlength="17" placeholder="@username">' +
+        '<button class="btn danger">Ban</button></div><p class="add-msg" id="bnMsg"></p></form>' +
+        '<h2 class="row-title">Banned players</h2><div id="banList"><p class="empty">Loading…</p></div>' +
         '<h2 class="row-title">Reset a password</h2><form class="add-friend" id="rpForm"><label for="rpUser">Username (for a player who forgot their password: they add a new one on a device that\'s still logged in)</label><div class="add-row"><input id="rpUser" maxlength="17">' +
         '<button class="btn danger">Reset</button></div><p class="add-msg" id="rpMsg"></p></form>' +
         '<h2 class="row-title">Remove any game</h2><form class="add-friend" id="rmForm"><label for="rmId">Game id (the letters after #/game/ in its address)</label><div class="add-row"><input id="rmId" maxlength="16">' +
         '<button class="btn danger">Remove</button></div><p class="add-msg" id="rmMsg"></p></form>' +
-        '<p class="tip" style="margin-top:20px">Bans block the account from GunnerVerse and the game (same as the dev menu ban). Unban from the game\'s dev menu.</p>';
+        '<p class="tip" style="margin-top:20px">Bans work everywhere: the home page, Studio games, Clash, the Backrooms and the big game.</p>';
+      var drawBans = function () {
+        call("/bans").then(function (b) {
+          var box = document.getElementById("banList"); if (!box) return;
+          var list = (b && b.bans) || [];
+          box.innerHTML = list.length ? '<div class="people">' + list.map(function (x) {
+            return '<div class="person"><span class="person-main"><span><b>' + esc(x.n || x.u || x.id) + "</b><small>banned " + (x.at ? new Date(x.at).toLocaleString() : "") + "</small></span></span>" +
+              '<div class="person-btns"><button class="btn small" data-unban="' + esc(x.id) + '">Unban</button></div></div>';
+          }).join("") + "</div>" : '<p class="empty">Nobody is banned.</p>';
+          Array.prototype.forEach.call(box.querySelectorAll("[data-unban]"), function (u) {
+            u.onclick = function () {
+              if (!confirm("Unban " + u.getAttribute("data-unban") + "?")) return;
+              u.disabled = true;
+              fetch(RELAY + "/unban", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: pw, u: u.getAttribute("data-unban") }) }).then(drawBans, drawBans);
+            };
+          });
+        }).catch(function () { var box = document.getElementById("banList"); if (box) box.innerHTML = '<p class="err">Couldn\'t load the bans.</p>'; });
+      };
+      drawBans();
+      document.getElementById("bnForm").onsubmit = function (e) {
+        e.preventDefault();
+        var u = document.getElementById("bnUser").value.trim().replace(/^@/, "");
+        if (!u || !confirm("Ban @" + u + " from all of GunnerVerse?")) return;
+        fetch(RELAY + "/ban", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ c: pw, u: u }) }).then(function (r) { return r.json(); })
+          .then(function (r) { document.getElementById("bnMsg").textContent = r.ok ? "@" + u + " is banned." : r.e === "bad" ? "That isn't a username." : "Didn't work."; drawBans(); })
+          .catch(function () { document.getElementById("bnMsg").textContent = "Couldn't reach GunnerVerse."; });
+      };
       var act = function (fn) { return function () { var b = this; if (!confirm(b.textContent + "?")) return; b.disabled = true; fn(b).then(function () { loadGames().then(pageAdmin); }); }; };
       Array.prototype.forEach.call(main.querySelectorAll("[data-rm]"), function (b) { b.onclick = act(function (b) { return call("/hub/admin/remove", { g: b.getAttribute("data-rm") }).then(function () { return call("/hub/admin/done", { id: b.getAttribute("data-rm") }); }); }); });
       Array.prototype.forEach.call(main.querySelectorAll("[data-done]"), function (b) { b.onclick = act(function (b) { return call("/hub/admin/done", { id: b.getAttribute("data-done") }); }); });
