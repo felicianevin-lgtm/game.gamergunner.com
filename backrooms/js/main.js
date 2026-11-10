@@ -162,7 +162,7 @@ async function startLevel(n) {
   scene.background = new THREE.Color(L.bg); scene.fog = new THREE.Fog(L.fog[0], L.fog[1], L.fog[2]);
   hemi.color.set(L.hemi[0]); hemi.groundColor.set(L.hemi[1]); hemi.intensity = L.hemi[2];
   lamp.intensity = L.pool ? 0 : 2.5;
-  P.pos.set(L.start.x, floorAt(L.start.x, L.start.z, 5, RAD), L.start.z); P.vel.set(0, 0, 0); P.yaw = L.start.yaw; P.pitch = 0; P.stamina = 1; P.rocks = 0; P.grounded = true;
+  P.pos.set(L.start.x, floorAt(L.start.x, L.start.z, 5, RAD), L.start.z); P.vel.set(0, 0, 0); P.yaw = L.start.yaw; P.pitch = 0; P.stamina = 1; P.tired = false; P.rocks = 0; P.grounded = true;
   for (const r of L.rocks) addRock(V(r.x, r.y, r.z));
   for (const m of L.monsters) {
     const c = await make(m.kind);
@@ -203,7 +203,9 @@ function updatePlayer(dt) {
   if (want.lengthSq() > 1) want.normalize();
   const w = waterAt(P.pos.x, P.pos.z);
   P.inWater = !!w && P.pos.y < w.top - 0.05;
-  P.running = keys.has("shift") && want.lengthSq() > 0.1 && P.stamina > 0.02 && !P.inWater;
+  // out of breath: once the run bar is empty you walk until it's a third full again (it used to start running again right away)
+  if (P.stamina <= 0.01) P.tired = true; else if (P.stamina >= 0.35) P.tired = false;
+  P.running = keys.has("shift") && want.lengthSq() > 0.1 && !P.tired && !P.inWater;
   P.stamina = Math.max(0, Math.min(1, P.stamina + (P.running ? -0.2 : 0.14) * dt));
   want.multiplyScalar((P.running ? RUN : WALK) * (P.inWater ? 0.8 : 1));
   const k = 1 - Math.exp(-(P.grounded ? 12 : 3) * dt);
@@ -242,7 +244,7 @@ function updatePlayer(dt) {
   $("rocks").textContent = P.rocks ? "🪨 x" + P.rocks + (touch ? "" : "  (F or click to throw)") : "";
   $("rocks").classList.toggle("hidden", !P.rocks);
   $("stam").style.width = P.stamina * 100 + "%";
-  $("stamWrap").classList.toggle("low", P.stamina < 0.25);
+  $("stamWrap").classList.toggle("low", P.stamina < 0.25 || !!P.tired);
   $("water").classList.toggle("on", P.inWater);
   // the exit
   if (Math.hypot(P.pos.x - L.exit.x, P.pos.z - L.exit.z) < L.exit.r) levelDone();
