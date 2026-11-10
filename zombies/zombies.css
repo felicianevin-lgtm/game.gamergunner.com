@@ -1,0 +1,146 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1c2a14; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: none; }
+canvas#canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+#overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; }
+body.playing canvas#canvas { cursor: none; }
+.hidden { display: none !important; }
+button { font: inherit; cursor: pointer; }
+a { color: #b6ff6a; }
+.coin { display: inline-block; width: 1em; height: 1em; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff6b0, #ffd23a 45%, #c88a10); box-shadow: 0 0 0 2px #8a5a08 inset; vertical-align: -0.12em; }
+
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 150px 50px rgba(255, 40, 60, 0.85); }
+
+/* ---------------- HUD */
+#hud { position: fixed; inset: 0; pointer-events: none; font-family: "Russo One", Impact, sans-serif; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6); }
+#hpBox { position: absolute; left: 14px; top: 12px; }
+#hpRow { display: flex; align-items: center; gap: 8px; }
+.heart { color: #ff4a6a; font-size: 26px; filter: drop-shadow(0 2px 0 #000); }
+#hpBar { position: relative; width: min(230px, 38vw); height: 20px; border-radius: 10px; background: rgba(0, 0, 0, 0.55); border: 2px solid rgba(255, 255, 255, 0.85); overflow: hidden; }
+#hpBar i { position: absolute; left: 0; top: 0; bottom: 0; }
+#hpFill { background: linear-gradient(#7dff6a, #2fbf3a); z-index: 2; transition: width 0.1s; }
+#hpLag { background: #ffd23a; z-index: 1; transition: width 0.6s 0.2s; }
+#hpBox.low #hpFill { background: linear-gradient(#ff8a6a, #e0302a); }
+#hpNum { font-size: 18px; min-width: 40px; }
+#dashRow { display: flex; align-items: center; gap: 8px; margin: 6px 0 0 34px; font-size: 11px; letter-spacing: 0.1em; }
+#dashBar { width: 80px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.5); overflow: hidden; }
+#dashFill { display: block; height: 100%; background: #5ff0ff; }
+#waveBox { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); text-align: center; }
+#waveNum { display: block; font-size: clamp(22px, 4vw, 34px); color: #c8ff7a; letter-spacing: 0.05em; -webkit-text-stroke: 1px #1a3a0a; }
+#zLeft { font-size: 13px; color: #fff; opacity: 0.9; }
+#bossBox { margin-top: 6px; }
+#bossBox small { display: block; font-size: 14px; color: #ffd23a; letter-spacing: 0.08em; }
+#bossBar { width: min(420px, 60vw); height: 16px; border-radius: 8px; background: rgba(0, 0, 0, 0.6); border: 2px solid #ffd23a; overflow: hidden; margin: 2px auto 0; }
+#bossFill { display: block; height: 100%; background: linear-gradient(#ff6a6a, #c0202a); transition: width 0.15s; }
+#topRight { position: absolute; right: 14px; top: 10px; text-align: right; }
+#coins { font-size: 28px; color: #ffd23a; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+#coins .coin { width: 26px; height: 26px; }
+#coins.bump b { animation: bump 0.25s; display: inline-block; }
+@keyframes bump { 50% { transform: scale(1.3); } }
+#score { font-size: 14px; opacity: 0.95; }
+.hudBtns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.hudBtns button { pointer-events: auto; width: 40px; height: 40px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, 0.6); background: rgba(0, 0, 0, 0.4); color: #fff; font-size: 18px; }
+#combo { position: absolute; right: 16px; top: 34%; text-align: center; transform: rotate(-6deg); }
+#combo b { display: block; font-size: 46px; color: #ffd23a; -webkit-text-stroke: 2px #6a2a00; }
+#combo span { font-size: 14px; letter-spacing: 0.25em; }
+#combo.pop b { animation: bump 0.2s; }
+#comboBar { width: 90px; height: 6px; margin: 4px auto 0; border-radius: 3px; background: rgba(0, 0, 0, 0.5); overflow: hidden; }
+#comboFill { display: block; height: 100%; background: #ffd23a; }
+#banner { position: absolute; left: 0; right: 0; top: 24%; text-align: center; opacity: 0; transition: opacity 0.3s; }
+#banner.on { opacity: 1; }
+#bannerBig { display: block; font-size: clamp(40px, 9vw, 92px); color: #c8ff7a; -webkit-text-stroke: 3px #143a0a; text-shadow: 0 6px 0 #0a2a04, 0 0 40px rgba(160, 255, 90, 0.5); }
+#banner.boss #bannerBig { color: #ff5a4a; -webkit-text-stroke-color: #3a0a0a; text-shadow: 0 6px 0 #2a0404, 0 0 40px rgba(255, 60, 40, 0.6); }
+#banner.on #bannerBig { animation: slam 0.45s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes slam { 0% { transform: scale(2.2); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+#bannerSmall { display: block; font-size: clamp(16px, 2.6vw, 24px); color: #fff; margin-top: 4px; }
+#bottom { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; align-items: flex-end; gap: 14px; padding: 0 12px; }
+#ammoBox { text-align: right; min-width: 120px; }
+#gunName { display: block; font-size: 15px; color: #c8ff7a; }
+#ammoNum { font-size: 34px; }
+#ammoNum.empty { color: #ff5a4a; }
+#reloadBar { height: 6px; border-radius: 3px; background: rgba(0, 0, 0, 0.5); overflow: hidden; visibility: hidden; }
+#reloadBar.on { visibility: visible; }
+#reloadFill { display: block; height: 100%; background: #ffd23a; }
+#slots { display: flex; gap: 6px; }
+.slot { position: relative; width: 58px; height: 58px; border-radius: 12px; background: rgba(0, 0, 0, 0.45); border: 2px solid rgba(255, 255, 255, 0.35); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; line-height: 1; }
+.slot small { font-size: 10px; margin-top: 3px; font-family: Inter, sans-serif; font-weight: 800; }
+.slot em { position: absolute; left: 4px; top: 2px; font-size: 11px; font-style: normal; opacity: 0.8; }
+.slot.on { border-color: #c8ff7a; background: rgba(90, 160, 40, 0.55); transform: translateY(-4px); box-shadow: 0 0 14px rgba(160, 255, 90, 0.6); }
+.slot.locked { opacity: 0.3; }
+#items { display: flex; flex-direction: column; gap: 4px; font-size: 14px; min-width: 90px; }
+#items span { background: rgba(0, 0, 0, 0.45); border-radius: 8px; padding: 3px 8px; }
+
+/* touch controls */
+#touchUI { display: none; }
+body.touch #touchUI { display: block; }
+.stick { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.18); opacity: 0.55; }
+.stick i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
+#stickL { left: 90px; top: calc(100% - 110px); }
+#stickR { left: calc(100% - 90px); top: calc(100% - 110px); border-color: rgba(255, 120, 100, 0.5); }
+.stick.on { opacity: 1; }
+#tBtns { position: absolute; right: 180px; bottom: 26px; display: flex; flex-direction: column; gap: 10px; }
+#tBtns button { pointer-events: auto; width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.55); background: rgba(0, 0, 0, 0.4); color: #fff; font-size: 22px; touch-action: none; }
+#tBtns #tDash { font-family: "Russo One", sans-serif; font-size: 13px; background: rgba(40, 170, 200, 0.55); }
+body.touch #bottom { bottom: auto; top: 96px; justify-content: flex-start; transform: scale(0.8); transform-origin: left top; }
+body.touch #slots .slot { pointer-events: auto; }
+body.touch #combo { top: 46%; }
+
+/* ---------------- panels */
+.panel { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(30, 50, 20, 0.72), rgba(8, 14, 6, 0.94)); z-index: 6; overflow-y: auto; touch-action: pan-y; }
+#menu { background: radial-gradient(ellipse at center, rgba(20, 40, 15, 0.55), rgba(8, 14, 6, 0.9)); }
+.box { max-width: 700px; width: 100%; text-align: center; margin: auto; }
+.box.wide { max-width: 980px; }
+.panel h1 { font-family: "Russo One", sans-serif; font-size: clamp(46px, 11vw, 96px); margin: 0; color: #a8ff5a; -webkit-text-stroke: 3px #143a0a; text-shadow: 0 7px 0 #0a2a04, 0 0 40px rgba(160, 255, 90, 0.45); letter-spacing: 0.03em; line-height: 1; }
+.panel h2 { font-family: "Russo One", sans-serif; font-size: clamp(30px, 6vw, 48px); margin: 0 0 8px; color: #c8ff7a; -webkit-text-stroke: 2px #143a0a; }
+.panel h2.red { color: #ff5a4a; -webkit-text-stroke-color: #3a0a0a; }
+.sub { color: #eaf6dc; font-size: 17px; line-height: 1.45; }
+.zlist { list-style: none; padding: 0; margin: 10px auto; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 640px; }
+.zlist li { background: rgba(0, 0, 0, 0.35); border-radius: 10px; padding: 6px 10px; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.zlist i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4); }
+.best { color: #ffd23a; font-weight: 800; min-height: 1em; }
+.btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0; align-items: center; }
+.btns button { border: 0; border-radius: 12px; padding: 10px 18px; background: rgba(255, 255, 255, 0.14); color: #fff; font-weight: 700; }
+button.big { background: #a8ff5a; color: #143a0a; font-family: "Russo One", sans-serif; font-size: 24px; padding: 14px 34px; box-shadow: 0 5px 0 #4a8a1a; }
+button.big:hover { filter: brightness(1.08); }
+button.big:active { transform: translateY(3px); box-shadow: 0 2px 0 #4a8a1a; }
+#controls, #controls2 { color: #cfe0c0; font-size: 14px; line-height: 1.7; }
+#controls b, #controls2 b { color: #c8ff7a; background: rgba(0, 0, 0, 0.35); border-radius: 5px; padding: 1px 6px; }
+.back { color: #b6ff6a; font-size: 14px; display: inline-block; margin-top: 8px; }
+.tip { color: #cfe0c0; font-size: 13px; }
+.tip b { color: #c8ff7a; }
+.bigStat { font-size: 24px; font-family: "Russo One", sans-serif; }
+.bigStat b { color: #c8ff7a; }
+.stats { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.stats div { background: rgba(0, 0, 0, 0.35); border-radius: 12px; padding: 10px 16px; min-width: 130px; }
+.stats small { display: block; font-size: 11px; letter-spacing: 0.1em; color: #cfe0c0; }
+.stats b { font-family: "Russo One", sans-serif; font-size: 28px; }
+
+/* shop */
+#shopGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin: 12px 0; text-align: left; }
+.card { background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(255, 255, 255, 0.15); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.card .ic { font-size: 30px; line-height: 1; }
+.card b { font-family: "Russo One", sans-serif; font-size: 16px; color: #fff; }
+.card p { margin: 0; font-size: 12px; color: #cfe0c0; flex: 1; }
+.card .lv { font-size: 11px; color: #ffd23a; font-weight: 800; letter-spacing: 0.05em; }
+.card button { border: 0; border-radius: 10px; padding: 8px 10px; background: #ffd23a; color: #3a2400; font-family: "Russo One", sans-serif; font-size: 15px; box-shadow: 0 3px 0 #a87a10; margin-top: 4px; }
+.card button:disabled { background: #555; color: #aaa; box-shadow: none; cursor: default; }
+.card.owned { border-color: rgba(168, 255, 90, 0.5); }
+.card.flash { animation: cardFlash 0.4s; }
+@keyframes cardFlash { 0% { background: rgba(255, 220, 60, 0.6); } }
+
+/* thumbnail */
+#thumbTitle { position: fixed; left: 0; right: 0; top: 30px; text-align: center; font-family: "Russo One", Impact, sans-serif; pointer-events: none; z-index: 8; }
+#thumbTitle b { display: block; font-size: 112px; line-height: 1; color: #b4ff5a; letter-spacing: 0.02em; -webkit-text-stroke: 5px #0e2a06; paint-order: stroke fill; text-shadow: 0 9px 0 #0e2a06, 0 12px 30px rgba(0, 0, 0, 0.7), 0 0 60px rgba(160, 255, 90, 0.5); transform: rotate(-3deg); }
+#thumbTitle span { display: inline-block; margin-top: 14px; font-size: 32px; color: #fff; background: #e0302a; padding: 4px 22px; border-radius: 10px; transform: rotate(-3deg); box-shadow: 0 5px 0 #6a0a0a, 0 8px 20px rgba(0, 0, 0, 0.5); -webkit-text-stroke: 1px #6a0a0a; }
+body.thumb #hud, body.thumb .panel { display: none !important; }
+#testOut { position: fixed; left: 0; bottom: 0; color: #fff; background: #000; font-size: 11px; max-height: 50vh; overflow: auto; z-index: 99; }
+
+@media (max-width: 640px) {
+  #waveBox { top: 52px; }
+  #hpBar { width: 34vw; }
+  #coins { font-size: 22px; }
+  #coins .coin { width: 20px; height: 20px; }
+  body.touch #bottom { top: 118px; }
+  .slot { width: 46px; height: 46px; font-size: 19px; }
+  #ammoNum { font-size: 26px; }
+  #combo b { font-size: 34px; }
+}

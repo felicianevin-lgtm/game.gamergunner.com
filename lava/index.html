@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Lava Tower | GunnerVerse</title>
+  <meta name="description" content="Climb an endless tower of jumps, spinning bars, jump pads and falling tiles while the lava rises below you. How high can you get?">
+  <meta name="theme-color" content="#2a0f12">
+  <link rel="icon" type="image/png" href="../img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="lava.css?v=1">
+  <!-- module versions (tools/stamp-site.py) -->
+  <script type="importmap">{"imports":{"/create/js/assets.js":"/create/js/assets.js?v=789ca1e0f0","/create/js/avatar-ui.js":"/create/js/avatar-ui.js?v=24675f02a9","/create/js/avatar.js":"/create/js/avatar.js?v=4a25c02909","/create/js/collab.js":"/create/js/collab.js?v=cb5e0bf31c","/create/js/editor.js":"/create/js/editor.js?v=b191b4d9d2","/create/js/files.js":"/create/js/files.js?v=7197ff9755","/create/js/filter.js":"/create/js/filter.js?v=7bb46d235b","/create/js/game.js":"/create/js/game.js?v=2d6eae2919","/create/js/gui.js":"/create/js/gui.js?v=b2f9926b5e","/create/js/monster.js":"/create/js/monster.js?v=1fe3f23aa3","/create/js/motion.js":"/create/js/motion.js?v=c67bcaa62c","/create/js/net.js":"/create/js/net.js?v=79cb8352ce","/create/js/others.js":"/create/js/others.js?v=2b18ccdb6d","/create/js/play.js":"/create/js/play.js?v=84f637d0ce","/create/js/player.js":"/create/js/player.js?v=6cb6b0f2b7","/create/js/publish.js":"/create/js/publish.js?v=8bb4fafb84","/create/js/scare.js":"/create/js/scare.js?v=6f16e0ed76","/create/js/script-editor.js":"/create/js/script-editor.js?v=ad684cbaa4","/create/js/scripts.js":"/create/js/scripts.js?v=f683805a93","/create/js/textures.js":"/create/js/textures.js?v=5d0d52e6b3","/create/js/world.js":"/create/js/world.js?v=d269fa5269","/create/vendor/BufferGeometryUtils.js":"/create/vendor/BufferGeometryUtils.js?v=defd1be58f","/create/vendor/FBXLoader.js":"/create/vendor/FBXLoader.js?v=eb348b6248","/create/vendor/GLTFLoader.js":"/create/vendor/GLTFLoader.js?v=0d15e0d65b","/create/vendor/NURBSCurve.js":"/create/vendor/NURBSCurve.js?v=acce859f76","/create/vendor/NURBSUtils.js":"/create/vendor/NURBSUtils.js?v=e5d24dd6d2","/create/vendor/OBJLoader.js":"/create/vendor/OBJLoader.js?v=db8ea76faf","/create/vendor/OrbitControls.js":"/create/vendor/OrbitControls.js?v=81b5fc1a5b","/create/vendor/SkeletonUtils.js":"/create/vendor/SkeletonUtils.js?v=ddf661e463","/create/vendor/TransformControls.js":"/create/vendor/TransformControls.js?v=c8f2ff8410","/create/vendor/fflate.module.js":"/create/vendor/fflate.module.js?v=634a59693a","/create/vendor/three.module.js":"/create/vendor/three.module.js?v=0399d7f2a6","/clash/js/arena.js":"/clash/js/arena.js?v=8865ade977","/clash/js/fighters.js":"/clash/js/fighters.js?v=b29e1b0743","/clash/js/main.js":"/clash/js/main.js?v=d20aa7bf32","/clash/js/moves.js":"/clash/js/moves.js?v=642c224704","/clash/js/sfx.js":"/clash/js/sfx.js?v=27a459b413","/backrooms/js/creatures.js":"/backrooms/js/creatures.js?v=7a892c4b25","/backrooms/js/levels.js":"/backrooms/js/levels.js?v=9a42bdbac5","/backrooms/js/main.js":"/backrooms/js/main.js?v=973e91875d","/lava/js/lava.js":"/lava/js/lava.js?v=e9e4564169","/lava/js/main.js":"/lava/js/main.js?v=18451aab99","/lava/js/player.js":"/lava/js/player.js?v=f6583c8bd8","/lava/js/sfx.js":"/lava/js/sfx.js?v=7fc3f14db6","/lava/js/tower.js":"/lava/js/tower.js?v=bebfd4684c","/zombies/js/fx.js":"/zombies/js/fx.js?v=7b14d81101","/zombies/js/hero.js":"/zombies/js/hero.js?v=86fcab5582","/zombies/js/main.js":"/zombies/js/main.js?v=22354536b6","/zombies/js/sfx.js":"/zombies/js/sfx.js?v=1fe3987fbd","/zombies/js/world.js":"/zombies/js/world.js?v=32232f0316","/zombies/js/zombies.js":"/zombies/js/zombies.js?v=906178f179","/dash/js/auto.js":"/dash/js/auto.js?v=467a965425","/dash/js/gen.js":"/dash/js/gen.js?v=6c4e1c56e4","/dash/js/main.js":"/dash/js/main.js?v=abc6bc56e6","/dash/js/save.js":"/dash/js/save.js?v=5ce6d616ef","/dash/js/sfx.js":"/dash/js/sfx.js?v=2eb2966a7e","/dash/js/sim.js":"/dash/js/sim.js?v=534cfe4d4e","/dash/js/world.js":"/dash/js/world.js?v=fd0a918355"}}</script>
+  <!-- /module versions -->
+</head>
+<body>
+  <canvas id="canvas" tabindex="0"></canvas>
+  <div id="heat"></div>
+  <div id="flash"></div>
+
+  <div id="hud" class="hidden">
+    <div id="hTop"><b id="hNow">0 m</b><small id="hBest">BEST 0 m</small></div>
+    <div id="hCoins"><i class="coin"></i><b id="hCoinN">0</b></div>
+    <div id="hBtns"><button type="button" id="bMute" title="Sound on/off (M)">🔊</button><button type="button" id="bPause" title="Pause (Esc)">⏸</button></div>
+    <div id="meter"><span>LAVA</span><div id="mBar"><i id="mFill"></i><em id="mYou"></em></div><b id="mDist">10 m</b></div>
+    <div id="toast"></div>
+    <div id="secName"></div>
+    <div id="stick"><i></i></div>
+    <button type="button" id="tJump">JUMP</button>
+  </div>
+
+  <div id="menu" class="panel side">
+    <div class="box">
+      <h1><span>LAVA</span> TOWER</h1>
+      <p class="sub">The lava is rising! Climb the endless tower of jumps, spinning bars, jump pads and falling tiles. How high can you get?</p>
+      <div class="btns"><button type="button" id="play" class="big">▶ PLAY</button></div>
+      <div class="stats"><span>🏔️ Best: <b id="mBest">0 m</b></span><span><i class="coin"></i> <b id="mCoins">0</b> coins</span></div>
+      <div class="shop">
+        <h3>Shop <small>spend your coins on a new look</small></h3>
+        <div class="row" id="shopSkins"></div>
+        <div class="row" id="shopHats"></div>
+        <p id="shopMsg"></p>
+      </div>
+      <p id="controls"></p>
+      <div class="foot"><a class="back" href="../#/">← GunnerVerse</a><button type="button" id="mMute" class="link">🔊 Sound on</button></div>
+    </div>
+  </div>
+
+  <div id="pause" class="panel hidden"><div class="box"><h2>Paused</h2><div class="btns col"><button type="button" id="resume" class="big">▶ Keep climbing</button><button type="button" id="restart">↻ Start over</button><button type="button" id="quit">Menu</button></div></div></div>
+
+  <div id="dead" class="panel hidden">
+    <div class="box">
+      <h2 class="burn">BURNED!</h2>
+      <p class="sub" id="deadMsg"></p>
+      <p id="deadBest"></p>
+      <div class="btns col"><button type="button" id="cont" class="big">🚩 Continue from checkpoint</button><button type="button" id="again" class="big alt">↻ Try again</button><button type="button" id="dMenu">Menu</button></div>
+    </div>
+  </div>
+
+  <div id="thumbTitle" class="hidden"><h1>LAVA<br>TOWER</h1><p>CLIMB OR BURN!</p></div>
+
+  <script type="module" src="js/main.js?v=18451aab99"></script>
+</body>
+</html>
