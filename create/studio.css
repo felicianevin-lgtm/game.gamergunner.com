@@ -221,7 +221,7 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .gui-handle { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; background: var(--sel); border-radius: 6px 0 10px 0; cursor: nwse-resize; }
 body.playing .gui-layer.edit, body.playing .gui-vis { display: none; }
 .gui-vis { position: absolute; top: 10px; right: 10px; z-index: 4; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--edge); background: rgba(7, 10, 13, .75); cursor: pointer; font-size: 12px; font-weight: 600; }
-.gui-vis.off { opacity: .55; text-decoration: line-through; }
+.gui-vis.off { border-color: var(--gold); color: var(--gold); }
 .spot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; width: 150px; aspect-ratio: 16 / 10; padding: 6px; border: 1px solid var(--edge);
   border-radius: 8px; background: var(--bg); }
 .spot-grid button { border: 1px solid var(--edge); border-radius: 4px; background: var(--panel-2); cursor: pointer; padding: 0; }
@@ -250,6 +250,11 @@ body.playing .gui-layer.edit, body.playing .gui-vis { display: none; }
 .tree-row.faded .tn { opacity: .55; }
 .tree-row .tree-add { margin-left: auto; width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--edge); background: var(--panel-2); cursor: pointer; padding: 0; line-height: 1; }
 .tree-row .tree-add:hover { border-color: var(--green-hi); }
+.tree-row .tree-eye { margin-left: auto; flex: none; width: 24px; height: 22px; border-radius: 6px; border: 1px solid transparent; background: transparent; cursor: pointer; padding: 0; line-height: 1; font-size: 13px; }
+.tree-row .tb2 + .tree-eye { margin-left: 6px; }
+.tree-row .tree-eye:hover { border-color: var(--edge); background: var(--panel-2); }
+.tree-row .tree-eye.off { opacity: .6; }
+.tree-row.child .tn { min-width: 0; }
 .script-chip { display: block; width: 100%; text-align: left; margin: 0 0 6px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #2c4a7a; background: rgba(47, 125, 246, .14); cursor: pointer; font-weight: 600; }
 .script-chip:hover { border-color: var(--sel); }
 .btn.add-script { width: 100%; margin-top: 2px; border-color: var(--green); background: rgba(31, 174, 69, .16); }

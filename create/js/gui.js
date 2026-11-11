@@ -87,14 +87,15 @@ export function guiShown(list, g) {
 }
 
 // Draw the GUI into a layer. Panels first (so things sit on top of them).
-// opts: {edit (show hidden things faded, so you can still change them), selected, onClick(item, element), fileUrl(id)}
+// opts: {edit (show hidden things faded, so you can still change them), selected, onClick(item, element), fileUrl(id),
+//        hide(item) -> true to leave it off this screen (the editor's eye buttons)}
 export function renderGui(layer, list, opts) {
   opts = opts || {};
   layer.innerHTML = "";
   const order = (list || []).filter((g) => g.kind === "frame").concat((list || []).filter((g) => g.kind !== "frame"));
   for (const g of order) {
     const shown = guiShown(list, g);
-    if (!shown && !opts.edit) continue;
+    if ((!shown && !opts.edit) || (opts.hide && opts.hide(g))) continue;
     const el = document.createElement(g.kind === "button" || g.kind === "devmenu" ? "button" : "div");
     el.className = "gui-item gui-" + g.kind + " gs-" + g.size + (opts.selected === g.id ? " gui-sel" : "") + (shown ? "" : " gui-off");
     if (el.tagName === "BUTTON") el.type = "button";

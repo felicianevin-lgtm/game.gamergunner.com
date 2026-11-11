@@ -78,7 +78,15 @@ const extraBoxes = []; // (one per other selected thing)
 // ---------------------------------------------------------------- objects in the world
 function obj(id) { return game.objects.find((o) => o.id === id) || null; }
 function guiItem(id) { return (game.gui || []).find((g) => g.id === id) || null; }
-function drawGui() { if (game) renderGui($("guiLayer"), game.gui, { edit: true, selected, fileUrl }); }
+function drawGui() { if (game) renderGui($("guiLayer"), game.gui, { edit: true, selected, fileUrl, hide: hiddenHere }); guiVisButton(); }
+// GUI you've hidden on YOUR screen while you build (the eye buttons). Only you see this; the game, Play and scripts
+// don't change, and nobody else in a shared studio is affected. Remembered on this computer, for each game.
+let hideHere = new Set();
+const hideKey = () => "gv_guihide_" + (game ? game.id : "");
+function loadHideHere() { hideHere = new Set(); try { for (const id of JSON.parse(localStorage.getItem(hideKey()) || "[]")) hideHere.add(id); } catch {} }
+function saveHideHere() { try { hideHere.size ? localStorage.setItem(hideKey(), JSON.stringify([...hideHere])) : localStorage.removeItem(hideKey()); } catch {} }
+function hiddenHere(g) { return hideHere.has(g.id) || (!!g.parent && hideHere.has(g.parent)); }
+function setHiddenHere(ids, hide) { for (const id of ids) hide ? hideHere.add(id) : hideHere.delete(id); saveHideHere(); drawGui(); drawTree(); }
 function scriptsOf(id) { return (game.scripts || []).filter((x) => x.on === id); }
 function rebuild(o) {
   const old = groups.get(o.id);
@@ -828,8 +836,10 @@ function drawTree() {
       (b ? '<span class="tb2">' + esc(b) + "</span>" : "") + "</div>" + scRows(o.id, 2);
   }
   html += '<div class="tree-row tree-root gui-root" data-root="gui"><span class="ti">🖥️</span><span class="tn">ScreenGui</span></div>';
-  const guiRow = (g, depth) => '<div class="tree-row child d' + depth + (g.id === selected ? " on" : "") + (g.visible ? "" : " faded") + '" data-id="' + g.id + '"><span class="ti">' + GUI_KINDS[g.kind].icon + '</span><span class="tn">' + esc(g.name) + "</span>" +
-    (g.visible ? "" : '<span class="tb2">hidden</span>') + "</div>" + scRows(g.id, depth + 1);
+  const guiRow = (g, depth) => { const off = hiddenHere(g);
+    return '<div class="tree-row child d' + depth + (g.id === selected ? " on" : "") + (g.visible ? "" : " faded") + '" data-id="' + g.id + '"><span class="ti">' + GUI_KINDS[g.kind].icon + '</span><span class="tn">' + esc(g.name) + "</span>" +
+    (g.visible ? "" : '<span class="tb2">hidden</span>') +
+    '<button type="button" class="tree-eye' + (off ? " off" : "") + '" data-eye="' + g.id + '" title="' + (off ? "Show it on my screen again" : "Hide it on my screen while I build (the game doesn't change)") + '">' + (off ? "🙈" : "👁️") + "</button></div>" + scRows(g.id, depth + 1); };
   for (const g of (game.gui || []).filter((x) => !x.parent)) {
     html += guiRow(g, 1);
     for (const k of game.gui.filter((x) => x.parent === g.id)) html += guiRow(k, 2);
@@ -849,6 +859,7 @@ function drawTree() {
   const gr = $("tree").querySelector('[data-root="gui"]');
   gr.oncontextmenu = (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, Object.entries(GUI_KINDS).map(([k, v]) => ({ icon: v.icon, label: "Add " + v.label, fn: () => addGui(k) }))); };
   $("addGameScript").onclick = (e) => { e.stopPropagation(); addScript(""); };
+  $("tree").querySelectorAll("[data-eye]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.eye; setHiddenHere([id], !hideHere.has(id)); }));
   const on = $("tree").querySelector(".tree-row.on.child");
   if (on) on.scrollIntoView({ block: "nearest" });
 }
@@ -1135,7 +1146,23 @@ guiLayer.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   select(el.dataset.id); thingMenu(el.dataset.id, e.clientX, e.clientY);
 });
-$("btnGuiVis").onclick = () => { const off = guiLayer.classList.toggle("gui-hide"); $("btnGuiVis").classList.toggle("off", off); $("btnGuiVis").title = off ? "Show the GUI" : "Hide the GUI while you build"; };
+// The 🖥️ GUI button: a list with a show / hide button for each GUI thing (on your screen only).
+$("btnGuiVis").onclick = () => {
+  const list = (game && game.gui) || [], r = $("btnGuiVis").getBoundingClientRect();
+  if (!list.length) { showMenu(r.left, r.bottom + 4, [{ icon: "＋", label: "No GUI yet. Add some from ＋ Add", fn: () => {} }]); return; }
+  const all = list.map((g) => g.id), anyOff = list.some((g) => hideHere.has(g.id));
+  const row = (g, pad) => ({ icon: hiddenHere(g) ? "🙈" : "👁️", label: pad + g.name + (hiddenHere(g) ? "  (hidden for me)" : ""), fn: () => { setHiddenHere([g.id], !hideHere.has(g.id)); $("btnGuiVis").click(); } });
+  const items = [];
+  for (const g of list.filter((x) => !x.parent)) { items.push(row(g, "")); for (const k of list.filter((x) => x.parent === g.id)) items.push(row(k, "   ")); }
+  items.push("-", anyOff ? { icon: "👁️", label: "Show all GUI", fn: () => setHiddenHere(all, false) } : { icon: "🙈", label: "Hide all GUI", fn: () => setHiddenHere(all, true) });
+  showMenu(r.left, r.bottom + 4, items);
+};
+function guiVisButton() {
+  const n = ((game && game.gui) || []).filter(hiddenHere).length;
+  $("btnGuiVis").textContent = "🖥️ GUI" + (n ? " (" + n + " hidden)" : "") + " ▾";
+  $("btnGuiVis").classList.toggle("off", n > 0);
+  $("btnGuiVis").title = "Show or hide each GUI on your screen while you build";
+}
 function addGui(kind) {
   if (!game) return;
   game.gui = game.gui || [];
@@ -1480,6 +1507,7 @@ function openGame(g) {
   const sp = game.objects.find((o) => o.b.k === "spawn");
   orbit.target.set(sp ? sp.pos[0] : 0, 0, sp ? sp.pos[2] : 0);
   camera.position.set(orbit.target.x + 28, 22, orbit.target.z + 34);
+  loadHideHere();
   drawTree(); drawProps(); updateButtons();
   $("savedNote").textContent = "Saved ✓";
   try { localStorage.setItem("gv_studio_last", game.id); } catch {}
