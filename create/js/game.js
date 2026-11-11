@@ -12,7 +12,12 @@ import { sanitizeMonster, monsterSize } from "./monster.js";
 import { BACKROOMS_CODE } from "./scripts.js";
 import { sanitizeMotion } from "./motion.js";
 import { sanitizeChase, sanitizeScare } from "./scare.js";
-import { sanitizeAnims } from "./keyanim.js";
+import { sanitizeAnims, okBone } from "./keyanim.js";
+import { NOT_IN_MESH } from "./assets.js";
+export const MAX_PARTS = 300;
+// A mesh's piece keeps only how it looks and where it is (no behavior, scripts or animations of its own).
+const PIECE = ["type", "name", "pos", "rot", "size", "color", "mat", "solid", "visible", "tex", "texS", "texFit", "transp", "file", "text"];
+function piece(p) { const o = {}; for (const k of PIECE) if (p[k] !== undefined) o[k] = p[k]; return o; }
 import { okTex } from "./textures.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space", backrooms: "Backrooms (yellow fog)" };
@@ -93,6 +98,19 @@ export function sanitize(g) {
     if (o.chase) c.chase = sanitizeChase(o.chase); // (👾 it chases players - scare.js)
     if (o.scare) c.scare = sanitizeScare(o.scare); // (😱 jump scare - scare.js)
     if (o.anims) { const an = sanitizeAnims(o.anims); if (an) c.anims = an; } // (🎞️ my animations: keyframes - keyanim.js)
+    if (o.type === "mesh") { // (🧩 a mesh: its pieces + 🦴 bones - world.js buildMesh)
+      c.mb = [0, 1, 2].map((i) => num(o.mb && o.mb[i], 0.1, 4096, c.size[i]));
+      c.parts = sanitize({ objects: (Array.isArray(o.parts) ? o.parts : []).filter((p) => p && !NOT_IN_MESH.has(p.type)).slice(0, MAX_PARTS) }).objects.map(piece);
+      if (!c.parts.length) continue;
+      const bones = [], seen = new Set();
+      for (const b of (Array.isArray(o.bones) ? o.bones : []).slice(0, 40)) {
+        if (!b || !okBone(String(b.id || "")) || seen.has(b.id)) continue;
+        seen.add(b.id);
+        bones.push({ id: b.id, name: String(b.name || "Bone").replace(/[\u0000-\u001f]/g, "").slice(0, 30) || "Bone", parent: seen.has(b.parent) && b.parent !== b.id ? b.parent : "",
+          at: [0, 1, 2].map((i) => num(b.at && b.at[i], -5000, 5000, 0)), parts: [...new Set((Array.isArray(b.parts) ? b.parts : []).filter((i) => Number.isInteger(i) && i >= 0 && i < c.parts.length))] });
+      }
+      if (bones.length) c.bones = bones;
+    }
     if (typeof o.text === "string" || BY_TYPE[o.type].text) c.text = String(o.text == null ? BY_TYPE[o.type].text || "" : o.text).slice(0, 120);
     out.objects.push(c);
   }

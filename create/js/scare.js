@@ -8,7 +8,7 @@
 // flashes and shakes and it screams. The Studio's "▶ Try it" button plays the very same thing.
 import * as THREE from "../vendor/three.module.js";
 import { animateThing, motionOf, withPlay } from "./motion.js";
-import { animAt } from "./keyanim.js";
+import { animAt, applyBones } from "./keyanim.js";
 
 export const CHASE_SOUNDS = { none: "No sound", scream: "😱 Scream", roar: "🦖 Roar", boom: "💥 Boom", glitch: "📺 Glitch" };
 export const SCARE_FX = {
@@ -139,6 +139,7 @@ export function playScare(thing, o, picUrl, done) {
         thing.position.copy(b.pos).add(new THREE.Vector3(pose.p[0], pose.p[1], pose.p[2]).applyQuaternion(b.q));
         thing.quaternion.copy(b.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(pose.r[0] * Math.PI / 180, pose.r[1] * Math.PI / 180, pose.r[2] * Math.PI / 180, "YXZ")));
         thing.scale.set(b.s.x * pose.s[0], b.s.y * pose.s[1], b.s.z * pose.s[2]);
+        if (inner) applyBones(inner, pose); // (🦴 its bones)
         if (inner && mine.walk) animateThing(inner, 1, t, 1, withPlay(motionOf(o), mine.walk));
       } else if (inner) { const mo = motionOf(o) || { g: "run", i: "dance", w: "always", sp: 1 }; animateThing(inner, 1, t, 1, { ...mo, w: "always", sp: 1.6 }); }
       renderer.render(scene, camera);

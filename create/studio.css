@@ -491,3 +491,18 @@ body.playing .chat-box { display: none; }
 .ka-side .field select, .ka-scare select { width: 100%; border-radius: 9px; border: 1px solid var(--edge); background: var(--bg); color: inherit; padding: 7px 8px; }
 .ka-num input { border-radius: 7px; border: 1px solid var(--edge); background: var(--bg); color: inherit; padding: 4px 6px; }
 .ka-num input:disabled { opacity: .45; }
+/* 🦴 bones (animmaker.js) */
+.ka-bones { margin-bottom: 12px; padding: 8px; border-radius: 10px; border: 1px solid var(--edge); background: rgba(255, 255, 255, .02); }
+.ka-bones-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.ka-bones-head .btn.small, .ka-bone .btn.small { height: 26px; padding: 0 8px; font-size: 12px; }
+#kaBoneList { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.ka-bone { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.ka-bone > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ka-bone:hover { background: var(--panel-2); }
+.ka-bone.on { background: rgba(255, 210, 63, .2); outline: 1px solid rgba(255, 210, 63, .6); }
+.ka-bone.edit { outline: 1px dashed #ffd23f; }
+.ka-bedit { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--edge); }
+.ka-bedit .field { margin-bottom: 8px; }
+.ka-bedit input, .ka-bedit select { width: 100%; border-radius: 8px; border: 1px solid var(--edge); background: var(--bg); color: inherit; padding: 6px 8px; }
+.ka-off { opacity: .35; pointer-events: none; }
+.ka-tools button:disabled { opacity: .35; cursor: default; }

@@ -121,12 +121,13 @@ const D2R = Math.PI / 180;
 export function buildObject(o) {
   const a = BY_TYPE[o.type];
   const inner = a.build(o);
-  if (o.mat === "grass") { // the grid texture repeats with the part's size
+  if (o.type === "mesh") buildMesh(inner, o);
+  if (o.mat === "grass" && o.type !== "mesh") { // the grid texture repeats with the part's size
     const gm = gridMaterialFor(o.color, o.size), plain = material(o.color, "grass");
     inner.traverse((m) => { if (m.isMesh && m.material === plain) m.material = gm; });
   }
   inner.scale.set(o.size[0] / a.base[0], o.size[1] / a.base[1], o.size[2] / a.base[2]);
-  if (o.tex && !inner.userData.model && !inner.userData.picture) applyTexture(inner, o); // (🧱 textures.js)
+  if (o.tex && !inner.userData.model && !inner.userData.picture && o.type !== "mesh") applyTexture(inner, o); // (🧱 textures.js)
   const g = new THREE.Group();
   g.add(inner);
   if (inner.userData.model) addModel(inner, o, seeThrough);
@@ -142,6 +143,35 @@ export function buildObject(o) {
   placeObject(g, o);
   return g;
 }
+// 🧩 A mesh's pieces, each hanging from its 🦴 bone (if it has one): a bone is a joint at `at` that turns the pieces
+// it holds (and the bones under it). inner.userData.bones = Map(bone id -> its joint), for keyanim.js boneList.
+function buildMesh(inner, o) {
+  const mb = o.mb || [1, 1, 1], sub = new THREE.Group();
+  sub.scale.set(1 / mb[0], 1 / mb[1], 1 / mb[2]);
+  inner.add(sub);
+  const bones = Array.isArray(o.bones) ? o.bones : [], byId = new Map(bones.map((b) => [b.id, b])), made = new Map(), owner = new Map();
+  for (const b of bones) for (const i of b.parts || []) if (!owner.has(i)) owner.set(i, b.id);
+  const joint = (id, depth) => {
+    if (!id || !byId.has(id) || depth > 40) return sub;
+    if (made.has(id)) return made.get(id);
+    const b = byId.get(id), up = byId.has(b.parent) ? byId.get(b.parent).at : [0, 0, 0];
+    const n = new THREE.Group(); n.name = b.name; n.userData.boneId = id;
+    n.position.set(b.at[0] - up[0], b.at[1] - up[1], b.at[2] - up[2]);
+    joint(b.parent, depth + 1).add(n); made.set(id, n);
+    return n;
+  };
+  for (const b of bones) joint(b.id, 0);
+  (o.parts || []).forEach((p, i) => {
+    if (!BY_TYPE[p.type] || BY_TYPE[p.type] === BY_TYPE.mesh) return;
+    const pg = buildObject({ ...p, id: "", b: { k: "none" } });
+    delete pg.userData.id; pg.userData.part = i;
+    const bid = owner.get(i), at = bid ? byId.get(bid).at : null;
+    if (at) pg.position.sub(new THREE.Vector3(at[0], at[1], at[2]));
+    joint(bid, 0).add(pg);
+  });
+  inner.userData.bones = made;
+  inner.userData.meshRoot = sub;
+}
 export function placeObject(g, o) {
   g.position.set(o.pos[0], o.pos[1], o.pos[2]);
   g.rotation.set(o.rot[0] * D2R, o.rot[1] * D2R, o.rot[2] * D2R);
@@ -151,12 +181,13 @@ export function placeObject(g, o) {
 const _q = new THREE.Quaternion(), _qx = new THREE.Quaternion(), _e = new THREE.Euler(), _X = new THREE.Vector3(1, 0, 0);
 export function worldBoxes(o, pos, quat) {
   const a = BY_TYPE[o.type];
-  const list = a.colliders ? a.colliders(o.size) : [{ c: [0, o.size[1] / 2, 0], h: [o.size[0] / 2, o.size[1] / 2, o.size[2] / 2] }];
+  const list = a.colliders ? a.colliders(o.size, o) : [{ c: [0, o.size[1] / 2, 0], h: [o.size[0] / 2, o.size[1] / 2, o.size[2] / 2] }];
   const q = quat || _q.setFromEuler(_e.set(o.rot[0] * D2R, o.rot[1] * D2R, o.rot[2] * D2R));
   const p = pos || new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2]);
   return list.map((b) => {
     const bq = q.clone();
-    if (b.rx) bq.multiply(_qx.setFromAxisAngle(_X, b.rx));
+    if (b.q) bq.multiply(b.q); // (a mesh's turned pieces)
+    else if (b.rx) bq.multiply(_qx.setFromAxisAngle(_X, b.rx));
     return { c: new THREE.Vector3(b.c[0], b.c[1], b.c[2]).applyQuaternion(q).add(p), q: bq, h: new THREE.Vector3(b.h[0], b.h[1], b.h[2]) };
   });
 }

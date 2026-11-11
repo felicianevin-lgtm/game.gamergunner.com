@@ -14,9 +14,9 @@
 import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/OrbitControls.js";
 import { TransformControls } from "../vendor/TransformControls.js";
-import { ASSETS, BY_TYPE, BEHAVIORS, CATEGORIES, MATERIALS, SWITCH_HOW } from "./assets.js";
+import { ASSETS, BY_TYPE, BEHAVIORS, CATEGORIES, MATERIALS, SWITCH_HOW, NOT_IN_MESH } from "./assets.js";
 import { createWorld, buildObject, placeObject, boundsBox } from "./world.js";
-import { SKIES, TEMPLATES, newObj, fillBehavior, sanitize, listGames, loadGame, saveGame, deleteGame, makeGame, r2, uid, MAX_SCRIPTS } from "./game.js";
+import { SKIES, TEMPLATES, newObj, fillBehavior, sanitize, listGames, loadGame, saveGame, deleteGame, makeGame, r2, uid, MAX_SCRIPTS, MAX_PARTS } from "./game.js";
 import { startPlay } from "./play.js";
 import { openPublish, uploadFiles } from "./publish.js";
 import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI, newGui, renderGui } from "./gui.js";
@@ -470,6 +470,7 @@ function drawManyProps(box) {
   const ids = selIds();
   $("propsFor").textContent = ids.length + " things";
   box.innerHTML = '<p class="note">' + ids.length + " things selected. Drag the gizmo to move, turn or size them all together. Shift / Ctrl + click adds or takes away.</p>" +
+    '<button type="button" class="btn add-script" id="mMesh">🧩 Mesh together</button><p class="note">Glues them into ONE thing: it moves, animates and can get 🦴 bones as one.</p>' +
     '<div class="group-title">⧉ Copies right next to them</div><div class="many-dirs">' + Object.entries(DIRS).map(([k, v]) => '<button type="button" class="btn small ghost" data-dir="' + k + '">' + v + "</button>").join("") + "</div>" +
     '<p class="note">Press again to keep going: a whole row, wall or forest. (Ctrl+D does → Right.)</p>' +
     spreadBox() +
@@ -478,7 +479,7 @@ function drawManyProps(box) {
   box.querySelectorAll("[data-dir]").forEach((b) => (b.onclick = () => dupNextTo(b.dataset.dir)));
   box.querySelectorAll("[data-c]").forEach((b) => (b.onclick = () => { pushUndo(); for (const id of selIds()) { const o = obj(id); o.color = b.dataset.c; rebuild(o); } changed(); }));
   wireSpread(box);
-  $("mCopy").onclick = copySel; $("mPaste").onclick = pasteClip; $("mDel").onclick = removeMany;
+  $("mCopy").onclick = copySel; $("mPaste").onclick = pasteClip; $("mDel").onclick = removeMany; $("mMesh").onclick = meshTogether;
   $("mFocus").onclick = () => { const b = boxOf(selIds()), c = b.getCenter(new THREE.Vector3()), r = Math.max(8, b.getSize(new THREE.Vector3()).length()); const d = camera.position.clone().sub(orbit.target).normalize(); orbit.target.copy(c); camera.position.copy(c).addScaledVector(d, r); };
 }
 function spreadBox() {
@@ -488,6 +489,57 @@ function spreadBox() {
 }
 function wireSpread(box) {
   box.querySelector("#spGo").onclick = () => spreadCopies(clamp(box.querySelector("#spN").value, 1, 200, 12), clamp(box.querySelector("#spR").value, 4, 500, 40), box.querySelector("#spK").checked);
+}
+// ---------------------------------------------------------------- 🧩 Mesh together / break apart
+// Glue the selected things into one Mesh (world.js buildMesh): it moves, turns, sizes, animates and gets 🦴 bones as
+// one thing. Their scripts move onto the mesh. Break apart turns it back into separate things.
+const PIECE_KEYS = ["type", "name", "pos", "rot", "size", "color", "mat", "solid", "visible", "tex", "texS", "texFit", "transp", "file", "text"];
+const pieceOf = (o) => { const p = {}; for (const k of PIECE_KEYS) if (o[k] !== undefined) p[k] = JSON.parse(JSON.stringify(o[k])); return p; };
+// A mesh's piece, placed in the world: {pos, rot, size}
+function pieceInWorld(m, p) {
+  const k = [0, 1, 2].map((i) => m.size[i] / m.mb[i]);
+  const mq = new THREE.Quaternion().setFromEuler(new THREE.Euler(m.rot[0] * D2R, m.rot[1] * D2R, m.rot[2] * D2R));
+  const pq = new THREE.Quaternion().setFromEuler(new THREE.Euler(p.rot[0] * D2R, p.rot[1] * D2R, p.rot[2] * D2R));
+  const pos = new THREE.Vector3(p.pos[0] * k[0], p.pos[1] * k[1], p.pos[2] * k[2]).applyQuaternion(mq).add(new THREE.Vector3(...m.pos));
+  const e = new THREE.Euler().setFromQuaternion(mq.multiply(pq));
+  return { pos: [r2(pos.x), r2(pos.y), r2(pos.z)], rot: [e.x, e.y, e.z].map((v) => r2(v / D2R)), size: [0, 1, 2].map((i) => r2(Math.max(0.1, p.size[i] * k[i]))) };
+}
+function meshTogether() {
+  const all = selIds().map(obj).filter(Boolean), list = all.filter((o) => o.type === "mesh" || !NOT_IN_MESH.has(o.type));
+  if (list.length < 2) { alert("Select 2 or more things first (Shift + click, or drag a box around them), then Mesh together."); return; }
+  const skipped = all.length - list.length;
+  const box = new THREE.Box3();
+  for (const o of list) { const g = groups.get(o.id); if (g) box.expandByObject(g); }
+  const c = box.getCenter(new THREE.Vector3()), origin = [r2(c.x), r2(box.min.y), r2(c.z)], size = box.getSize(new THREE.Vector3());
+  const parts = [];
+  for (const o of list) {
+    if (o.type === "mesh") for (const p of o.parts) { const w = pieceInWorld(o, p); parts.push({ ...pieceOf(p), ...w }); }
+    else parts.push(pieceOf(o));
+  }
+  for (const p of parts) p.pos = [0, 1, 2].map((i) => r2(p.pos[i] - origin[i]));
+  if (parts.length > MAX_PARTS) { alert("A mesh can have up to " + MAX_PARTS + " pieces."); return; }
+  pushUndo();
+  const m = newObj("mesh", origin);
+  m.name = uniqueName("Mesh"); m.size = [size.x, size.y, size.z].map((v) => r2(Math.max(0.1, v))); m.mb = m.size.slice(); m.parts = parts;
+  m.solid = list.some((o) => o.solid);
+  const gone = new Set(list.map((o) => o.id));
+  for (const sc of game.scripts || []) if (gone.has(sc.on)) sc.on = m.id; // (their scripts now belong to the mesh)
+  game.objects = game.objects.filter((o) => !gone.has(o.id));
+  transform.detach();
+  for (const id of gone) { const g = groups.get(id); if (g) { world.root.remove(g); disposeGroup(g); groups.delete(id); } }
+  game.objects.push(m); rebuild(m); select(m.id); changed();
+  if (skipped) alert(skipped + " thing" + (skipped === 1 ? "" : "s") + " (imported models / monsters) can't go in a mesh, so they stayed separate.");
+}
+function breakApart(m) {
+  if (!m || m.type !== "mesh") return;
+  pushUndo();
+  const made = m.parts.map((p) => { const o = sanitize({ objects: [{ ...pieceOf(p), ...pieceInWorld(m, p), id: uid() }] }).objects[0]; if (o) o.name = uniqueName(o.name); return o; }).filter(Boolean);
+  for (const sc of game.scripts || []) if (sc.on === m.id && made[0]) sc.on = made[0].id;
+  game.objects = game.objects.filter((o) => o.id !== m.id);
+  transform.detach();
+  const g = groups.get(m.id); if (g) { world.root.remove(g); disposeGroup(g); groups.delete(m.id); }
+  for (const o of made) { game.objects.push(o); rebuild(o); }
+  selectMany(made.map((o) => o.id)); changed();
 }
 function dropScripts(ids) {
   if (scriptOpen() && ids.has((game.scripts.find((x) => x.id === scriptOpen()) || {}).on)) closeScript();
@@ -551,6 +603,7 @@ function manyMenu(x, y) {
     { icon: "⧉", label: "Copies next to them (Ctrl+D)", fn: () => dupNextTo("right") },
     { icon: "🌲", label: "Spread copies around…", fn: () => { const k = prompt("How many copies? (scattered around them, each turned a different way)", "12"); if (k) spreadCopies(clamp(k, 1, 200, 12), Math.max(30, boxOf(selIds()).getSize(new THREE.Vector3()).length() * 1.5), true); } },
     { icon: "📋", label: "Copy " + n + " things (Ctrl+C)", fn: copySel },
+    { icon: "🧩", label: "Mesh together (one thing)", fn: meshTogether },
     "-", { icon: "🗑️", label: "Delete " + n + " things", danger: true, fn: removeMany },
   ]);
 }
@@ -566,6 +619,7 @@ function thingMenu(id, x, y) {
   if (o) items.push({ icon: "🌲", label: "Spread copies around…", fn: () => { select(id); const n = prompt("How many copies? (they're scattered around it, each turned a different way)", "12"); if (n) spreadCopies(clamp(n, 1, 200, 12), Math.max(20, Math.max(o.size[0], o.size[2]) * 6), true); } });
   if (o) items.push({ icon: "🎯", label: "Zoom to it", fn: () => { select(id); focusSelected(); } }, { icon: "🎬", label: "Animation…", fn: () => { select(id); openAnimator(o); } }, { icon: "🎞️", label: "Add animation…", fn: () => { select(id); makeAnim(o, null); } },
     { icon: "🌍", label: "Share to the Toolbox…", fn: () => { select(id); openShare(o); } });
+  if (o && o.type === "mesh") items.push({ icon: "🦴", label: "Bones…", fn: () => { select(id); makeAnim(o, null, null, null, true); } }, { icon: "💥", label: "Break apart", fn: () => breakApart(o) });
   if (g) items.push({ icon: g.visible ? "🙈" : "👁️", label: g.visible ? "Hide at start" : "Show at start", fn: () => { pushUndo(); g.visible = !g.visible; changed(); drawGui(); drawProps(); } });
   items.push("-", { icon: "🗑️", label: "Delete", danger: true, fn: () => { select(id); remove(); } });
   showMenu(x, y, items);
@@ -631,7 +685,7 @@ function texSelect(o) {
     (fid && !pics.some((f) => f.id === fid) ? '<option value="' + cur + '" selected>🖼️ ' + esc((game.files[fid] || {}).name || "Picture") + "</option>" : "") +
     '<option value="+">📥 Your own picture…</option></select>';
 }
-function texturable(o) { const a = BY_TYPE[o.type]; return !!a && o.type !== "model" && o.type !== "picture" && o.type !== "monster"; }
+function texturable(o) { const a = BY_TYPE[o.type]; return !!a && o.type !== "model" && o.type !== "picture" && o.type !== "monster" && o.type !== "mesh"; }
 function setTexture(ids, tex) {
   const list = ids.map(obj).filter((o) => o && texturable(o));
   if (!list.length) { toast("Textures go on blocks, balls, ramps, walls and other parts."); return; }
@@ -928,6 +982,8 @@ function drawProps(numbersOnly) {
     '<p class="note">' + esc((game.files[o.file] || {}).name || "Missing file") + ". Scripts can play animations too: me.play(\"Walk\")</p>";
   if (o.type === "picture") html += '<div class="group-title">Picture</div>' + row("Picture", pictureSelect("pPic", o.file));
   if (o.type === "monster") html += '<div class="group-title">Monster</div><p class="note">' + esc(o.text || "A monster") + '</p>';
+  if (o.type === "mesh") html += '<div class="group-title">🧩 Mesh</div><p class="note">' + o.parts.length + " pieces glued together" + ((o.bones || []).length ? " · " + o.bones.length + " bone" + (o.bones.length === 1 ? "" : "s") : "") + '.</p>' +
+    '<div class="many-dirs"><button type="button" class="btn small ghost" id="pBones">🦴 Bones…</button><button type="button" class="btn small ghost" id="pUnmesh">💥 Break apart</button></div>';
   const mo = motionOf(o);
   html += '<div class="group-title">Animation</div><p class="note">' + (mo ? (GAITS[mo.g].icon + " " + esc(GAITS[mo.g].label) + " · " + IDLES[mo.i].icon + " " + esc(IDLES[mo.i].label) + " · " + esc(WHEN[mo.w])) : "No animation yet. Any thing can walk, dance, wave, hop…") + "</p>" +
     '<button type="button" class="btn add-script" id="pAnimate">🎬 Animation…</button>' +
@@ -956,6 +1012,8 @@ function drawProps(numbersOnly) {
   if ($("pTexFit")) $("pTexFit").onchange = (e) => { pushUndo(); for (const x of (many() ? selIds().map(obj) : [o]).filter((x) => x && x.tex)) { if (e.target.value) x.texFit = "stretch"; else delete x.texFit; rebuild(x); } changed(); drawProps(); };
   $("pAnimate").onclick = () => openAnimator(o);
   wireMyAnims(o);
+  if ($("pBones")) $("pBones").onclick = () => makeAnim(o, null, null, null, true);
+  if ($("pUnmesh")) $("pUnmesh").onclick = () => breakApart(o);
   $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster" || !!o.chase)) delete o.bump; else o.bump = e.target.checked; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
   wireMonsterProps(o);
@@ -970,10 +1028,10 @@ function drawProps(numbersOnly) {
       edit(() => { o[k][i] = r2(v); }, k === "size");
     };
   });
-  const colorSet = (c) => edit(() => { o.color = c; }, true);
+  const colorSet = (c) => edit(() => { o.color = c; if (o.type === "mesh") for (const p of o.parts) p.color = c; }, true); // (🧩 a mesh: paints every piece)
   $("pColor").onchange = (e) => colorSet(e.target.value);
   box.querySelectorAll(".swatches button").forEach((b) => (b.onclick = () => { colorSet(b.dataset.c); $("pColor").value = b.dataset.c; }));
-  $("pMat").onchange = (e) => edit(() => { o.mat = e.target.value; }, true);
+  $("pMat").onchange = (e) => edit(() => { o.mat = e.target.value; if (o.type === "mesh") for (const p of o.parts) p.mat = e.target.value; }, true);
   $("pSolid").onchange = (e) => { pushUndo(); o.solid = e.target.checked; changed(); };
   $("pVisible").onchange = (e) => { pushUndo(); o.visible = e.target.checked; changed(); };
   $("pXray").onchange = (e) => { pushUndo(); if (e.target.checked) o.xray = true; else delete o.xray; rebuild(o); changed(); };
@@ -1267,10 +1325,17 @@ function wireMyAnims(o) {
   }));
 }
 // Open the maker; then = extra changes after it's saved (the jump scare picking it).
-function makeAnim(o, a, preset, then) {
-  if (!a && (o.anims || []).length >= MAX_ANIMS) { alert("A thing can have up to " + MAX_ANIMS + " animations."); return; }
+// bonesOnly: just the 🦴 bones screen (no timeline).
+function makeAnim(o, a, preset, then, bonesOnly) {
+  if (!a && !bonesOnly && (o.anims || []).length >= MAX_ANIMS) { alert("A thing can have up to " + MAX_ANIMS + " animations."); return; }
   openAnimMaker(o, a || null, {
-    openModal, closeModal, preset, buttons: (game.gui || []).filter((g) => g.kind === "button").map((g) => ({ id: g.id, name: g.name })),
+    openModal, closeModal, preset, bonesOnly, buttons: (game.gui || []).filter((g) => g.kind === "button").map((g) => ({ id: g.id, name: g.name })),
+    onBones(bones) { // (a mesh's bones changed)
+      pushUndo();
+      if (bones.length) o.bones = bones; else delete o.bones;
+      const clean = sanitize({ objects: [o] }).objects[0]; if (clean) { if (clean.bones) o.bones = clean.bones; else delete o.bones; }
+      rebuild(o); changed(); drawProps();
+    },
     onSave(n) {
       pushUndo();
       const list = (o.anims || []).filter((x) => x.id !== n.id);

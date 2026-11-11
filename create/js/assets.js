@@ -383,6 +383,11 @@ export const ASSETS = [
     build: (o) => { const g = new THREE.Group(); cyl(g, 0.25, 0.3, 0.4, M("#3a3d42", "metal"), 0, 1.2, 0, 12); ball(g, 0.45, M(o.color, "neon"), 0, 0.7, 0); return g; } },
   { type: "monster", label: "Monster", icon: "👾", cat: "Gameplay", hidden: true, base: [1, 1, 1], color: "#a64bf4", text: "",
     build: (o) => monsterInner(o.mon) }, // (made with ＋ Add > Make a Monster: monster.js)
+  // 🧩 A MESH: pieces glued into one thing (select some, right-click > Mesh together). obj.parts = the pieces (like
+  // objects, measured from the mesh's bottom middle when it was made, at obj.mb = its size then), obj.bones = its 🦴
+  // bones. world.js buildMesh builds it; every solid piece is solid.
+  { type: "mesh", label: "Mesh", icon: "🧩", cat: "Parts", hidden: true, base: [1, 1, 1], color: "#a3a8b0",
+    build: () => new THREE.Group(), colliders: (size, o) => meshColliders(size, o) },
   // (imported things: see files.js. They're added from ＋ Add > Import or the Toolbox's "My imports".)
   { type: "model", label: "Imported Model", icon: "📦", cat: "Imported", hidden: true, base: [1, 1, 1], color: "#ffffff",
     build: () => { const g = new THREE.Group(); g.userData.model = true; return g; } },
@@ -421,6 +426,23 @@ export const ASSETS = [
 ];
 
 export const BY_TYPE = Object.fromEntries(ASSETS.map((a) => [a.type, a]));
+export const NOT_IN_MESH = new Set(["mesh", "monster", "model"]); // (those can't be pieces of a mesh)
+const _D2R = Math.PI / 180, _AX = new THREE.Vector3(1, 0, 0);
+function meshColliders(size, o) {
+  if (!o || !Array.isArray(o.parts)) return [];
+  const mb = o.mb || [1, 1, 1], k = [size[0] / mb[0], size[1] / mb[1], size[2] / mb[2]], out = [];
+  for (const p of o.parts) {
+    const A = BY_TYPE[p.type]; if (!A || p.solid === false || NOT_IN_MESH.has(p.type)) continue;
+    const list = A.colliders ? A.colliders(p.size) : [{ c: [0, p.size[1] / 2, 0], h: [p.size[0] / 2, p.size[1] / 2, p.size[2] / 2] }];
+    const pq = new THREE.Quaternion().setFromEuler(new THREE.Euler(p.rot[0] * _D2R, p.rot[1] * _D2R, p.rot[2] * _D2R));
+    for (const b of list) {
+      const c = new THREE.Vector3(b.c[0], b.c[1], b.c[2]).applyQuaternion(pq).add(new THREE.Vector3(p.pos[0], p.pos[1], p.pos[2]));
+      const q = pq.clone(); if (b.rx) q.multiply(new THREE.Quaternion().setFromAxisAngle(_AX, b.rx));
+      out.push({ c: [c.x * k[0], c.y * k[1], c.z * k[2]], h: [b.h[0] * k[0], b.h[1] * k[1], b.h[2] * k[2]], q });
+    }
+  }
+  return out;
+}
 
 // What each behavior does in Play (see play.js) and the settings it shows in Properties.
 export const BEHAVIORS = {

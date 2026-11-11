@@ -10,6 +10,8 @@
 // The player is your avatar from the home page (avatar.js).
 // 🎞️ MY ANIMATIONS (obj.anims, keyanim.js) start by themselves: when the game starts, after some seconds, when a GUI
 // button / the thing is clicked, touched or a player comes close, or from a script's me.play("name"). One at a time per thing.
+// "While it moves" / "While it stands still" ones loop by themselves (a walk you animated yourself, with 🦴 bones) and
+// take over from the 🎬 walk styles; any other animation that starts plays first, then they come back.
 import * as THREE from "../vendor/three.module.js";
 import { buildObject, worldBoxes, boundsBox } from "./world.js";
 import { renderGui } from "./gui.js";
@@ -19,7 +21,7 @@ import { buildAvatar, animateAvatar, loadAvatar } from "./avatar.js";
 import { fileUrl, updateMixers, clearMixers } from "./files.js";
 import { animateThing, motionOf, withPlay } from "./motion.js";
 import { playScare, scareSound, stopScare } from "./scare.js";
-import { animAt, shiftPose } from "./keyanim.js";
+import { animAt, shiftPose, applyBones, animBones, sampleAnim, LOOPS } from "./keyanim.js";
 import { sanitize, newObj } from "./game.js";
 import { startOthers } from "./others.js";
 
@@ -51,7 +53,7 @@ export function startPlay(world, game, opts) {
     e.walker = typeof o.bump === "boolean" ? o.bump : o.type === "monster" || !!o.chase; // (walls stop it when it moves)
     if (e.walker) { e.vy = 0; e.home = g.position.clone(); }
     e.clip = !!(o.anim && o.type === "model"); // (an imported model playing its own animation)
-    if (o.anims) { e.kas = o.anims.filter((a) => a.when !== "scare"); e.kLast = { p: new THREE.Vector3(), q: new THREE.Quaternion() }; e.kBase = { s: g.scale.clone() }; }
+    if (o.anims) { e.kas = o.anims.filter((a) => a.when !== "scare"); e.kaOwnWalk = e.kas.some((a) => LOOPS[a.when]); e.kLast = { p: new THREE.Vector3(), q: new THREE.Quaternion() }; e.kBase = { s: g.scale.clone() }; }
     return e;
   }
   const ents = game.objects.map(makeEnt);
@@ -413,6 +415,7 @@ export function startPlay(world, game, opts) {
     // Animations (motion.js): monsters and anything with Animation settings move their legs and arms. "Walk when it moves"
     // watches how fast the thing really goes (a script moving it, a moving platform...) and walks faster when it's faster.
     for (const e of ents) {
+      if (e.kas && (e.kaOwnWalk || (e.ka && e.ka.bones))) continue; // (its own animations move it: keyanim.js)
       const mo = withPlay(motionOf(e.o), e.play), inner = e.g.userData.inner;
       if (!mo || !inner) continue;
       if (!e.lastP) e.lastP = e.g.position.clone();
@@ -757,7 +760,7 @@ export function startPlay(world, game, opts) {
   }
   // 🎞️ My animations (keyanim.js): each thing plays one at a time, on top of wherever it is (so chasers, movers and
   // things scripts move can animate too).
-  function kaStart(e, a) { if (e.ka) kaStop(e); e.ka = { a, t0: time }; e.moving = true; if (a.walk) { e.kaWalkWas = e.play; e.play = a.walk; } }
+  function kaStart(e, a) { if (e.ka) kaStop(e); e.ka = { a, t0: time, bones: animBones(a).length > 0 }; e.moving = true; if (a.walk) { e.kaWalkWas = e.play; e.play = a.walk; } }
   function kaFire(e, when) { if (e.kas && !e.off) for (const a of e.kas) if (a.when === when) kaStart(e, a); }
   function kaStop(e) { if (e.ka && e.ka.a.walk) e.play = e.kaWalkWas || null; e.ka = null; }
   function stepKeyAnims(dt) {
@@ -773,10 +776,21 @@ export function startPlay(world, game, opts) {
         }
       }
       e.kaStarted = true;
+      if (e.kaOwnWalk) { // walking / chasing or standing still: how fast it really goes (not counting the animation's own moves)
+        const bx = e.g.position.x - e.kLast.p.x, bz = e.g.position.z - e.kLast.p.z;
+        if (e.kaPrev) { const v = Math.hypot(bx - e.kaPrev.x, bz - e.kaPrev.z) / Math.max(dt, 1e-3); e.kaSpeed = (e.kaSpeed || 0) + (v - (e.kaSpeed || 0)) * Math.min(1, dt * 8); }
+        e.kaPrev = { x: bx, z: bz };
+        if (!e.ka || LOOPS[e.ka.a.when]) {
+          const want = e.kas.find((a) => a.when === ((e.kaSpeed || 0) > 0.6 ? "moving" : "idle")) || null;
+          if (want && (!e.ka || e.ka.a !== want)) kaStart(e, want);
+          else if (!want && e.ka) { const rest = sampleAnim(e.ka.a, 0); shiftPose(e.g, e.kBase, rest, e.kLast); applyBones(e.g.userData.inner, rest); kaStop(e); } // (back to how it stands)
+        }
+      }
       if (!e.ka) continue;
       const { pose, done } = animAt(e.ka.a, time - e.ka.t0);
       if (e.k === "spin" || e.k === "move" || e.k === "door") { e.kLast.p.set(0, 0, 0); e.kLast.q.identity(); } // (those were just placed from scratch)
       shiftPose(e.g, e.kBase, pose, e.kLast);
+      applyBones(e.g.userData.inner, pose); // (🦴 its bones)
       refreshBoxes(e);
       if (done) kaStop(e);
     }
