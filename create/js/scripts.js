@@ -20,7 +20,7 @@ export const HELP = [
     ["me.turn(90)", "Turn (degrees)"], ["me.spin(90)", "Keep spinning (degrees every second)"], ["me.lookAt(player)", "Face something"],
     ["me.color = \"red\"", "Change the color (names like \"red\" or codes like \"#ff0000\")"], ["me.text = \"Hi!\"", "Change the words (signs, GUI)"],
     ["me.solid = false", "Let players walk through it"], ["me.transparency = 50", "See-through: 0 = solid, 100 = invisible (it's still there!)"], ["me.distanceTo(player)", "How far away something is"],
-    ["me.play(\"dance\")", "Play an animation. Monsters: walk, idle, dance, fly, stop. Imported models: their own animation names"], ["me.clone()", "Make a copy (it starts in the same spot)"], ["me.destroy()", "Delete it from the game"],
+    ["me.play(\"dance\")", "Play an animation: one you made in 🎞️ My animations (its name), walk / run / dance / wave / fly / stop, or an imported model's own animation"], ["me.clone()", "Make a copy (it starts in the same spot)"], ["me.destroy()", "Delete it from the game"],
     ["me.x", "Where it is: me.x, me.y, me.z (GUI: % across and down the screen)"]]],
   ["The player", [
     ["player.teleport(0, 10, 0)", "Send the player somewhere (or player.teleport(find(\"Spot\")))"], ["player.respawn()", "Back to the checkpoint"],

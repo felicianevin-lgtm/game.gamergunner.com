@@ -12,6 +12,7 @@ import { sanitizeMonster, monsterSize } from "./monster.js";
 import { BACKROOMS_CODE } from "./scripts.js";
 import { sanitizeMotion } from "./motion.js";
 import { sanitizeChase, sanitizeScare } from "./scare.js";
+import { sanitizeAnims } from "./keyanim.js";
 import { okTex } from "./textures.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space", backrooms: "Backrooms (yellow fog)" };
@@ -91,6 +92,7 @@ export function sanitize(g) {
     if (typeof o.bump === "boolean") c.bump = o.bump; // (walls stop it when it moves; monsters do unless this is false)
     if (o.chase) c.chase = sanitizeChase(o.chase); // (👾 it chases players - scare.js)
     if (o.scare) c.scare = sanitizeScare(o.scare); // (😱 jump scare - scare.js)
+    if (o.anims) { const an = sanitizeAnims(o.anims); if (an) c.anims = an; } // (🎞️ my animations: keyframes - keyanim.js)
     if (typeof o.text === "string" || BY_TYPE[o.type].text) c.text = String(o.text == null ? BY_TYPE[o.type].text || "" : o.text).slice(0, 120);
     out.objects.push(c);
   }

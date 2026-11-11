@@ -451,3 +451,43 @@ button.pchip { cursor: pointer; color: #fff; font: inherit; font-size: 12px; }
 .chat-form input { flex: 1; min-width: 0; height: 30px; border-radius: 8px; border: 1px solid var(--edge); background: var(--bg); color: var(--cream); padding: 0 8px; outline: none; }
 .chat-form .btn { height: 30px; padding: 0 10px; font-size: 12px; }
 body.playing .chat-box { display: none; }
+
+/* ---------- 🎞️ My animations (animmaker.js): a 3D preview with a timeline under it ---------- */
+.modal-box.wide { width: min(1080px, 100%); }
+.ka-main { display: grid; grid-template-columns: 1fr 260px; gap: 16px; }
+.ka-left { min-width: 0; }
+.ka-stage { position: relative; height: min(46vh, 400px); }
+.ka-stage canvas { min-height: 0; height: 100%; touch-action: none; }
+.ka-tools { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; }
+.ka-tools button { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--edge); background: rgba(7, 10, 13, .75); color: inherit; cursor: pointer; font-size: 13px; font-weight: 600; }
+.ka-tools button.on { border-color: var(--green-hi); background: rgba(31, 174, 69, .35); }
+.ka-hint { position: absolute; left: 8px; right: 8px; bottom: 8px; font-size: 12.5px; color: #e8e2ff; text-shadow: 0 1px 3px #000; pointer-events: none; }
+.ka-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 10px 0 6px; }
+.ka-bar .btn { height: 32px; padding: 0 10px; font-size: 13px; }
+.ka-bar b { min-width: 52px; font-variant-numeric: tabular-nums; }
+.ka-gap { flex: 1; }
+.ka-track { position: relative; height: 54px; border-radius: 10px; border: 1px solid var(--edge); background: #0d1220; cursor: pointer; touch-action: none; user-select: none; margin: 0 8px; }
+.ka-ruler span { position: absolute; top: 4px; transform: translateX(-50%); font-size: 10.5px; color: var(--dim); }
+.ka-ruler span::after { content: ""; position: absolute; left: 50%; top: 15px; height: 6px; border-left: 1px solid #2b3550; }
+.ka-key { position: absolute; top: 26px; transform: translateX(-50%); border: 0; background: none; color: #f2c14e; font-size: 18px; line-height: 1; padding: 2px; cursor: grab; }
+.ka-key.first { color: #6f8cff; cursor: pointer; }
+.ka-key.on { color: #fff; text-shadow: 0 0 8px #f2c14e; }
+.ka-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #ff4d6d; pointer-events: none; }
+.ka-head::before { content: ""; position: absolute; top: -1px; left: -5px; border: 6px solid transparent; border-top-color: #ff4d6d; }
+.ka-nums { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+.ka-num { display: flex; align-items: center; gap: 4px; font-size: 12.5px; }
+.ka-num span { width: 52px; color: var(--dim); }
+.ka-num input { width: 58px; }
+.ka-side .field { margin-bottom: 10px; }
+.ka-side code { font-size: 12px; }
+.ka-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.ka-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px; background: var(--panel-2); }
+.ka-row > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ka-row small { color: var(--dim); font-size: 11.5px; }
+.ka-row .btn.small { height: 26px; padding: 0 6px; }
+.ka-scare { display: flex; gap: 6px; margin: 8px 0; }
+.ka-scare select { flex: 1; }
+@media (max-width: 800px) { .ka-main { grid-template-columns: 1fr; } }
+.ka-side .field select, .ka-scare select { width: 100%; border-radius: 9px; border: 1px solid var(--edge); background: var(--bg); color: inherit; padding: 7px 8px; }
+.ka-num input { border-radius: 7px; border: 1px solid var(--edge); background: var(--bg); color: inherit; padding: 4px 6px; }
+.ka-num input:disabled { opacity: .45; }

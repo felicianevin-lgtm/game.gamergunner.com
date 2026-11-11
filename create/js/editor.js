@@ -26,6 +26,8 @@ import { api, account, RELAY } from "./net.js";
 import { connectStudio, shareStudio, inviteTo, removeFrom, stopSharing, myStudios, SHARE_ERR as STUDIO_ERR } from "./collab.js";
 import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount, LIMBS } from "./motion.js";
 import { TEXTURES, texturePicture } from "./textures.js";
+import { sanitizeAnims, animSummary, MAX_ANIMS } from "./keyanim.js";
+import { openAnimMaker } from "./animmaker.js";
 import { CHASE_SOUNDS, SCARE_FX, FLASHES, SCARE_SOUNDS, SCARE_WHEN, DEFAULT_CHASE, DEFAULT_SCARE, sanitizeChase, sanitizeScare, playScare } from "./scare.js";
 
 const $ = (id) => document.getElementById(id);
@@ -562,7 +564,7 @@ function thingMenu(id, x, y) {
     { icon: "📋", label: "Copy (Ctrl+C)", fn: () => { select(id); copySel(); } },
   ];
   if (o) items.push({ icon: "🌲", label: "Spread copies around…", fn: () => { select(id); const n = prompt("How many copies? (they're scattered around it, each turned a different way)", "12"); if (n) spreadCopies(clamp(n, 1, 200, 12), Math.max(20, Math.max(o.size[0], o.size[2]) * 6), true); } });
-  if (o) items.push({ icon: "🎯", label: "Zoom to it", fn: () => { select(id); focusSelected(); } }, { icon: "🎬", label: "Animation…", fn: () => { select(id); openAnimator(o); } },
+  if (o) items.push({ icon: "🎯", label: "Zoom to it", fn: () => { select(id); focusSelected(); } }, { icon: "🎬", label: "Animation…", fn: () => { select(id); openAnimator(o); } }, { icon: "🎞️", label: "Add animation…", fn: () => { select(id); makeAnim(o, null); } },
     { icon: "🌍", label: "Share to the Toolbox…", fn: () => { select(id); openShare(o); } });
   if (g) items.push({ icon: g.visible ? "🙈" : "👁️", label: g.visible ? "Hide at start" : "Show at start", fn: () => { pushUndo(); g.visible = !g.visible; changed(); drawGui(); drawProps(); } });
   items.push("-", { icon: "🗑️", label: "Delete", danger: true, fn: () => { select(id); remove(); } });
@@ -930,6 +932,7 @@ function drawProps(numbersOnly) {
   html += '<div class="group-title">Animation</div><p class="note">' + (mo ? (GAITS[mo.g].icon + " " + esc(GAITS[mo.g].label) + " · " + IDLES[mo.i].icon + " " + esc(IDLES[mo.i].label) + " · " + esc(WHEN[mo.w])) : "No animation yet. Any thing can walk, dance, wave, hop…") + "</p>" +
     '<button type="button" class="btn add-script" id="pAnimate">🎬 Animation…</button>' +
     row("Walls stop it", '<input type="checkbox" id="pBump"' + (bumps(o) ? " checked" : "") + ' title="When a script moves it, it bumps into walls and stands on floors instead of going through">');
+  html += myAnimsProps(o);
   html += monsterProps(o);
   html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>" + scriptBox(o.id);
   box.innerHTML = html;
@@ -952,6 +955,7 @@ function drawProps(numbersOnly) {
   if ($("pTexS")) $("pTexS").onchange = (e) => { pushUndo(); o.texS = clamp(e.target.value, 0.25, 64, 4); rebuild(o); changed(); };
   if ($("pTexFit")) $("pTexFit").onchange = (e) => { pushUndo(); for (const x of (many() ? selIds().map(obj) : [o]).filter((x) => x && x.tex)) { if (e.target.value) x.texFit = "stretch"; else delete x.texFit; rebuild(x); } changed(); drawProps(); };
   $("pAnimate").onclick = () => openAnimator(o);
+  wireMyAnims(o);
   $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster" || !!o.chase)) delete o.bump; else o.bump = e.target.checked; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
   wireMonsterProps(o);
@@ -1195,6 +1199,7 @@ function monsterProps(o) {
     '<div class="lbl">When</div>' + chips("s.when", SCARE_WHEN, s.when) +
     (s.when === "near" ? slide("s.r", "How close", 2, 60, 1, s.r, (v) => v + " studs") : "") +
     '<div class="lbl">Animation</div>' + chips("s.fx", SCARE_FX, s.fx) +
+    (s.fx === "mine" ? scareAnimPick(o, s) : "") +
     '<div class="lbl">Flash</div>' + chips("s.flash", FLASHES, s.flash) +
     '<div class="lbl">Sound</div>' + chips("s.snd", SCARE_SOUNDS, s.snd) +
     slide("s.secs", "How long", 0.5, 4, 0.1, s.secs, (v) => v + " s") +
@@ -1220,7 +1225,17 @@ function wireMonsterProps(o) {
     inp.oninput = () => { const v = Number(inp.value); target(w)[k] = v; show.textContent = { "c.sp": v + (v < 6 ? " (slow)" : v < 15 ? "" : " (fast!)"), "c.dmg": v ? v + " of 100 health" : "none (it just chases)", "c.r": v ? v + " studs" : o.chase && o.chase.see ? "90 studs" : "always chasing", "s.r": v + " studs", "s.secs": v + " s" }[inp.dataset.sl]; };
     inp.onchange = () => save(() => {});
   });
-  box.querySelectorAll("[data-chip]").forEach((b) => (b.onclick = () => { const [w, k] = b.dataset.chip.split("."); save(() => { target(w)[k] = b.dataset.v; }); drawProps(); if (w === "s" && k === "fx") tryScare(o); }));
+  box.querySelectorAll("[data-chip]").forEach((b) => (b.onclick = () => {
+    const [w, k] = b.dataset.chip.split(".");
+    if (w === "s" && k === "fx" && b.dataset.v === "mine" && !(o.anims || []).some((a) => a.when === "scare")) { // (no jump scare animation yet: make one)
+      makeAnim(o, null, "scare", (a) => { o.scare.fx = "mine"; o.scare.anim = a.id; o.scare = sanitizeScare(o.scare); });
+      return;
+    }
+    save(() => { target(w)[k] = b.dataset.v; if (w === "s" && k === "fx" && b.dataset.v === "mine" && !(o.anims || []).some((a) => a.id === o.scare.anim)) o.scare.anim = o.anims.find((a) => a.when === "scare").id; });
+    drawProps(); if (w === "s" && k === "fx") tryScare(o);
+  }));
+  if ($("pScareAnim")) $("pScareAnim").onchange = (e) => { save(() => { o.scare.anim = e.target.value; }); tryScare(o); };
+  if ($("pScareAnimEdit")) $("pScareAnimEdit").onclick = () => { const a = (o.anims || []).find((x) => x.id === o.scare.anim); makeAnim(o, a || null, "scare", (n) => { o.scare.anim = n.id; }); };
   box.querySelectorAll("[data-tick]").forEach((inp) => (inp.onchange = () => { const [w, k] = inp.dataset.tick.split("."); save(() => { target(w)[k] = inp.checked ? 1 : 0; }); }));
   if ($("pScarePic")) wirePicture($("pScarePic"), o.scare.pic, (id) => { save(() => { o.scare.pic = id; }); drawProps(); });
   if ($("pScareTry")) $("pScareTry").onclick = () => tryScare(o);
@@ -1230,6 +1245,47 @@ function tryScare(o) {
   let thing = null;
   try { if (!o.scare.pic) thing = buildObject(o); } catch {}
   playScare(thing, o, o.scare.pic ? fileUrl(o.scare.pic) : null);
+}
+// ---------------------------------------------------------------- 🎞️ My animations (keyframes: keyanim.js, the maker: animmaker.js)
+function myAnimsProps(o) {
+  const list = o.anims || [];
+  return '<div class="group-title">🎞️ My animations</div>' +
+    (list.length ? '<div class="ka-list">' + list.map((a) => '<div class="ka-row"><span><b>' + esc(a.name) + "</b><small>" + esc(animSummary(a, game.gui)) + "</small></span>" +
+      '<button type="button" class="btn small" data-ka-edit="' + a.id + '" title="Change it">✏️</button><button type="button" class="btn small" data-ka-del="' + a.id + '" title="Delete it">🗑</button></div>').join("") + "</div>"
+      : '<p class="note">Make it move however you want: pose it at different moments and it glides between them. Play it when the game starts, after some seconds, when a button is clicked, when it’s touched…</p>') +
+    (list.length < MAX_ANIMS ? '<button type="button" class="btn add-script" id="pAddAnim">＋ Add animation</button>' : "");
+}
+function wireMyAnims(o) {
+  if ($("pAddAnim")) $("pAddAnim").onclick = () => makeAnim(o, null);
+  $("props").querySelectorAll("[data-ka-edit]").forEach((b) => (b.onclick = () => makeAnim(o, (o.anims || []).find((a) => a.id === b.dataset.kaEdit))));
+  $("props").querySelectorAll("[data-ka-del]").forEach((b) => (b.onclick = () => {
+    const a = (o.anims || []).find((x) => x.id === b.dataset.kaDel);
+    if (!a || !confirm('Delete the animation "' + a.name + '"?')) return;
+    pushUndo(); o.anims = o.anims.filter((x) => x !== a); if (!o.anims.length) delete o.anims;
+    if (o.scare && o.scare.fx === "mine" && o.scare.anim === a.id) o.scare.fx = "lunge";
+    changed(); drawProps();
+  }));
+}
+// Open the maker; then = extra changes after it's saved (the jump scare picking it).
+function makeAnim(o, a, preset, then) {
+  if (!a && (o.anims || []).length >= MAX_ANIMS) { alert("A thing can have up to " + MAX_ANIMS + " animations."); return; }
+  openAnimMaker(o, a || null, {
+    openModal, closeModal, preset, buttons: (game.gui || []).filter((g) => g.kind === "button").map((g) => ({ id: g.id, name: g.name })),
+    onSave(n) {
+      pushUndo();
+      const list = (o.anims || []).filter((x) => x.id !== n.id);
+      const i = a ? (o.anims || []).findIndex((x) => x.id === a.id) : -1;
+      list.splice(i >= 0 ? i : list.length, 0, n);
+      o.anims = sanitizeAnims(list) || undefined; if (!o.anims) delete o.anims;
+      if (then) then(n);
+      changed(); drawProps();
+    },
+  });
+}
+function scareAnimPick(o, s) {
+  const list = (o.anims || []);
+  return '<div class="ka-scare"><select id="pScareAnim">' + list.map((a) => '<option value="' + a.id + '"' + (a.id === s.anim ? " selected" : "") + ">🎞️ " + esc(a.name) + "</option>").join("") + "</select>" +
+    '<button type="button" class="btn small" id="pScareAnimEdit">✏️ Edit</button></div>';
 }
 function bumps(o) { return typeof o.bump === "boolean" ? o.bump : o.type === "monster" || !!o.chase; }
 function openAnimator(o) {
@@ -1323,7 +1379,7 @@ function clamp(v, lo, hi, d) { v = Number(v); return Number.isFinite(v) ? Math.m
 
 // ---------------------------------------------------------------- My games
 function openModal(html) { $("modalBox").innerHTML = html; $("modal").classList.remove("hidden"); }
-function closeModal() { $("modal").classList.add("hidden"); $("modalBox").innerHTML = ""; }
+function closeModal() { $("modal").classList.add("hidden"); $("modalBox").innerHTML = ""; $("modalBox").classList.remove("wide"); }
 $("modal").addEventListener("click", (e) => { if (e.target === $("modal") && game) closeModal(); });
 function openGames(first) {
   saveNow();

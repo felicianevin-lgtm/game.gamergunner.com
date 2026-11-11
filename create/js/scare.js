@@ -2,11 +2,13 @@
 //   obj.chase = {sp: speed, dmg: damage per hit, r: starts chasing when you're this close (0 = always), face: 1 = turns
 //                to face you, snd: sound when it hits, see: 1 = only chases when it can see you (r = how far it sees)}                                       (play.js chasers)
 //   obj.scare = {when: "near" / "touch", r: how close, fx: SCARE_FX, flash: FLASHES, snd: SCARE_SOUNDS, secs,
-//                again: 1 = every time (else once), hide: 1 = invisible until it jumps out, pic: a picture file instead}
+//                again: 1 = every time (else once), hide: 1 = invisible until it jumps out, pic: a picture file instead,
+//                anim: with fx "mine", which of the thing's own animations (obj.anims, keyanim.js) it does}
 // playScare() shows the scare on top of everything: the thing itself (or a picture) flies at your face, the screen
 // flashes and shakes and it screams. The Studio's "▶ Try it" button plays the very same thing.
 import * as THREE from "../vendor/three.module.js";
-import { animateThing, motionOf } from "./motion.js";
+import { animateThing, motionOf, withPlay } from "./motion.js";
+import { animAt } from "./keyanim.js";
 
 export const CHASE_SOUNDS = { none: "No sound", scream: "😱 Scream", roar: "🦖 Roar", boom: "💥 Boom", glitch: "📺 Glitch" };
 export const SCARE_FX = {
@@ -16,6 +18,7 @@ export const SCARE_FX = {
   shake: { label: "Shake", icon: "🫨", note: "Shaking like crazy" },
   spin: { label: "Spin in", icon: "🌀", note: "Spins toward you" },
   glitch: { label: "Glitch", icon: "📺", note: "Flickers in and out" },
+  mine: { label: "My own animation", icon: "✏️", note: "Animate it yourself (🎞️ My animations)" },
 };
 export const FLASHES = { red: "🟥 Red", white: "⬜ White", black: "⬛ Dark", none: "No flash" };
 export const SCARE_SOUNDS = { scream: "😱 Scream", roar: "🦖 Roar", glitch: "📺 Glitch", boom: "💥 Boom", none: "No sound" };
@@ -28,11 +31,11 @@ export function sanitizeChase(c) {
   if (!c || typeof c !== "object") return null;
   return { sp: num(c.sp, 1, 40, 8), dmg: num(c.dmg, 0, 100, 20), r: num(c.r, 0, 300, 0), face: c.face === 0 || c.face === false ? 0 : 1, snd: word(c.snd, CHASE_SOUNDS, "scream"), see: c.see ? 1 : 0 };
 }
-export const DEFAULT_SCARE = { when: "near", r: 8, fx: "lunge", flash: "red", snd: "scream", secs: 1.5, again: 0, hide: 0, pic: "" };
+export const DEFAULT_SCARE = { when: "near", r: 8, fx: "lunge", flash: "red", snd: "scream", secs: 1.5, again: 0, hide: 0, pic: "", anim: "" };
 export function sanitizeScare(s) {
   if (!s || typeof s !== "object") return null;
   return { when: word(s.when, SCARE_WHEN, "near"), r: num(s.r, 2, 60, 8), fx: word(s.fx, SCARE_FX, "lunge"), flash: word(s.flash, FLASHES, "red"), snd: word(s.snd, SCARE_SOUNDS, "scream"),
-    secs: num(s.secs, 0.5, 4, 1.5), again: s.again ? 1 : 0, hide: s.hide ? 1 : 0, pic: /^[a-z0-9]{6,40}$/i.test(s.pic || "") ? s.pic : "" };
+    secs: num(s.secs, 0.5, 4, 1.5), again: s.again ? 1 : 0, hide: s.hide ? 1 : 0, pic: /^[a-z0-9]{6,40}$/i.test(s.pic || "") ? s.pic : "", anim: /^[a-z0-9]{1,16}$/i.test(s.anim || "") ? s.anim : "" };
 }
 
 // ---------------------------------------------------------------- sounds (made right here, nothing to download)
@@ -67,12 +70,15 @@ let playing = null;
 export function playScare(thing, o, picUrl, done) {
   if (playing) { done && done(); return; }
   const s = sanitizeScare(o.scare) || DEFAULT_SCARE;
+  // ✏️ My own animation: the thing does one of its keyframe animations right in front of you (keyanim.js)
+  const mine = s.fx === "mine" ? (o.anims || []).find((a) => a.id === s.anim) || (o.anims || []).find((a) => a.when === "scare") || null : null;
+  if (s.fx === "mine" && !mine) s.fx = "lunge";
   const layer = document.createElement("div");
   layer.className = "scare-layer fx-" + s.fx;
   layer.innerHTML = '<div class="scare-flash flash-' + s.flash + '"></div>';
   document.body.appendChild(layer);
   const flash = layer.firstChild;
-  let renderer = null, scene, camera, holder, inner = null, img = null;
+  let renderer = null, scene, camera, holder, inner = null, img = null, thingBase = null;
   if (picUrl) {
     img = document.createElement("img"); img.className = "scare-pic"; img.alt = ""; img.src = picUrl; layer.insertBefore(img, flash);
   } else if (thing) {
@@ -93,10 +99,11 @@ export function playScare(thing, o, picUrl, done) {
       const k = 1 / Math.max(0.01, size.y, size.x * 0.75);
       thing.position.sub(c); thing.position.y -= size.y * (size.y > size.x * 1.2 ? 0.28 : 0.05); holder.add(thing); holder.scale.setScalar(k); // (tall things: the head and shoulders fill the screen)
       inner = thing.userData.inner || null;
+      thingBase = { pos: thing.position.clone(), q: thing.quaternion.clone(), s: thing.scale.clone() };
     } catch { renderer = null; }
   }
   scareSound(s.snd);
-  const secs = s.secs, t0 = performance.now();
+  const secs = mine ? (mine.end === "loop" ? Math.max(s.secs, mine.len) : mine.len + 0.4) : s.secs, t0 = performance.now();
   playing = { stop: finish };
   function finish() {
     if (!playing) return;
@@ -117,6 +124,7 @@ export function playScare(thing, o, picUrl, done) {
     else if (s.fx === "shake") { z = 1.1; shake = 0.09; }
     else if (s.fx === "spin") { const a = Math.min(1, t / 0.6); z = 0.9 + (1 - a) * 6; spin = (1 - a) * Math.PI * 4; }
     else if (s.fx === "glitch") { z = 1 + (Math.random() < 0.3 ? Math.random() * 1.5 : 0); show = Math.random() < 0.75 ? 1 : 0; shake = 0.06; }
+    else if (mine) { z = 2.2; shake = 0; }
     const sx = (Math.random() - 0.5) * shake, sy = (Math.random() - 0.5) * shake;
     // the "creep" only flashes once it jumps
     flash.style.opacity = s.flash === "none" ? 0 : String(Math.max(0, (s.fx === "creep" ? (t > secs * 0.55 ? 1 - (t - secs * 0.55) / 0.5 : 0) : 1 - t / 0.5)) * 0.85);
@@ -126,7 +134,13 @@ export function playScare(thing, o, picUrl, done) {
       renderer.setSize(innerWidth, innerHeight, false);
       holder.position.set(sx, y + sy, -z); holder.rotation.set(0, spin, Math.sin(t * 30) * shake * 2);
       holder.visible = !!show;
-      if (inner) { const mo = motionOf(o) || { g: "run", i: "dance", w: "always", sp: 1 }; animateThing(inner, 1, t, 1, { ...mo, w: "always", sp: 1.6 }); }
+      if (mine && thingBase) { // (its own moves, measured from its own front: "forward" comes at you)
+        const pose = animAt(mine, t).pose, b = thingBase;
+        thing.position.copy(b.pos).add(new THREE.Vector3(pose.p[0], pose.p[1], pose.p[2]).applyQuaternion(b.q));
+        thing.quaternion.copy(b.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(pose.r[0] * Math.PI / 180, pose.r[1] * Math.PI / 180, pose.r[2] * Math.PI / 180, "YXZ")));
+        thing.scale.set(b.s.x * pose.s[0], b.s.y * pose.s[1], b.s.z * pose.s[2]);
+        if (inner && mine.walk) animateThing(inner, 1, t, 1, withPlay(motionOf(o), mine.walk));
+      } else if (inner) { const mo = motionOf(o) || { g: "run", i: "dance", w: "always", sp: 1 }; animateThing(inner, 1, t, 1, { ...mo, w: "always", sp: 1.6 }); }
       renderer.render(scene, camera);
     } else if (img) {
       const k = 1 / Math.max(0.3, z); img.style.transform = "translate(" + sx * 60 + "px," + (y * 30 + sy * 60) + "%) scale(" + k * 0.9 + ") rotate(" + spin + "rad)"; img.style.opacity = show;

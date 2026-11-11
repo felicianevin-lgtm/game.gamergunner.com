@@ -8,6 +8,8 @@
 // SCRIPTS (scripts.js) run in a locked sandbox: each frame they get the player and what moved, and send back commands
 // (applyScripts() below checks every one). Text they show goes through the chat word filter (filter.js).
 // The player is your avatar from the home page (avatar.js).
+// 🎞️ MY ANIMATIONS (obj.anims, keyanim.js) start by themselves: when the game starts, after some seconds, when a GUI
+// button / the thing is clicked, touched or a player comes close, or from a script's me.play("name"). One at a time per thing.
 import * as THREE from "../vendor/three.module.js";
 import { buildObject, worldBoxes, boundsBox } from "./world.js";
 import { renderGui } from "./gui.js";
@@ -17,6 +19,7 @@ import { buildAvatar, animateAvatar, loadAvatar } from "./avatar.js";
 import { fileUrl, updateMixers, clearMixers } from "./files.js";
 import { animateThing, motionOf, withPlay } from "./motion.js";
 import { playScare, scareSound, stopScare } from "./scare.js";
+import { animAt, shiftPose } from "./keyanim.js";
 import { sanitize, newObj } from "./game.js";
 import { startOthers } from "./others.js";
 
@@ -48,6 +51,7 @@ export function startPlay(world, game, opts) {
     e.walker = typeof o.bump === "boolean" ? o.bump : o.type === "monster" || !!o.chase; // (walls stop it when it moves)
     if (e.walker) { e.vy = 0; e.home = g.position.clone(); }
     e.clip = !!(o.anim && o.type === "model"); // (an imported model playing its own animation)
+    if (o.anims) { e.kas = o.anims.filter((a) => a.when !== "scare"); e.kLast = { p: new THREE.Vector3(), q: new THREE.Quaternion() }; e.kBase = { s: g.scale.clone() }; }
     return e;
   }
   const ents = game.objects.map(makeEnt);
@@ -109,6 +113,7 @@ export function startPlay(world, game, opts) {
       if (h.distance > 80) return;
       if (e.k === "switch" && e.o.b.how !== "touch") flip(e);
       if (wantClick.has(e.o.id) && host) host.event("click", e.o.id);
+      kaFire(e, "click");
       return;
     }
   }
@@ -149,6 +154,7 @@ export function startPlay(world, game, opts) {
     canvas.focus();
     if (g.kind === "frame") { if (ev && ev.target && ev.target.dataset.close) { setOn(g.id, false); beep(400, 0.06, "square"); } else if (host) host.event("click", g.id); return; } // (panels: onClick scripts work too)
     if (host) host.event("click", g.id);
+    if (g.kind === "button") for (const e of ents) if (e.kas && !e.off) for (const a of e.kas) if (a.when === "button" && a.btn === g.id) kaStart(e, a);
     if (g.kind === "button") {
       if (g.action === "message") showMsg(g.message || "Hello!", 2.2);
       else if (g.action === "spawn") respawn("Back to the checkpoint!");
@@ -370,6 +376,7 @@ export function startPlay(world, game, opts) {
       }
       if (e.k !== "car") refreshBoxes(e);
     }
+    stepKeyAnims(dt);
     // ride along on whatever we stand on
     if (groundEnt && (groundEnt.moving || groundEnt.scripted) && !driving) {
       const e = groundEnt;
@@ -418,11 +425,12 @@ export function startPlay(world, game, opts) {
     for (const e of ents) if (e.k === "coin" && !e.done && !e.scripted) e.g.quaternion.copy(e.baseQ).premultiply(q.setFromAxisAngle(Y, time * 2.5));
     // touch Switches + parts whose scripts wait for a touch (they fire once each time you step on)
     for (const e of ents) {
-      if (!(e.k === "switch" && e.o.b.how === "touch") && !wantTouch.has(e.o.id) && !(e.o.scare && e.o.scare.when === "touch")) continue;
+      if (!(e.k === "switch" && e.o.b.how === "touch") && !wantTouch.has(e.o.id) && !(e.o.scare && e.o.scare.when === "touch") && !(e.kas && e.kas.some((a) => a.when === "touch"))) continue;
       const now = !e.off && e.bounds.c.distanceToSquared(pos) < (e.bounds.h.length() + 4) ** 2 && touches(e.bounds, 0.15);
       if (now && !e.touching) { if (e.k === "switch" && e.o.b.how === "touch") flip(e); if (host && wantTouch.has(e.o.id)) host.event("touch", e.o.id); }
       if (!now && e.touching && host && wantTouch.has(e.o.id)) host.event("untouch", e.o.id);
       if (now && !e.touching && e.o.scare && e.o.scare.when === "touch") scareFrom(e);
+      if (now && !e.touching) kaFire(e, "touch");
       e.touching = now;
     }
     if (host) host.tick(dt, { x: r3(pos.x), y: r3(pos.y), z: r3(pos.z), ry: r3(facing / D2R), coins, health: sc.health }, movedList());
@@ -747,6 +755,32 @@ export function startPlay(world, game, opts) {
       if (Math.hypot(e.bounds.c.x - pos.x, e.bounds.c.z - pos.z) - half < s.r && Math.abs(e.bounds.c.y - pos.y) < s.r + e.o.size[1]) scareFrom(e);
     }
   }
+  // 🎞️ My animations (keyanim.js): each thing plays one at a time, on top of wherever it is (so chasers, movers and
+  // things scripts move can animate too).
+  function kaStart(e, a) { if (e.ka) kaStop(e); e.ka = { a, t0: time }; e.moving = true; if (a.walk) { e.kaWalkWas = e.play; e.play = a.walk; } }
+  function kaFire(e, when) { if (e.kas && !e.off) for (const a of e.kas) if (a.when === when) kaStart(e, a); }
+  function kaStop(e) { if (e.ka && e.ka.a.walk) e.play = e.kaWalkWas || null; e.ka = null; }
+  function stepKeyAnims(dt) {
+    for (const e of ents) {
+      if (!e.kas || e === driving) continue;
+      for (const a of e.kas) { // (starting by themselves)
+        if (a.when === "start" && !e.kaStarted) { e.kaStarted = true; kaStart(e, a); }
+        else if (a.when === "time" && time >= a.at && !(e.kaFired || (e.kaFired = new Set())).has(a.id)) { e.kaFired.add(a.id); kaStart(e, a); }
+        else if (a.when === "near" && !e.off) {
+          const near = Math.hypot(e.bounds.c.x - pos.x, e.bounds.c.z - pos.z) - Math.max(e.o.size[0], e.o.size[2]) / 2 < a.r && Math.abs(e.bounds.c.y - pos.y) < a.r + e.o.size[1];
+          if (near && !e.kaNear) kaStart(e, a);
+          e.kaNear = near;
+        }
+      }
+      e.kaStarted = true;
+      if (!e.ka) continue;
+      const { pose, done } = animAt(e.ka.a, time - e.ka.t0);
+      if (e.k === "spin" || e.k === "move" || e.k === "door") { e.kLast.p.set(0, 0, 0); e.kLast.q.identity(); } // (those were just placed from scratch)
+      shiftPose(e.g, e.kBase, pose, e.kLast);
+      refreshBoxes(e);
+      if (done) kaStop(e);
+    }
+  }
   function flies(e) {
     const mo = withPlay(motionOf(e.o), e.play);
     return !!(mo && (mo.w === "idle" ? mo.i === "fly" : mo.g === "fly" || (mo.w === "move" && mo.i === "fly"))) || !!(e.o.mon && (e.o.mon.float || e.o.mon.ghost));
@@ -908,6 +942,9 @@ export function startPlay(world, game, opts) {
       else if (k === "anim" && e) {
         const inner = e.g.userData.inner, m = inner && inner.userData.copy, name = String(b || "").toLowerCase();
         const motionName = name === "auto" || name === "idle" || withPlay(null, name).w !== "move";
+        const mine = e.kas && e.kas.find((x) => x.name.toLowerCase() === name);
+        if (mine) { kaStart(e, mine); continue; } // (🎞️ one of its own animations)
+        if (e.ka && (name === "stop" || name === "none")) kaStop(e);
         if (m && m.userData.play && (m.userData.has(String(b)) || !motionName)) { m.userData.play(String(b) || true); e.clip = true; e.play = null; } // (the model's own animation)
         else if (motionName) { if (m && m.userData.play && e.clip) { m.userData.play(null); e.clip = false; } e.play = name === "auto" || !name ? null : name === "idle" ? "breathe" : name; } // (walk, run, stomp, dance, wave, fly, stop... motion.js withPlay)
       }
