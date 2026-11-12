@@ -1,9 +1,11 @@
 // MUD VALLEY RP: play with friends! A lobby = a room on the GunnerVerse relay (relay/src/index.js, rooms with ?k=mv).
 // You see your friends walking and driving (with name tags) and you can text each other on the phone:
 //  - quick texts (8 presets, the relay's "qc"), "Send my location" (a map pin + waypoint, the relay's "mvpin"),
-//  - typing only if you turn chat on (Settings), and only through the relay's filtered "chat" (80 characters,
+//  - typing (on unless you turn it off in Settings), only through the relay's filtered "chat" (80 characters,
 //    no links or phone numbers, bad words starred out, one message every 1.5 s).
-// Money, robbers, cops, jobs and saves all stay on your own computer: only where you are + what you drive is shared.
+// Money, jobs and saves all stay on your own computer: only where you are, what you drive, your career (cop / robber /
+// civilian + wanted stars: "mvrole") and your blaster shots are shared. Cops and robbers can splat / tase each other
+// ("mvzap" goes only to the player who got hit; their own game decides what happens: crime.js zappedBy).
 import * as THREE from "/create/vendor/three.module.js";
 import { RELAY, account } from "/create/js/net.js";
 import { makePerson } from "./character.js";
@@ -16,6 +18,8 @@ const ERRORS = { notfound: "Nobody is in a lobby with that code.", taken: "That 
 const hex = (c) => c.toString(16).padStart(6, "0");
 const unhex = (s) => parseInt(s || "888888", 16);
 const newCode = () => String(10000000 + Math.floor(Math.random() * 89999999));
+const ROLES = ["civ", "robber", "cop"];
+const tagText = (p) => (p.role === "cop" ? "👮 " : p.role === "robber" ? "🦹 " : "") + p.n + (p.role === "robber" && p.wanted ? " " + "★".repeat(p.wanted) : "");
 
 // a floating name tag
 function tag(text) {
@@ -66,8 +70,11 @@ export class MP {
       case "welcome":
         this.id = m.id; this.name = m.n; this.host = m.h; this.rt = m.rt || ""; this.status = "in"; this.chatRoom = m.cr !== 0;
         if (!m.re) { this.clearPlayers(); for (const p of m.players || []) this.addPlayer(p); this.say("", "You joined lobby " + this.code + " as " + m.n + ".", "sys"); }
-        this.sendLook(); this.lastCar = null; A.changed(); break;
-      case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); break;
+        this.sendLook(); this.sendRole(true); this.lastCar = null; A.changed(); break;
+      case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; break;
+      case "mvrole": { const p = this.players.get(m.id); if (p) { const r = ROLES[m.r] || "civ", w = m.w | 0; if (p.role !== r || p.wanted !== w) { p.role = r; p.wanted = w; this.retag(p); } } break; }
+      case "mvzap": { const p = this.players.get(m.id); if (p) A.zapped(p, m.k); break; }
+      case "shot": { const p = this.players.get(m.id); if (p && Array.isArray(m.p) && Array.isArray(m.x)) A.shot(m.p, m.x, m.w); break; }
       case "leave": { const p = this.players.get(m.id); if (p) { this.say("", p.n + " left.", "sys"); this.removePlayer(m.id); } break; }
       case "away": { const p = this.players.get(m.id); if (p) p.away = true; break; }
       case "back": { const p = this.players.get(m.id); if (p) p.away = false; break; }
@@ -86,7 +93,7 @@ export class MP {
   }
   addPlayer(p) {
     if (this.players.has(p.id)) return;
-    const P = { id: p.id, n: p.n, k: p.k, v: p.v || "", away: !!p.a, model: null, car: null, tag: null };
+    const P = { id: p.id, n: p.n, k: p.k, v: p.v || "", away: !!p.a, model: null, car: null, tag: null, role: "civ", wanted: 0 };
     this.players.set(p.id, P); this.rebuild(P); this.api.changed();
   }
   removePlayer(id) { const p = this.players.get(id); if (!p) return; this.dispose(p); this.players.delete(id); this.api.changed(); }
@@ -103,8 +110,13 @@ export class MP {
       p.car = buildCar({ id: parts[1], paint: unhex(parts[2]), rims: "chrome", tires: "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0 }, { driver: look });
       this.api.scene.add(p.car.root); p.model.root.visible = false;
     }
-    p.tag = tag(p.n); this.api.scene.add(p.tag);
+    p.tag = tag(tagText(p)); this.api.scene.add(p.tag);
   }
+  retag(p) { if (!p.tag) return; this.api.scene.remove(p.tag); p.tag.material.map.dispose(); p.tag = tag(tagText(p)); this.api.scene.add(p.tag); this.api.changed(); }
+  // your career + wanted stars (sent when they change, and every few seconds for people who just joined)
+  sendRole(now) { if (!this.on) return; const r = ROLES.indexOf(S.role), w = S.wanted | 0; if (now || r !== this.lastRole || w !== this.lastWanted) { this.lastRole = r; this.lastWanted = w; this.roleT = 5; this.send({ t: "mvrole", r: Math.max(0, r), w }); } }
+  zap(id, k) { this.send({ t: "mvzap", id, k }); }
+  shot(p, x, w) { if (this.on) this.send({ t: "shot", p: p.map((v) => Math.round(v * 10) / 10), x: x.map((v) => Math.round(v * 10) / 10), w, h: 0 }); }
   sendLook() {
     const L = this.api.look();
     this.send({ t: "look", k: [hex(L.shirt), hex(L.pants), hex(L.skin), "000000", hex(L.hair), L.cap ? hex(L.cap) : "000000", hex(L.shoes)] });
@@ -124,6 +136,7 @@ export class MP {
     if (this.sendT <= 0) { this.sendT = 0.1; this.send({ t: "s", p: [me.x, me.y, me.z], r: me.yaw, w: me.moving ? 1 : 0, c: 0 }); }
     const v = me.car ? "w|" + me.car.id + "|" + hex(me.car.paint) : "";
     if (v !== this.lastCar) { this.lastCar = v; this.send({ t: "car", v }); }
+    this.roleT = (this.roleT || 0) - dt; this.sendRole(this.roleT <= 0);
   }
   draw(dt, time) {
     for (const p of this.players.values()) {
@@ -136,5 +149,6 @@ export class MP {
       p.tag.material.opacity = p.away ? 0.4 : 1;
     }
   }
-  dots() { const out = []; for (const p of this.players.values()) if (p.x !== undefined) out.push({ x: p.x, z: p.z, n: p.n }); return out; }
+  dots() { const out = []; for (const p of this.players.values()) if (p.x !== undefined) out.push({ x: p.x, z: p.z, n: p.n, role: p.role }); return out; }
+  list() { return [...this.players.values()]; }
 }

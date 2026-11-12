@@ -12,9 +12,10 @@ import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
 import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf } from "./physics.js";
 import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable } from "./trailer.js";
-import { makePerson, LOOKS, lookFor, makeRod, makeBlaster } from "./character.js";
+import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
 import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js";
 import { Fishing, rodById } from "./fishing.js";
+import { Heist } from "./heist.js";
 import { Interiors, buildingById, JAIL_SPOT } from "./interiors.js";
 import { MP } from "./mp.js";
 import { FX } from "./fx.js";
@@ -59,7 +60,7 @@ const G = {
   // fast travel to your home (from the phone)
   goHome(h) { const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
 };
-let sky, world, fx, jobs, crime, fishing, interiors, mp;
+let sky, world, fx, jobs, crime, fishing, interiors, mp, heist;
 const cam = { yaw: Math.PI, pitch: 0.3, zoom: 1, x: 0, y: 5, z: 0, tx: 0, ty: 0, tz: 0, snap: true };
 
 // ---------------------------------------------------------------- your vehicles + trailers in the world
@@ -114,7 +115,7 @@ function goInside(bd, spot) {
   if (fishing.busy) fishing.cancel();
   const p = interiors.enter(bd, spot), w = G.me.w;
   w.x = p.x; w.z = p.z; w.y = 0; w.vx = w.vz = w.vy = 0; w.air = false; w.yaw = p.yaw; cam.yaw = p.yaw; cam.pitch = 0.32; cam.snap = true;
-  SFX.door(); H.flash("#000"); G.me.p.hold(null); // (you put your stuff away inside)
+  SFX.door(); H.flash("#000"); if (S.equip !== "blaster") G.me.p.hold(null); // (you put your stuff away inside: only a blaster stays out)
 }
 function goOutside() {
   const p = interiors.leaveRoom(); if (!p) return;
@@ -127,7 +128,8 @@ const MENUS = { dealer: () => UI.dealer(), jobs: () => UI.jobs(), gear: () => UI
 function insideActions(out) {
   const R = interiors.cur, w = G.me.w, l = interiors.local(w), bd = R.bd;
   if (l.z > bd.d / 2 - 1.7 && Math.abs(l.x) < 1.5) { out.E = { text: "Leave " + bd.name, fn: goOutside }; return out; }
-  out.E = crime.robAction({ x: l.x, z: l.z, room: bd.id });
+  if (S.equip === "blaster") out.Q = { text: "Shoot the blaster", fn: useItem };
+  out.E = crime.robAction({ x: l.x, z: l.z, room: bd.id }) || heist.action(l);
   if (out.E) return out;
   for (const sp of R.spots) {
     if (Math.hypot(sp.x - l.x, sp.z - l.z) > sp.r) continue;
@@ -147,35 +149,37 @@ function itemsOwned() {
   const L = ["none"];
   if (S.blaster || S.role === "cop") L.push("blaster");
   if (S.rod) L.push("rod");
-  if (S.role === "cop") L.push("spikes");
+  if (S.role === "cop") L.push("taser", "spikes");
   return L;
 }
-const ITEM_NAME = { none: "Empty hands", blaster: "Blaster", rod: "Fishing rod", spikes: "Spike strips" };
+const ITEM_NAME = { none: "Empty hands", blaster: "Blaster", rod: "Fishing rod", spikes: "Spike strips", taser: "Taser" };
 function applyItem() {
   if (!itemsOwned().includes(S.equip)) S.equip = "none";
   let m = null;
   if (S.equip === "blaster") { const bl = blasterById(S.blaster) || STUN_BLASTER, k = "b" + bl.id; m = itemModels[k] || (itemModels[k] = makeBlaster(bl.tier)); }
   if (S.equip === "rod") { const r = rodById(S.rod), k = "r" + r.id; m = itemModels[k] || (itemModels[k] = makeRod(r.color)); }
+  if (S.equip === "taser") m = itemModels.taser || (itemModels.taser = makeTaser());
   G.me.p.hold(m);
   document.body.classList.toggle("hasItem", S.equip !== "none");
 }
 function cycleItem() {
-  if (inside()) { SFX.nope(); H.toast("Not inside!", "Take out your stuff when you’re outdoors.", "warn", 1800); return; }
   if (fishing.busy) fishing.cancel();
-  const L = itemsOwned();
+  let L = itemsOwned();
+  if (inside()) { L = L.filter((k) => k === "none" || k === "blaster"); if (L.length < 2) { SFX.nope(); H.toast("Not inside!", "Only a blaster can come out indoors.", "warn", 1800); return; } }
   if (L.length < 2) { SFX.nope(); H.toast("Nothing to hold yet", "Buy a blaster at Splat Blasters or a fishing rod at the Bait & Tackle.", "warn"); return; }
   S.equip = L[(L.indexOf(S.equip) + 1) % L.length]; applyItem(); SFX.click();
-  const tip = { none: "", blaster: "Q = shoot (it aims for you!)", rod: "Face the water and press Q to cast", spikes: "Q = drop a spike strip" }[S.equip];
+  const tip = { none: "", blaster: "Q = shoot (it aims for you!)", rod: "Face the water and press Q to cast", spikes: "Q = drop a spike strip", taser: "Q = zap! (short range, it aims for you)" }[S.equip];
   H.toast("🔄 " + ITEM_NAME[S.equip], tip, "", 2200);
 }
 function useItem() {
   const c = mine();
-  if (inside()) return;
+  if (inside()) { if (S.equip === "blaster" && !crime.ko && !crime.jail) { const y = cam.yaw; if (heist.fire(y)) { G.me.w.yaw = y; G.aimT = 0.4; } } return; }
   if (c) { if (S.role === "cop") crime.dropSpikes(); return; }
   if (crime.ko || crime.jail) return;
   if (S.equip === "blaster") { const y = cam.yaw; if (crime.fire(y)) { G.me.w.yaw = y; G.aimT = 0.4; } }
   else if (S.equip === "rod") fishing.press();
   else if (S.equip === "spikes") crime.dropSpikes();
+  else if (S.equip === "taser") { const y = cam.yaw; if (crime.tase(y)) { G.me.w.yaw = y; G.aimT = 0.5; } }
   else if (itemsOwned().length > 1) H.toast("Your hands are empty", "Press X to take out your " + itemsOwned().slice(1).map((k) => ITEM_NAME[k].toLowerCase()).join(" or ") + ".", "", 2600);
 }
 // the police car you get as a cop (it isn't one of your garage rides)
@@ -193,8 +197,19 @@ function removePoliceCar() {
   for (const t of G.TRS.values()) if (t.hitched === c.b) { t.hitched = null; t.s.hitched = null; }
   scene.remove(c.m.root); G.CARS.delete(POLICE_UID); G.siren = false;
 }
+// golden light beams over the career's main places (they glow on the maps too: hud.js HOT)
+function hotBeacons(r) {
+  G.hot = G.hot || {};
+  for (const id of Object.keys(G.hot)) { scene.remove(G.hot[id]); delete G.hot[id]; }
+  for (const id of Object.keys(H.HOT[r] || {})) { const p = PLACES[id]; if (!p) continue; const bc = beacon(0xffd23a); setBeacon(bc, p); bc.children[0].scale.set(0.8, 1, 0.8); G.hot[id] = bc; }
+}
 function roleChanged(r) {
-  G.me.p.setLook(lookFor(r, S.gear.mask)); if (mp) mp.sendLook();
+  G.me.p.setLook(lookFor(r, S.gear.mask)); if (mp) { mp.sendLook(); mp.sendRole(); }
+  hotBeacons(r);
+  if (r === "robber") {
+    const shop = !S.blaster ? "blasters" : !S.gear.drill ? "gear" : null;
+    if (shop) { GAME.setWaypoint({ x: PLACES[shop].x, z: PLACES[shop].z, name: PLACES[shop].name }); setTimeout(() => H.toast("🌟 " + (shop === "blasters" ? "Splat Blasters" : "The Tool Barn") + " is on your map!", shop === "blasters" ? "Get a blaster to hold up the teller. Then get tools at the Tool Barn next door." : "Get the Super Drill for the bank vault.", "good", 5000), 1600); }
+  }
   if (r === "cop") { const c = spawnPoliceCar(); H.toast("👮 Your police car is ready", "It’s parked at the Police Station. Hop in (F) and press G for the siren!", "good", 4200); }
   else removePoliceCar();
   applyItem();
@@ -314,6 +329,7 @@ function actions() {
   else if (S.equip === "blaster") out.Q = { text: "Shoot the blaster", fn: useItem };
   else if (S.equip === "rod") out.Q = fishing.state === "bite" ? { text: "HOOK IT!", fn: useItem } : fishing.state === "reel" ? { text: "Hold to reel in", fn: () => {} } : fishing.state === "wait" ? { text: "Waiting for a bite... (Q = reel in)", fn: useItem } : fishing.busy ? null : { text: fishing.waterAhead() ? "Cast your line" : "Face the water to fish", warn: !fishing.waterAhead(), fn: useItem };
   else if (S.equip === "spikes") out.Q = { text: "Drop a spike strip (" + S.cop.spikes + ")", fn: useItem };
+  else if (S.equip === "taser") out.Q = { text: "Zap with the taser ⚡", fn: useItem };
   // F: get in / out
   if (c) out.F = { text: "Get out", fn: exitCar };
   else {
@@ -563,6 +579,7 @@ function tick(dt) {
   if (G.race) raceTick(dt);
   jobs.update(dt);
   crime.update(dt);
+  if (inside()) heist.update(dt);
   fishing.update(dt, !blocked && IN.isHeld("KeyQ"));
   mp.update(dt);
   if (G.aimT > 0) G.aimT -= dt;
@@ -719,12 +736,12 @@ function draw(dt) {
     else if (G.aimT > 0) p.pose("aim", G.time);
     else p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
   }
-  crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); if (inside()) interiors.draw(G.time, G.me.w);
+  crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); }
   if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
   if (G.tow && G.tow.towCar.smoke) { G.tow.towCar.smoke.children.forEach((s, i) => { s.position.y = 1 + ((G.time * 0.8 + i * 0.4) % 1.6); s.scale.setScalar(0.6 + ((G.time * 0.8 + i * 0.4) % 1.6) * 0.6); }); }
   if (G.preview) { G.preview.root.rotation.y = G.time * 0.5; if (G.preview.wheels) animateCar(G.preview, { speed: 0, steer: 0 }, dt); }
-  for (const bc of [jobBeacon, gpsBeacon]) if (bc.visible) { bc.userData.ring.rotation.z = G.time; bc.children[0].material.opacity = 0.22 + Math.sin(G.time * 4) * 0.08; }
+  for (const bc of [jobBeacon, gpsBeacon, ...Object.values(G.hot || {})]) if (bc.visible) { bc.userData.ring.rotation.z = G.time; bc.children[0].material.opacity = 0.22 + Math.sin(G.time * 4) * 0.08; }
   if (G.race) { G.race.hoop.rotation.z = 0; G.race.hoopRing.material.opacity = 0.6 + Math.sin(G.time * 6) * 0.3; }
   animateWorld(world, G.time, dt, camera.position, !!G.race);
   updateCamera(dt);
@@ -804,19 +821,25 @@ async function boot() {
     goJail() { goInside(buildingById("police"), JAIL_SPOT); G.lockWalk = true; cam.yaw = 0; cam.pitch = 0.25; cam.snap = true; },
     leaveJail(p) { G.lockWalk = false; if (inside()) interiors.leaveRoom(); teleportMe(p.x, p.z, p.yaw); },
     exitCar: () => { if (mine()) exitCar(); }, teleport: (x, z, yaw) => teleportMe(x, z, yaw), lockWalk: (v) => { G.lockWalk = v; }, roleChanged, policeCar, mySiren: () => G.siren && !!mine() && mine().police, shake: (k) => { G.shake = Math.max(G.shake, k); },
+    indoors: () => inside(), roomId: () => (inside() ? interiors.cur.bd.id : null), openVault: () => heist.openVault(),
+    friends: () => (mp && mp.on ? mp.list() : []), zap: (id, k) => mp.zap(id, k), shared: (x, y, z, tx, ty, tz, w) => mp.shot([x, y, z], [tx, ty, tz], w),
   });
   fishing = new Fishing({ scene, fx, toast: H.toast, banner: H.banner, me: () => G.me.w, person: () => G.me.p, rodModel: () => (S.equip === "rod" ? G.me.p.item && G.me.p.item.userData.bend ? G.me.p.item : itemModels["r" + S.rod] : null) });
-  interiors = new Interiors({ scene });
+  interiors = new Interiors({ scene, onEnter: (c) => heist.enter(c), onLeave: () => heist.leave() });
+  heist = new Heist({ scene, crime, interiors, me: () => G.me.w, toast: H.toast, banner: H.banner, bumpMoney: H.bumpMoney,
+    aim() { G.aimT = 0.3; const w = G.me.w; if (w.moving < 0.5) w.yaw = heist.aimYaw(); } });
   G.pins = [];
   mp = new MP({
     scene, toast: H.toast, look: () => lookFor(S.role, S.gear.mask),
     me() { const c = mine(), p = mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint } : null }; },
     pin(who, x, z) { G.pins.push({ x, z, name: who }); if (G.pins.length > 5) G.pins.shift(); GAME.setWaypoint({ x, z, name: who + "’s pin 📍" }); },
     changed() { UI.mpChanged && UI.mpChanged(); $("bPhone").classList.toggle("dot", mp.unread > 0); },
+    zapped: (p, k) => crime.zappedBy(p, k), shot: (p, x, w) => crime.friendShot(p, x, w),
   });
   // little red rings where robbers can rob things outside (only robbers see them)
   G.robMarks = ROB_SPOTS.filter((sp) => !sp.room).map((sp) => { const m = makeMarker(scene, sp.x, sp.z, 1.4, "#ff4a4a", sp.icon); m.icon.scale.set(1.6, 1.6, 1); m.icon.position.y = 2.6; m.spot = sp; m.g.visible = false; return m; });
   if (S.role === "cop") { const c = spawnPoliceCar(); if (S.driving === POLICE_UID) { Object.assign(c.b, { x: S.px, z: S.pz }); settle(c.b); } }
+  hotBeacons(S.role);
   applyItem();
   houseSigns();
   setMuted(!!S.muted); $("bMute").textContent = S.muted ? "🔇" : "🔊";

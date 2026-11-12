@@ -15,7 +15,7 @@ function fresh() {
     role: "civ", gear: {}, blasters: [], blaster: null, rods: [], rod: null, equip: "none", loot: 0, wanted: 0,
     cop: { joined: false, arrests: 0, spikes: 3, car: "cruiser", interceptor: false },
     fish: [], fishLog: {},
-    chatOn: false, // typing to friends in a lobby (off until you turn it on; quick texts always work)
+    chatOn: true, chatV: 2, // typing to friends in a lobby (filtered by the relay; can be turned off in Settings)
   };
 }
 export const S = load();
@@ -30,6 +30,7 @@ function load() {
   for (const k of ["blasters", "rods", "fish"]) if (!Array.isArray(s[k])) s[k] = [];
   s.loot = Math.max(0, Math.floor(+s.loot || 0)); s.wanted = 0; // (the cops forget about you when you leave the game)
   if (s.role === "cop" && !s.cop.joined) s.role = "civ";
+  if (s.chatV !== 2) { s.chatOn = true; s.chatV = 2; } // (Nov 2026: typing is on for everyone by default)
   if (!Array.isArray(s.cars) || !s.cars.length) s.cars = fresh().cars;
   if (!Array.isArray(s.trailers)) s.trailers = [];
   if (!Array.isArray(s.houses) || !s.houses.includes("lot")) s.houses = ["lot", ...(Array.isArray(s.houses) ? s.houses : [])];

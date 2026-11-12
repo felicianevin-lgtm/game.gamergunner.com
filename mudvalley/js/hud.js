@@ -103,11 +103,30 @@ let base = null;
 export function setMapBase(c) { base = c; }
 const icons = () => {
   const out = [];
-  for (const p of Object.values(PLACES)) out.push({ x: p.x, z: p.z, icon: p.icon, color: p.color, name: p.name, big: !!p.r });
+  for (const [id, p] of Object.entries(PLACES)) out.push({ id, x: p.x, z: p.z, icon: p.icon, color: p.color, name: p.name, big: !!p.r });
   for (const h of HOUSES) if (h.id !== "lot") out.push({ x: h.garage.x, z: h.garage.z, icon: "🏠", color: S.houses.includes(h.id) ? "#3ac04a" : "#ff5ad8", name: h.name + (S.houses.includes(h.id) ? " (yours)" : " (for sale)"), big: true });
   return out;
 };
 let ICONS = null;
+// the career's main places glow on the maps: robbers = Splat Blasters (the blaster store), the Tool Barn, the bank + the
+// hideout; cops = the Police Station
+// (label, which side of the icon it goes on: the Copper Creek shops are close together)
+export const HOT = { robber: { blasters: ["BLASTERS", "up"], gear: ["TOOLS", "left"], bank: ["BANK", "down"], hideout: ["HIDEOUT", "up"] }, cop: { police: ["POLICE", "up"] } };
+const hotOf = (ic) => (ic.id && HOT[S.role] && HOT[S.role][ic.id]) || null;
+function glow(g, x, y, r, hot, t, big, labels) {
+  // the pulsing gold ring (labels are saved and drawn after all the icons, so nothing covers them)
+  if (labels === "label") {
+    const label = hot[0], dir = hot[1];
+    g.save(); const fs = big ? 14 : 11; g.font = "bold " + fs + "px sans-serif"; const w = g.measureText(label).width + 8, h = fs + 4;
+    const cx = dir === "left" ? x - r - 6 - w / 2 : dir === "right" ? x + r + 6 + w / 2 : x, cy = dir === "down" ? y + r + 6 + h / 2 : dir === "up" ? y - r - 6 - h / 2 : y;
+    g.fillStyle = "rgba(20,15,10,0.85)"; g.fillRect(cx - w / 2, cy - h / 2, w, h); g.fillStyle = "#ffd23a"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(label, cx, cy + 1); g.restore();
+    return;
+  }
+  const k = 0.5 + 0.5 * Math.sin(t * 5);
+  g.beginPath(); g.arc(x, y, r + 4 + k * 5, 0, 7); g.fillStyle = "rgba(255,210,58," + (0.25 + 0.25 * k) + ")"; g.fill();
+  g.beginPath(); g.arc(x, y, r + 3, 0, 7); g.lineWidth = 3; g.strokeStyle = "#ffd23a"; g.stroke();
+  if (hot && labels) labels.push([x, y, r, hot, big]);
+}
 function dot(g, x, y, r, fill, stroke = "#fff", lw = 2) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = fill; g.fill(); if (stroke) { g.lineWidth = lw; g.strokeStyle = stroke; g.stroke(); } }
 function arrowShape(g, x, y, a, s, fill) { g.save(); g.translate(x, y); g.rotate(a); g.beginPath(); g.moveTo(0, -s); g.lineTo(s * 0.7, s * 0.8); g.lineTo(0, s * 0.4); g.lineTo(-s * 0.7, s * 0.8); g.closePath(); g.fillStyle = fill; g.fill(); g.lineWidth = 2; g.strokeStyle = "#fff"; g.stroke(); g.restore(); }
 export function drawMini(g) {
@@ -123,11 +142,16 @@ export function drawMini(g) {
   const ca = Math.cos(a), sa = Math.sin(a);
   const toS = (wx, wz) => { const dx = (wx - g.px) * k, dz = (wz - g.pz) * k; return [R + dx * ca - dz * sa, R + dx * sa + dz * ca]; };
   x.font = "15px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  const labels = [];
   for (const ic of ICONS) {
     let [sx, sy] = toS(ic.x, ic.z); const dx = sx - R, dy = sy - R, d = Math.hypot(dx, dy);
-    if (d > R - 10) { if (!ic.big) continue; sx = R + (dx / d) * (R - 10); sy = R + (dy / d) * (R - 10); }
-    dot(x, sx, sy, 9, ic.color); x.fillText(ic.icon, sx, sy + 1);
+    const hot = hotOf(ic);
+    if (d > R - 10) { if (!ic.big && !hot) continue; sx = R + (dx / d) * (R - 10); sy = R + (dy / d) * (R - 10); }
+    if (hot) glow(x, sx, sy, 10, d > R - 30 ? null : hot, performance.now() / 1000, false, labels);
+    dot(x, sx, sy, hot ? 11 : 9, ic.color); x.fillText(ic.icon, sx, sy + 1);
   }
+  for (const L of labels) glow(x, L[0], L[1], L[2], L[3], 0, L[4], "label");
+  x.font = "15px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
   for (const v of g.vehicles) { const [sx, sy] = toS(v.x, v.z); if (Math.hypot(sx - R, sy - R) < R - 4) dot(x, sx, sy, 4, "#6ad0ff", "#0a2a4a", 1.5); }
   const blink = Math.floor(performance.now() / 250) % 2;
   for (const v of g.friends || []) { const [sx, sy] = toS(v.x, v.z); if (Math.hypot(sx - R, sy - R) < R - 4) dot(x, sx, sy, 6, "#ffffff", "#ff8a1a", 2.5); }
@@ -148,7 +172,10 @@ export function drawBigMap(g) {
   x.font = "18px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
   for (const v of g.vehicles) { const [sx, sy] = toS(v.x, v.z); dot(x, sx, sy, 5, "#6ad0ff", "#0a2a4a", 2); }
   for (const t of g.trailerDots) { const [sx, sy] = toS(t.x, t.z); x.fillStyle = "#ffd23a"; x.fillRect(sx - 4, sy - 4, 8, 8); }
-  for (const ic of ICONS) { const [sx, sy] = toS(ic.x, ic.z); dot(x, sx, sy, 13, ic.color, "#fff", 2.5); x.fillText(ic.icon, sx, sy + 1); }
+  const labels = [];
+  for (const ic of ICONS) { const [sx, sy] = toS(ic.x, ic.z), hot = hotOf(ic); if (hot) glow(x, sx, sy, 16, hot, performance.now() / 1000, true, labels); dot(x, sx, sy, hot ? 16 : 13, ic.color, "#fff", 2.5); x.fillText(ic.icon, sx, sy + 1); }
+  for (const L of labels) glow(x, L[0], L[1], L[2], L[3], 0, L[4], "label");
+  x.font = "18px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
   for (const v of g.cops || []) { const [sx, sy] = toS(v.x, v.z); dot(x, sx, sy, 6, "#3a6aff", "#ff3a3a", 2); }
   x.font = "bold 13px sans-serif";
   for (const v of g.friends || []) { const [sx, sy] = toS(v.x, v.z); dot(x, sx, sy, 7, "#ffffff", "#ff8a1a", 3); x.fillStyle = "#fff"; x.fillText(v.n, sx, sy - 14); }

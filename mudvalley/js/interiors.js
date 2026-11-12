@@ -60,7 +60,16 @@ export const buildingById = (id) => BUILDINGS.find((b) => b.id === id);
 export const INSIDE_SPOTS = {
   gas: { x: 1.2, z: -0.6 }, cafe: { x: 1.2, z: -1.6 },
   case0: { x: -4, z: 0.9 }, case1: { x: 0, z: 0.9 }, case2: { x: 4, z: 0.9 },
-  vault: { x: 5.5, z: -4.4 },
+  vault: { x: 5.5, z: -3.5 }, // (in front of the vault door: drill it open)
+  gold: { x: 5.5, z: -5.6 }, // (inside the vault, once the door is open)
+};
+// the vault room in the bank (room coordinates): its doorway, where the door's hinge is
+export const VAULT = { x0: 2, z: -4.4, door0: 4, door1: 7, doorH: 3 };
+// people behind a counter you can hold up (heist.js): loot range, how many stars, what they're called
+export const HOLDUP = {
+  bank: { loot: [600, 900], heat: 2, who: "teller" }, jewelry: { loot: [400, 650], heat: 2, who: "jeweler" },
+  gas: { loot: [150, 260], heat: 1, who: "cashier" }, cafe: { loot: [150, 260], heat: 1, who: "barista" }, diner: { loot: [150, 260], heat: 1, who: "waiter" },
+  pizza: { loot: [150, 260], heat: 1, who: "pizza guy" }, toys: { loot: [150, 260], heat: 1, who: "toy maker" }, hardware: { loot: [180, 300], heat: 1, who: "clerk" }, post: { loot: [120, 220], heat: 1, who: "mail clerk" },
 };
 export const JAIL_SPOT = { x: -7.2, z: -4.6 }; // inside the police station: the first jail cell
 
@@ -143,14 +152,24 @@ function furnish(bd, b, C) {
     shopCounter(6);
     for (let i = 0; i < Math.floor((w - 4) / 3.5); i++) { const x = -w / 2 + 2.5 + i * 3.5; bed(b, C, x, d / 2 - 2.6, 0x6ad0ff); b.box(0.06, 2.2, 2.6, x + 1.4, 0, d / 2 - 2.6, 0x9ad8ff); }
   } else if (k === "bank") {
-    // the teller counter on the left, the big vault door on the back wall on the right
+    // the teller counter on the left (with little gates at both ends, so you can't walk behind it)
     counter(b, C, -4, back + 3, 8, 0x5a4a3a, 0xe8e2d4); for (let i = 0; i < 3; i++) b.box(0.06, 1, 2.2, -7 + i * 2.6, 1.1, back + 3, 0xbfe8ff, "glass"); keeper = { x: -4, z: back + 2 }; spots.push({ x: -4, z: back + 4, r: 1.8, act: "chat", say: "Welcome to Copper Creek Bank! Your money is safe with us." });
-    // the vault room wall, with a doorway and the huge round vault door
-    b.box(1.6, ROOM_H, 0.4, 2.8, 0, back + 2.6, 0x9aa0aa); b.box(1.6, ROOM_H, 0.4, 8.2, 0, back + 2.6, 0x9aa0aa); b.box(3.8, ROOM_H - 3, 0.4, 5.5, 3, back + 2.6, 0x9aa0aa);
-    solid(C, 2.8, back + 2.6, 0.8, 0.25); solid(C, 8.2, back + 2.6, 0.8, 0.25);
-    b.add(new THREE.CylinderGeometry(1.4, 1.4, 0.4, 20), 0xc8ccd2, 3.4, 1.5, back + 3.6, Math.PI / 2, 0.9, 0); b.add(new THREE.CylinderGeometry(0.4, 0.4, 0.5, 8), 0xffd23a, 3.2, 1.5, back + 3.8, Math.PI / 2, 0.9, 0);
-    for (let i = 0; i < 6; i++) b.box(0.6, 0.35, 0.4, 3.6 + (i % 3) * 0.7, (Math.floor(i / 3)) * 0.36, back + 0.6, 0xffd23a); // gold bars in the vault
-    b.box(3, 0.4, 1, 5.5, 0, back + 1.2, 0x7a7a8a); solid(C, 5.5, back + 0.9, 2.2, 0.8);
+    for (const gx of [-9, 1]) { b.box(2, 1.05, 0.15, gx, 0, back + 3, 0x5a4a3a); b.box(2.1, 0.08, 0.3, gx, 1.05, back + 3, 0xe8e2d4); solid(C, gx, back + 3, 1, 0.3); }
+    // the vault room on the right: thick steel walls all the way around. Its door (heist.js) stays shut until you
+    // drill it open with the Super Drill.
+    const V = VAULT, steel = 0x9aa0aa, zf = V.z;
+    b.box(V.door0 - V.x0, ROOM_H, 0.5, (V.x0 + V.door0) / 2, 0, zf, steel); solid(C, (V.x0 + V.door0) / 2, zf, (V.door0 - V.x0) / 2, 0.3);
+    b.box(w / 2 - V.door1, ROOM_H, 0.5, (V.door1 + w / 2) / 2, 0, zf, steel); solid(C, (V.door1 + w / 2) / 2, zf, (w / 2 - V.door1) / 2, 0.3);
+    b.box(V.door1 - V.door0, ROOM_H - V.doorH, 0.5, (V.door0 + V.door1) / 2, V.doorH, zf, steel);
+    b.box(0.5, ROOM_H, zf - back, V.x0, 0, (zf + back) / 2, steel); solid(C, V.x0, (zf + back) / 2, 0.3, (zf - back) / 2);
+    b.box(V.door1 - V.door0 + 0.6, 0.3, 0.7, (V.door0 + V.door1) / 2, V.doorH, zf + 0.1, 0x6a6e78); // the door frame
+    for (const x of [V.door0 - 0.15, V.door1 + 0.15]) b.box(0.3, V.doorH, 0.7, x, 0, zf + 0.1, 0x6a6e78);
+    b.box(w / 2 - V.x0, 0.02, zf - back, (V.x0 + w / 2) / 2, 0.005, (zf + back) / 2, 0x7a7a84); // (a steel floor in the vault)
+    // gold bars + money bags on the back wall
+    for (let i = 0; i < 18; i++) b.box(0.6, 0.3, 0.32, 3.2 + (i % 6) * 0.95, Math.floor(i / 6) * 0.32 + 0.4, back + 0.45, 0xffd23a, "glow");
+    b.box(6.2, 0.4, 0.8, 5.6, 0, back + 0.45, 0x5a4a3a); solid(C, 5.6, back + 0.45, 3.2, 0.45);
+    for (const [x, s] of [[3, 1], [8.8, 1.2], [9.4, 0.9]]) { b.ball(0.38 * s, x, 0.38 * s, back + 1.4, 0x8a6a3a); b.ball(0.12 * s, x, 0.8 * s, back + 1.4, 0xc8a060); }
+    b.box(1.2, 0.8, 0.06, 5.5, 3.2, zf + 0.36, 0xffd23a); b.box(1, 0.6, 0.07, 5.5, 3.2, zf + 0.37, 0x2a6a4a); // "VAULT" plate
     rug(b, -4, 2, 6, 4, 0x2a6a4a); plant(b, C, -w / 2 + 1, d / 2 - 1.5); plant(b, C, w / 2 - 1, d / 2 - 1.5);
   } else if (k === "jewelry") {
     counter(b, C, 0, back + 2.2, 6, 0x9a4ad8, 0xf4f4f4); keeper = { x: 0, z: back + 1.2 }; spots.push({ x: 0, z: back + 3.2, r: 1.6, act: "chat", say: "Look but don’t touch! (Robbers need a lockpick set for these cases.)" });
@@ -217,6 +236,8 @@ export class Interiors {
   enter(bd, spot) {
     if (this.cur) this.leaveRoom();
     const C = [], b = room(null, bd.w, bd.d, bd.kind), f = furnish(bd, b, C);
+    // a cash register on the counter wherever there's somebody to hold up
+    if (HOLDUP[bd.id] && f.keeper) { const rx = f.keeper.x - 1.6, rz = f.keeper.z + 1; b.box(0.7, 0.32, 0.5, rx, 1.13, rz, 0x3a3a44); b.box(0.5, 0.26, 0.05, rx, 1.5, rz - 0.18, 0x2a2a2a); b.box(0.44, 0.2, 0.06, rx, 1.53, rz - 0.15, 0x7aff5a, "glow"); f.register = { x: rx, z: rz }; }
     b.at(0, 0, 0);
     const meshes = b.finish(this.api.scene).map((m) => { m.castShadow = m.receiveShadow = false; m.position.x += POCKET.x; m.position.z += POCKET.z; return m; });
     let keeper = null;
@@ -224,7 +245,8 @@ export class Interiors {
       const look = bd.kind === "police" ? LOOKS.cop : LOOKS.npc[(bd.id.length + bd.name.length) % LOOKS.npc.length];
       keeper = makePerson(look); keeper.root.position.set(POCKET.x + f.keeper.x, 0, POCKET.z + f.keeper.z); this.api.scene.add(keeper.root);
     }
-    this.cur = { bd, meshes, C, spots: f.spots, keeper, t: 0 };
+    this.cur = { bd, meshes, C, spots: f.spots, keeper, t: 0, keeperAt: f.keeper, register: f.register || null, extras: [] };
+    if (this.api.onEnter) this.api.onEnter(this.cur);
     const p = spot || { x: 0, z: bd.d / 2 - 1.3 };
     return { x: POCKET.x + p.x, z: POCKET.z + p.z, yaw: spot ? 0 : Math.PI };
   }
@@ -232,6 +254,8 @@ export class Interiors {
     const c = this.cur; if (!c) return null;
     for (const m of c.meshes) { this.api.scene.remove(m); m.geometry.dispose(); }
     if (c.keeper) this.api.scene.remove(c.keeper.root);
+    for (const m of c.extras) this.api.scene.remove(m); // (things heist.js added: the vault door, the register drawer...)
+    if (this.api.onLeave) this.api.onLeave(c);
     this.cur = null;
     const bd = c.bd; return { x: bd.dx + Math.sin(bd.out) * 1.6, z: bd.dz + Math.cos(bd.out) * 1.6, yaw: bd.out };
   }
@@ -258,7 +282,7 @@ export class Interiors {
   // keep the camera inside the walls
   clampCam(px, py, pz) { const c = this.cur, w = c.bd.w, d = c.bd.d; return [clamp(px - POCKET.x, -w / 2 + 0.3, w / 2 - 0.3) + POCKET.x, clamp(py, 0.6, ROOM_H - 0.3), clamp(pz - POCKET.z, -d / 2 + 0.3, d / 2 - 0.3) + POCKET.z]; }
   draw(time, me) {
-    const c = this.cur; if (!c || !c.keeper) return;
+    const c = this.cur; if (!c || !c.keeper || c.busy) return; // (busy: heist.js is moving them)
     const k = c.keeper, d = Math.hypot(me.x - k.root.position.x, me.z - k.root.position.z);
     k.root.rotation.y = Math.atan2(me.x - k.root.position.x, me.z - k.root.position.z);
     k.pose(d < 4 ? "wave" : "stand", time);

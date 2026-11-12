@@ -455,7 +455,10 @@ export function bank(scene, b) {
   b.box(26, 9, 18, 0, 0, 0, 0xe8e2d4).solid(0, 0, 13, 9); b.roof(27, 3, 19, 0, 9, 0, 0x6a7a6a);
   b.box(22, 0.8, 4, 0, 0, 10.4, 0xdedad0); b.box(22, 1, 3, 0, 8, 10.2, 0xe8e2d4); b.roof(22, 2.2, 3, 0, 9, 10.2, 0xe8e2d4);
   for (let x = -9; x <= 9; x += 3) b.cyl(0.55, 7.2, x, 0.8, 11, 0xffffff, 10);
-  b.box(4, 5, 0.25, 0, 0.8, 9.1, 0x4a3a2a); b.cyl(1.6, 0.4, 0, 2.6, 9.0, 0x9aa0aa, 18); // (the round vault door shows through the door!)
+  // big closed double doors (wood + glass, brass handles). The vault is deep inside (interiors.js).
+  b.box(4.4, 5.4, 0.3, 0, 0.8, 9.05, 0x5a3a1a); b.box(0.1, 5.2, 0.34, 0, 0.8, 9.05, 0x2a1a0a);
+  for (const sx of [-1, 1]) { b.box(1.5, 2.2, 0.34, sx * 1.05, 3.1, 9.05, 0xbfe8ff, "glass"); b.box(0.12, 0.7, 0.42, sx * 0.3, 2.5, 9.05, 0xffd23a); b.box(1.6, 0.12, 0.36, sx * 1.05, 2.2, 9.05, 0x2a1a0a); }
+  b.box(5, 0.4, 0.5, 0, 6.2, 9.1, 0xc8b070);
   bsign(scene, b, "COPPER CREEK BANK", 18, 1.8, 0, 8.6, 11.8, { bg: "#2a6a4a", fg: "#ffe9a8" });
   bsign(scene, b, "$", 3, 3, 0, 11.2, 9.7, { bg: null, fg: "#ffd23a", px: 128, stroke: "#3a2a00" });
 }

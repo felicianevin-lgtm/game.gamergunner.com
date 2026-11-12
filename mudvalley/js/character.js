@@ -162,6 +162,18 @@ export function makeBlaster(tier = 0) {
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
+// a cartoon cop taser: chunky yellow + black, with two little prongs (fires a lightning bolt, nothing real!)
+export function makeTaser() {
+  const g = new THREE.Group(), y = mat(0xffd23a), k = mat(0x22222a), glow = new THREE.MeshBasicMaterial({ color: 0x9af0ff });
+  const body = box(0.11, 0.14, 0.3, y); body.position.set(0, 0.07, 0.12); g.add(body);
+  const grip = box(0.08, 0.18, 0.09, k); grip.position.set(0, -0.05, 0); grip.rotation.x = 0.3; g.add(grip);
+  const front = box(0.12, 0.12, 0.06, k); front.position.set(0, 0.07, 0.29); g.add(front);
+  for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.05), glow); p.position.set(s * 0.035, 0.07, 0.33); g.add(p); }
+  const tip = new THREE.Object3D(); tip.position.set(0, 0.07, 0.35); g.add(tip);
+  g.userData = { tip };
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
 // a cartoon fish to hold up (color + size)
 export function makeFish(color = 0x8ab0c0, size = 1) {
   const g = new THREE.Group(), m = new THREE.MeshLambertMaterial({ color });

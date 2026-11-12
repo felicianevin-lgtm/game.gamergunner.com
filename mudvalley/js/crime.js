@@ -4,7 +4,10 @@
 //    get a wanted level (1-5 stars), lose the cops, then stash your loot at the hideout to turn it into money.
 //    Busted = jail (wait it out, or try a jail break).
 //  - Cop career: sign up at the Police Station, get a uniform + a police cruiser, answer radio calls,
-//    stop the getaway car (spike strips, bumping it, stun blaster), cuff the robber (hold E) and book them at the station.
+//    stop the getaway car (spike strips, bumping it, stun blaster, taser), cuff the robber (hold E) and book them at the station.
+//  - In a lobby (mp.js), cop players and robber players can splat / tase each other: a wanted robber who gets zapped
+//    by a cop player is busted; anyone else just sees stars for a moment.
+//  - Robbing inside (hold-ups, splatting the teller, the vault door) is in heist.js.
 import * as THREE from "/create/vendor/three.module.js";
 import { PLACES, ATMS, HOUSES } from "./layout.js";
 import { buildingById, INSIDE_SPOTS } from "./interiors.js";
@@ -42,6 +45,7 @@ export const rankOf = (n = S.cop.arrests) => { let r = RANKS[0]; for (const k of
 export const nextRank = (n = S.cop.arrests) => RANKS.find((k) => k.at > n) || null;
 export const lootCap = () => (S.gear.duffel ? 5000 : 1500);
 export const BOOK_PAY = 400;
+export const TASER = { range: 13, rate: 1.3, stun: 7 };
 
 // important spots
 export const JAIL = { x: 449, z: -348, yaw: Math.PI }; // the jail cell (in the Police Station: you can see in through the bars)
@@ -54,7 +58,8 @@ export const ROB_SPOTS = [
   inside("cafe", "cafe", { name: "the Copper Cafe register", icon: "🧾", tool: null, time: 3.5, loot: [100, 200], heat: 1, kind: "register" }),
   ...ATMS.map((a, i) => ({ id: "atm" + i, name: "the ATM", icon: "🏧", x: a.x + Math.sin(a.yaw) * 1.3, z: a.z + Math.cos(a.yaw) * 1.3, tool: "crowbar", time: 5, loot: [200, 380], heat: 1, kind: "atm" })),
   ...[0, 1, 2].map((i) => inside("case" + i, "jewelry", { name: "a jewelry case", icon: "💎", tool: "lockpick", time: 3, loot: [300, 450], heat: 2, kind: "case" })),
-  inside("vault", "bank", { name: "the bank vault", icon: "🏦", tool: "drill", time: 12, loot: [2000, 3000], heat: 3, kind: "vault" }),
+  inside("vault", "bank", { name: "the bank vault door", icon: "🏦", tool: "drill", time: 12, loot: [0, 0], heat: 1, kind: "vault" }),
+  inside("gold", "bank", { name: "the gold in the vault", icon: "🪙", tool: null, time: 3.5, loot: [2000, 3000], heat: 2, kind: "gold" }),
 ];
 const TOOL_NAME = { crowbar: "a crowbar", lockpick: "a lockpick set", drill: "the Super Drill" };
 
@@ -75,7 +80,11 @@ export class Crime {
   constructor(api) {
     this.api = api; const scene = (this.scene = api.scene);
     this.cops = []; this.shots = []; this.splats = []; this.spikes = []; this.call = null; this.callT = 12; this.t = 0;
-    this.evadeT = 0; this.spawnT = 0; this.bustT = 0; this.jail = null; this.ko = null; this.fireT = 0; this.warnT = 0; this.hidden = false;
+    this.evadeT = 0; this.spawnT = 0; this.bustT = 0; this.jail = null; this.ko = null; this.fireT = 0; this.warnT = 0; this.hidden = false; this.vaultUntil = 0; this.carHits = 0;
+    // the taser's lightning bolt (two zig-zag lines, redrawn every frame while it crackles)
+    // (thick: 11 glowing sticks per line, a yellow glow + a white-hot middle)
+    this.bolts = [[0xffe14a, 0.11, 0.5], [0xffffff, 0.045, 1]].map(([c, w, o]) => { const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: c, transparent: o < 1, opacity: o, depthWrite: o === 1 }), 11); m.userData.w = w; m.frustumCulled = false; m.visible = false; scene.add(m); return m; });
+    this.bolt = null;
     for (const s of ROB_SPOTS) s.readyAt = 0;
     // flying goo balls + paint splats (instanced: one draw call each)
     this.shotMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), 80);
@@ -90,6 +99,15 @@ export class Crime {
     this.beacon = api.makeBeacon(0xff3a3a);
   }
   get wanted() { return S.wanted; }
+  vaultOpen() { return this.t < this.vaultUntil; }
+  lootCap() { return lootCap(); }
+  // a hold-up or an emptied register (heist.js) is done: stars + the robbery counts
+  robberyDone(heat, got, msg) {
+    S.stats.robberies++;
+    if (msg) { SFX.cash(); this.api.toast("+" + money(got) + " loot!", "Loot: " + money(S.loot) + " / " + money(lootCap()), "cash", 3000); }
+    this.setWanted(S.wanted + Math.max(1, heat - (S.gear.mask ? 1 : 0)));
+    save();
+  }
   get role() { return S.role; }
 
   // ------------------------------------------------------------ careers
@@ -116,6 +134,8 @@ export class Crime {
   setWanted(n) {
     n = clamp(Math.round(n), 0, 5);
     const was = S.wanted; S.wanted = n; this.evadeT = 0;
+    if (n > was && this.api.indoors()) this.alarmAt = this.api.roomId(); // (you can't hide in the place you just robbed)
+    if (n === 0) this.alarmAt = null;
     if (n > was) { SFX.alarm(); this.api.toast("★".repeat(n) + " WANTED!", n >= 4 ? "Fast interceptors are coming!" : "The cops are coming! Lose them, then stash your loot at the hideout.", "warn", 3600); }
     if (n === 0 && was > 0) {
       for (const c of this.cops) c.leaving = true;
@@ -172,20 +192,26 @@ export class Crime {
     if (S.role !== "robber" || this.jail || this.ko) return null;
     for (const s of ROB_SPOTS) {
       if ((s.room || null) !== (me.room || null) || Math.hypot(s.x - me.x, s.z - me.z) > (s.room ? 1.8 : 2.6)) continue;
-      if (this.t < s.readyAt) return { text: "Already robbed. Come back later!", warn: true, fn: () => SFX.nope() };
+      if (s.kind === "vault" && this.vaultOpen()) continue; // (it's already open: go grab the gold)
+      if (s.kind === "gold" && !this.vaultOpen()) continue;
+      if (this.t < s.readyAt) return { text: s.kind === "gold" ? "The vault is empty. Come back later!" : "Already robbed. Come back later!", warn: true, fn: () => SFX.nope() };
       if (s.tool && !S.gear[s.tool]) return { text: "Needs " + TOOL_NAME[s.tool] + " (Tool Barn)", warn: true, fn: () => { SFX.nope(); this.api.toast("You need " + TOOL_NAME[s.tool] + "!", "Buy one at the Tool Barn in Copper Creek.", "warn"); } };
       if (S.loot >= lootCap()) return { text: "Your bag is full! Stash it at the hideout", warn: true, fn: () => SFX.nope() };
-      const verb = { register: "Grab the cash", atm: "Pry open the ATM", case: "Pick the lock + grab the gems", vault: "Drill the bank vault" }[s.kind];
+      if (s.kind === "vault") return { id: "rob_vault", text: "Hold E: Drill open the vault door", hold: s.time, spot: s,
+        start: () => { if (S.wanted < 1) { this.setWanted(1); this.api.toast("ALARM!", "The bank alarm is ringing! Drill fast!", "warn"); } },
+        tick: () => { if (Math.random() < 0.3) SFX.drill(); },
+        done: () => { this.vaultUntil = this.t + 240; s.readyAt = this.t + 240; this.api.openVault(); save(); } };
+      const verb = { register: "Grab the cash", atm: "Pry open the ATM", case: "Pick the lock + grab the gems", gold: "Grab the gold bars" }[s.kind];
       return { id: "rob_" + s.id, text: "Hold E: " + verb, hold: s.time, spot: s,
-        start: () => { if (s.kind === "vault" && S.wanted < 2) { this.setWanted(Math.max(S.wanted, 1)); this.api.toast("ALARM!", "The bank alarm is ringing! Drill fast!", "warn"); } },
-        tick: (k) => { if (Math.random() < 0.12) (s.kind === "vault" ? SFX.drill : s.kind === "atm" ? SFX.pry : SFX.reel)(); },
+        start: () => {},
+        tick: (k) => { if (Math.random() < 0.12) (s.kind === "atm" ? SFX.pry : SFX.reel)(); },
         done: () => this.robbed(s) };
     }
     return null;
   }
   robbed(s) {
     const got = Math.min(lootCap() - S.loot, Math.round(rnd(s.loot[0], s.loot[1]) / 5) * 5);
-    S.loot += got; S.stats.robberies++; s.readyAt = this.t + (s.kind === "vault" ? 240 : 150);
+    S.loot += got; S.stats.robberies++; s.readyAt = Math.max(s.readyAt, this.t + (s.kind === "gold" ? 240 : 150));
     (s.kind === "case" ? SFX.smash : SFX.cash)();
     const p = this.api.me(); this.api.fx.confetti(p.x, p.y + 2, p.z, 20);
     this.api.toast("+" + money(got) + " loot!", S.loot >= lootCap() ? "Your bag is full! Get to the hideout." : "Loot: " + money(S.loot) + " / " + money(lootCap()), "cash", 3400);
@@ -200,11 +226,24 @@ export class Crime {
   }
 
   // ------------------------------------------------------------ knocked out / busted / jail
-  knockOut(why) {
+  knockOut(why, soft, by) {
     if (this.ko || this.jail) return;
     this.api.exitCar(); SFX.stun();
-    this.ko = { t: 0, why };
-    this.api.toast("KNOCKED OUT!", why === "cop" ? "Stun goo! You see stars..." : "Bonk! You see stars...", "warn", 2400);
+    this.ko = { t: 0, why, soft: !!soft, by };
+    this.api.toast(by ? "SPLAT! " + by + " got you!" : "KNOCKED OUT!", soft ? "You see stars for a second..." : why === "cop" ? "Stun goo! You see stars..." : "Bonk! You see stars...", "warn", 2400);
+  }
+  // a lobby friend zapped you (mp.js: they're a cop and you're a robber, or the other way around). k: 1 blaster, 2 taser
+  zappedBy(p, k) {
+    if (this.jail || this.ko || this.api.indoors()) return;
+    const ok = (p.role === "cop" && S.role === "robber") || (p.role === "robber" && S.role === "cop"); if (!ok) return;
+    const me = this.api.me(); if (Math.hypot((p.x ?? 1e9) - me.x, (p.z ?? 1e9) - me.z) > 90) return; // (they have to be near you)
+    if (me.inCar && k === 1) { // in a car it takes 3 splats
+      this.carHits = (this.carHits || 0) + 1; this.carHitT = 12; if (me.body) { me.body.vx *= 0.5; me.body.vz *= 0.5; } SFX.splat(); this.api.shake(0.35);
+      if (this.carHits < 3) { this.api.toast("SPLAT!", p.n + " is shooting your ride! (" + (3 - this.carHits) + " more and you’re out)", "warn", 1800); return; }
+    }
+    this.carHits = 0;
+    if (p.role === "cop" && S.wanted > 0) this.knockOut("cop", false, p.n); // (then busted!)
+    else this.knockOut("player", true, p.n);
   }
   bust() {
     if (this.jail) return;
@@ -252,8 +291,32 @@ export class Crime {
     const col = [0xff5ad8, 0x3ad0ff, 0x7aff5a, 0xffd23a][bl.tier];
     this.shots.push({ x: ox, y: oy, z: oz, vx: dx * bl.speed, vy: dy * bl.speed, vz: dz * bl.speed, life: bl.range / bl.speed + 0.15, mine: true, stun: bl.stun, splash: bl.splash || 0, color: col });
     SFX.zap(bl.tier);
+    this.api.shared(ox, oy, oz, ox + dx * bl.range, oy + dy * bl.range, oz + dz * bl.range, bl.tier);
     return true;
   }
+  // a friend's shot (just to see it: their game decides who it hits)
+  friendShot(p, x, w) {
+    if (w === 15) { this.zapBolt({ x: p[0], y: p[1], z: p[2] }, { x: x[0], y: x[1], z: x[2] }); SFX.zap(3); return; }
+    const l = Math.hypot(x[0] - p[0], x[1] - p[1], x[2] - p[2]) || 1, sp = 44;
+    this.shots.push({ x: p[0], y: p[1], z: p[2], vx: (x[0] - p[0]) / l * sp, vy: (x[1] - p[1]) / l * sp, vz: (x[2] - p[2]) / l * sp, life: l / sp, mine: false, vis: true, stun: 0, splash: 0, color: [0xff5ad8, 0x3ad0ff, 0x7aff5a, 0xffd23a][w] || 0xff5ad8 });
+  }
+  // ------------------------------------------------------------ the cop's taser: a crackling lightning bolt (short range)
+  tase(aimYaw) {
+    if (S.role !== "cop") return false;
+    if (this.fireT > 0) return false; this.fireT = TASER.rate;
+    const me = this.api.me();
+    let best = null, bd = TASER.range;
+    for (const t of this.targets()) { const dx = t.x - me.x, dz = t.z - me.z, d = Math.hypot(dx, dz); if (d > bd || d < 0.3 || Math.abs(wrap(Math.atan2(dx, dz) - aimYaw)) > 0.6) continue; best = t; bd = d; }
+    const from = { x: me.x + Math.sin(aimYaw) * 0.6, y: me.y + 1.3, z: me.z + Math.cos(aimYaw) * 0.6 };
+    const to = best ? { x: best.x, y: best.y + 1, z: best.z } : { x: me.x + Math.sin(aimYaw) * 5, y: me.y + 0.9, z: me.z + Math.cos(aimYaw) * 5 };
+    this.zapBolt(from, to, best); SFX.zap(3); setTimeout(() => SFX.zap(2), 90);
+    this.api.shared(from.x, from.y, from.z, to.x, to.y, to.z, 15);
+    if (best) this.hit(best, { stun: TASER.stun, taser: true }); else this.api.toast("Missed!", "Get closer (" + TASER.range + " m) and face them.", "", 1400);
+    return true;
+  }
+  zapBolt(from, to, target) { this.bolt = { from, to, t: 0, target }; }
+  // who can splat whom in a lobby: cops vs robbers only (civilians can't be hit and can't hit anyone)
+  static canHit(a, b) { return (a === "cop" && b === "robber") || (a === "robber" && b === "cop"); }
   npcShoot(from, to, speed = 26) {
     const ox = from.x, oy = from.y + 1.6, oz = from.z, tx = to.x + (to.vx || 0) * 0.35, ty = to.y + 1, tz = to.z + (to.vz || 0) * 0.35;
     const l = Math.hypot(tx - ox, ty - oy, tz - oz) || 1;
@@ -265,6 +328,7 @@ export class Crime {
     const out = [];
     for (const c of this.cops) out.push({ kind: "cop", ref: c, x: c.b.x, y: c.b.y, z: c.b.z, vx: c.b.vx, vz: c.b.vz, r: 2.2 });
     const r = this.call && this.call.robber;
+    for (const p of this.api.friends()) if (Crime.canHit(S.role, p.role) && p.x !== undefined) out.push({ kind: "player", ref: p, x: p.x, y: p.y, z: p.z, vx: 0, vz: 0, r: p.car ? 2.2 : 0.8 });
     if (r) { if (r.state === "fleeing") out.push({ kind: "robcar", ref: r, x: r.car.b.x, y: r.car.b.y, z: r.car.b.z, vx: r.car.b.vx, vz: r.car.b.vz, r: 2.2 }); else if (r.w && r.state !== "cuffed" && r.state !== "carried") out.push({ kind: "robber", ref: r, x: r.w.x, y: r.w.y, z: r.w.z, vx: r.w.vx, vz: r.w.vz, r: 0.9 }); }
     return out;
   }
@@ -273,7 +337,8 @@ export class Crime {
       if (S.role !== "robber") { if (this.warnT <= 0) { this.warnT = 4; this.api.toast("Hey, that’s a cop!", "Only robbers fight the cops. (Splat!)", "warn"); } return; }
       t.ref.stunT = Math.max(t.ref.stunT, s.stun); SFX.stun();
     } else if (t.kind === "robcar") { t.ref.stunT = Math.max(t.ref.stunT || 0, s.stun * 0.7); t.ref.car.b.vx *= 0.4; t.ref.car.b.vz *= 0.4; SFX.stun(); }
-    else if (t.kind === "robber") { const r = t.ref; if (r.state !== "ko") { r.state = "ko"; r.koT = s.stun + 2; SFX.stun(); this.api.toast("Robber knocked out!", "Quick, cuff them! (hold E)", "good"); } }
+    else if (t.kind === "robber") { const r = t.ref; if (r.state !== "ko") { r.state = "ko"; r.koT = s.stun + 2; SFX.stun(); this.api.toast(s.taser ? "ZAPPED! ⚡" : "Robber knocked out!", "Quick, cuff them! (hold E)", "good"); } }
+    else if (t.kind === "player") { const p = t.ref; if ((p.hitT || 0) > this.t) return; p.hitT = this.t + 0.5; this.api.zap(p.id, s.taser ? 2 : 1); SFX.stun(); this.api.toast((s.taser ? "⚡ ZAPPED " : "SPLAT! ") + p.n, p.role === "robber" && p.wanted > 0 ? "They’re wanted: that’s a bust!" : "They’re seeing stars!", "good", 1800); }
   }
   updateShots(dt) {
     const me = this.api.me(), tg = this.targets();
@@ -285,7 +350,7 @@ export class Crime {
         for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < t.r + 0.3 && s.y > t.y - 0.5 && s.y < t.y + 3.2) { done = true; break; }
         if (done && s.splash) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < s.splash) this.hit(t, s); }
         else if (done) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < t.r + 0.5 && s.y > t.y - 0.6 && s.y < t.y + 3.3) { this.hit(t, s); break; } }
-      } else if (!me.inCar && Math.hypot(me.x - s.x, me.z - s.z) < 0.8 && s.y > me.y && s.y < me.y + 2) {
+      } else if (!s.vis && !me.inCar && Math.hypot(me.x - s.x, me.z - s.z) < 0.8 && s.y > me.y && s.y < me.y + 2) {
         done = true; this.knockOut("cop");
       }
       if (done) {
@@ -301,7 +366,7 @@ export class Crime {
   // ------------------------------------------------------------ cop career: radio calls + NPC robbers
   callout() {
     const me = this.api.me();
-    const spots = [...ROB_SPOTS.filter((s) => s.kind !== "case").map((s) => (s.room ? { ...s, x: s.ox, z: s.oz } : s)), ...roadPoints().filter((_, i) => i % 23 === 0).map((p) => ({ x: p.x, z: p.z, name: "a car on the road", kind: "car" }))]
+    const spots = [...ROB_SPOTS.filter((s) => s.kind !== "case" && s.kind !== "gold").map((s) => (s.room ? { ...s, x: s.ox, z: s.oz } : s)), ...roadPoints().filter((_, i) => i % 23 === 0).map((p) => ({ x: p.x, z: p.z, name: "a car on the road", kind: "car" }))]
       .filter((s) => { const d = Math.hypot(s.x - me.x, s.z - me.z); return d > 90 && d < 420; });
     const s = spots[Math.floor(Math.random() * spots.length)]; if (!s) { this.callT = 10; return; }
     const what = { register: "Robbery at " + s.name.replace("the ", "the "), atm: "Someone is breaking into an ATM", vault: "BANK ROBBERY at Copper Creek Bank", car: "Car thief spotted" }[s.kind] || "Robbery in progress";
@@ -438,6 +503,7 @@ export class Crime {
   // ------------------------------------------------------------ every step
   update(dt) {
     this.t += dt; this.fireT -= dt; this.warnT -= dt;
+    if (this.carHits && (this.carHitT -= dt) <= 0) this.carHits = 0;
     const me = this.api.me();
     // jail
     if (this.jail) {
@@ -448,8 +514,9 @@ export class Crime {
     if (this.ko) {
       this.ko.t += dt;
       if (this.ko.t > 2.6) {
-        const why = this.ko.why; this.ko = null;
-        if (S.role === "robber" && S.wanted > 0) this.bust();
+        const why = this.ko.why, soft = this.ko.soft; this.ko = null;
+        if (soft) this.api.toast("You shook it off!", "", "good", 1500);
+        else if (S.role === "robber" && S.wanted > 0) this.bust();
         else { this.api.teleport(HOSPITAL.x, HOSPITAL.z, HOSPITAL.yaw); this.api.toast("You woke up at the Hospital", "All better! Back to it.", "good", 4000); }
       }
     }
@@ -459,7 +526,8 @@ export class Crime {
       if (this.cops.filter((c) => !c.leaving).length < this.copCount() && this.spawnT <= 0) { this.spawnCop(); this.spawnT = 3; }
     }
     let seen = false, sirenVol = 0, nearest = 1e9;
-    this.hidden = S.wanted > 0 && !me.inCar && (me.indoors || Math.hypot(me.x - PLACES.hideout.x, me.z - PLACES.hideout.z) < 9 || HOUSES.some((h) => S.houses.includes(h.id) && Math.hypot(me.x - h.garage.x, me.z - h.garage.z) < 6));
+    const inAlarm = S.wanted > 0 && me.indoors && this.alarmAt && this.api.roomId() === this.alarmAt;
+    this.hidden = S.wanted > 0 && !me.inCar && !inAlarm && (me.indoors || Math.hypot(me.x - PLACES.hideout.x, me.z - PLACES.hideout.z) < 9 || HOUSES.some((h) => S.houses.includes(h.id) && Math.hypot(me.x - h.garage.x, me.z - h.garage.z) < 6));
     // hiding inside? if a cop waits by the door long enough, they come in and get you
     if (S.wanted > 0 && me.indoors && !this.jail) {
       const at = this.cops.some((c) => !c.leaving && Math.hypot(c.b.x - me.x, c.b.z - me.z) < 30);
@@ -501,7 +569,7 @@ export class Crime {
     if (this.bustT > 1.6 && S.wanted > 0) { this.bustT = 0; this.bust(); }
     // losing the cops: nobody sees you for long enough
     if (S.wanted > 0 && !this.jail) {
-      if (seen || this.doorT > 0) this.evadeT = 0; else this.evadeT += dt * (S.gear.mask ? 1.5 : 1) * (this.hidden ? 2 : 1);
+      if (seen || this.doorT > 0 || inAlarm) this.evadeT = 0; else this.evadeT += dt * (S.gear.mask ? 1.5 : 1) * (this.hidden ? 2 : 1);
       if (this.evadeT > 6 + S.wanted * 2) this.setWanted(0);
     }
     // the player's own siren
@@ -516,6 +584,20 @@ export class Crime {
   }
   // models + flying goo (every frame)
   draw(dt, time) {
+    // the taser bolt: a jagged line that jumps around while it crackles (it follows whoever it hit)
+    const B = this.bolt;
+    if (B) {
+      B.t += dt; const on = B.t < 0.45, tg = B.target;
+      const to = tg ? (tg.kind === "robber" ? { x: tg.ref.w.x, y: tg.ref.w.y + 1, z: tg.ref.w.z } : tg.kind === "robcar" ? { x: tg.ref.car.b.x, y: tg.ref.car.b.y + 1, z: tg.ref.car.b.z } : tg.kind === "cop" ? { x: tg.ref.b.x, y: tg.ref.b.y + 1, z: tg.ref.b.z } : { x: tg.ref.x, y: tg.ref.y + 1, z: tg.ref.z }) : B.to;
+      const pts = []; for (let i = 0; i < 12; i++) { const f = i / 11, j = i === 0 || i === 11 ? 0 : 0.45; pts.push(new THREE.Vector3(B.from.x + (to.x - B.from.x) * f + (Math.random() - 0.5) * j, B.from.y + (to.y - B.from.y) * f + (Math.random() - 0.5) * j, B.from.z + (to.z - B.from.z) * f + (Math.random() - 0.5) * j)); }
+      const M = new THREE.Matrix4(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1), d = new THREE.Vector3(), mid = new THREE.Vector3(), sc = new THREE.Vector3();
+      for (const L of this.bolts) {
+        L.visible = on; if (!on) continue;
+        for (let i = 0; i < 11; i++) { d.subVectors(pts[i + 1], pts[i]); const len = d.length(); q.setFromUnitVectors(Z, d.normalize()); mid.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5); M.compose(mid, q, sc.set(L.userData.w, L.userData.w, len + L.userData.w)); L.setMatrixAt(i, M); }
+        L.instanceMatrix.needsUpdate = true;
+      }
+      if (!on) this.bolt = null;
+    }
     for (const c of this.cops) { placeModel(c.b); animateCar(c.m, { speed: speedOf(c.b), steer: c.b.steer, siren: !c.leaving || c.life < 3, t: time, wheelDrop: c.b.wheelDrop }, dt); }
     if (this.call) { const r = this.call.robber; if (r.state === "fleeing" || r.state === "robbing") { placeModel(r.car.b); animateCar(r.car.m, { speed: speedOf(r.car.b), steer: r.car.b.steer, wheelDrop: r.car.b.wheelDrop }, dt); r.stars.rotation.y += dt * 4; } }
     const M = new THREE.Matrix4(), col = new THREE.Color(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
