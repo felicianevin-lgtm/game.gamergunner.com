@@ -54,12 +54,12 @@ export function updateHud(g) {
   // wanted stars, loot, cop calls
   const C = g.crime;
   if (C) {
-    const show = C.wanted > 0 || C.loot > 0 || S.backpack.length > 0;
+    const show = C.wanted > 0 || C.loot > 0 || S.backpack.length > 0 || C.headStart > 0;
     $("crimeBox").classList.toggle("hidden", !show);
     if (show) {
       setT("stars", "★".repeat(C.wanted) + "☆".repeat(5 - C.wanted));
       $("stars").classList.toggle("flash", C.wanted > 0 && C.evade > 0);
-      setT("lootTxt", [C.loot ? "💰 Loot " + money(C.loot) + " / " + money(C.cap) : "", S.backpack.length ? "🎒 " + S.backpack.length + " / " + (S.gear.duffel ? 16 : 10) : ""].filter(Boolean).join("  ·  "));
+      setT("lootTxt", [C.headStart ? "🏃 RUN! Alarm in " + C.headStart + "s" : "", C.loot ? "💰 Loot " + money(C.loot) + " / " + money(C.cap) : "", S.backpack.length ? "🎒 " + S.backpack.length + " / " + (S.gear.duffel ? 16 : 10) : ""].filter(Boolean).join("  ·  "));
       $("evade").style.display = C.wanted > 0 ? "" : "none";
       $("evade").firstElementChild.style.width = Math.round(C.evade * 100) + "%";
       setT("evadeTxt", C.wanted ? (C.hidden ? "Hiding... " : C.evade > 0 ? "Losing them... " : "SPOTTED! ") : "");

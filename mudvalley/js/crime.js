@@ -52,6 +52,7 @@ export const TASER = { range: 13, rate: 1.3, stun: 7 };
 export const SPEED_LIMIT = 22.4, TICKET = 150; // (m/s = 50 mph)
 
 // important spots
+const HEAD_START = 20; // seconds you get to run after a jail break, before the cops come after you
 export const JAIL = { x: 449, z: -348, yaw: Math.PI }; // the jail cell (in the Police Station: you can see in through the bars)
 export const JAIL_OUT = { x: 466, z: -326, yaw: 0 }; // where you come out
 export const HOSPITAL = { x: 484, z: -326, yaw: 0 };
@@ -121,6 +122,7 @@ export class Crime {
     if (r === S.role) return null;
     if (S.wanted > 0) return "Lose the cops first! (You can’t switch while you’re wanted.)";
     if (this.jail) return "You’re in jail!";
+    if (this.headStart > 0) return "You just broke out of jail! Run first!";
     if (r === "cop" && !S.cop.joined) return "Sign up at the Police Station in Copper Creek first.";
     if (S.role === "robber" && S.loot > 0) { this.api.toast("You dropped your loot", money(S.loot) + " left behind. (Stash it at the hideout next time!)", "warn"); S.loot = 0; }
     if (S.role === "cop") this.endCall(true);
@@ -135,6 +137,14 @@ export class Crime {
     save(); return null;
   }
   joinPolice() { S.cop.joined = true; return this.setRole("cop"); }
+  // at the Police Station you can always switch sides: your stars (and any loot) are wiped
+  copAtStation() {
+    if (this.jail) return "You’re in jail!";
+    if (this.headStart > 0) return "You just broke out of jail! Run first!";
+    S.cop.joined = true;
+    if (S.wanted > 0) { const lost = S.loot; S.loot = 0; this.setWanted(0); for (const c of this.cops.slice()) this.removeCop(c); this.api.toast("You turned yourself in", (lost ? "The cops kept your " + money(lost) + " loot. " : "") + "Your record is clean. Welcome to the force!", "good", 4000); }
+    return this.setRole("cop");
+  }
 
   // ------------------------------------------------------------ wanted level + cops
   setWanted(n) {
@@ -249,6 +259,7 @@ export class Crime {
       if (this.carHits < 3) { this.api.toast("BANG!", p.n + " is shooting your ride! (" + (3 - this.carHits) + " more and you’re out)", "warn", 1800); return; }
     }
     this.carHits = 0;
+    if (k === 1 && !me.inCar) this.bleed(me.x, me.y + 1.2, me.z);
     if (p.role === "cop" && S.wanted > 0) this.knockOut("cop", false, p.n); // (then busted!)
     else this.knockOut("player", true, p.n);
   }
@@ -276,7 +287,7 @@ export class Crime {
   }
   release(broke) {
     this.jail = null; this.api.leaveJail(JAIL_OUT);
-    if (broke) { SFX.escape(); this.api.banner("JAIL BREAK!", "You busted out! The cops are after you!"); this.setWanted(2); }
+    if (broke) { SFX.escape(); this.headStart = HEAD_START; this.api.banner("JAIL BREAK!", "RUN! The guards find your empty cell in " + HEAD_START + " seconds!"); }
     else { this.api.toast("You’re free!", "Time served. Try not to get caught next time!", "good", 4000); }
     save();
   }
@@ -348,7 +359,14 @@ export class Crime {
     if (r) { if (r.state === "fleeing") out.push({ kind: "robcar", ref: r, x: r.car.b.x, y: r.car.b.y, z: r.car.b.z, vx: r.car.b.vx, vz: r.car.b.vz, r: 2.2 }); else if (r.w && r.state !== "cuffed" && r.state !== "carried") out.push({ kind: "robber", ref: r, x: r.w.x, y: r.w.y, z: r.w.z, vx: r.w.vx, vz: r.w.vz, r: 0.9 }); }
     return out;
   }
+  // blood: a red spray + a puddle on the ground under them
+  bleed(x, y, z, big) {
+    this.api.fx.blood(x, y, z, big ? 20 : 14);
+    const gy = groundAt(x, z); if (this.splats.length >= 60) this.splats.shift();
+    this.splats.push({ x: x + rnd(-0.3, 0.3), z: z + rnd(-0.3, 0.3), y: gy + 0.04 + Math.random() * 0.01, r: big ? 0.75 : 0.5, life: 16, color: 0x7a0a10 });
+  }
   hit(t, s) {
+    if (t.kind === "civ" || t.kind === "robber" || (t.kind === "player" && !t.ref.car)) this.bleed(t.x, t.y + 1.2, t.z, !!s.splash);
     if (t.kind === "cop") {
       if (S.role !== "robber") { if (this.warnT <= 0) { this.warnT = 4; this.api.toast("Hey, that’s a cop!", "Only robbers fight the cops.", "warn"); } return; }
       t.ref.stunT = Math.max(t.ref.stunT, s.stun); SFX.stun();
@@ -368,7 +386,7 @@ export class Crime {
         s.x += s.vx * h; s.y += s.vy * h; s.z += s.vz * h;
         if (s.y < groundAt(s.x, s.z)) { done = true; break; }
         if (s.mine) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < t.r + 0.45 && s.y > t.y - 0.6 && s.y < t.y + 3.3) { done = true; hitT = t; break; } }
-        else if (!s.vis && !me.inCar && Math.hypot(me.x - s.x, me.z - s.z) < 0.8 && s.y > me.y && s.y < me.y + 2) { done = true; this.knockOut("cop"); }
+        else if (!s.vis && !me.inCar && Math.hypot(me.x - s.x, me.z - s.z) < 0.8 && s.y > me.y && s.y < me.y + 2) { done = true; if (!this.ko && !this.jail) this.bleed(me.x, me.y + 1.2, me.z); this.knockOut("cop"); }
       }
       if (s.mine && done && s.splash) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < s.splash) this.hit(t, s); }
       else if (hitT) this.hit(hitT, s);
@@ -529,6 +547,12 @@ export class Crime {
     if (this.jail) {
       const j = this.jail; j.t -= dt; j.cool -= dt; j.needle = 0.5 + 0.48 * Math.sin(this.t * (2.2 + j.wins * 0.6));
       if (j.t <= 0) this.release(false);
+    }
+    // just broke out of jail: a head start before the alarm goes off
+    if (this.headStart > 0 && !this.jail) {
+      const was = Math.ceil(this.headStart); this.headStart -= dt; const now = Math.ceil(this.headStart);
+      if (now !== was && (now === 10 || now === 5)) this.api.toast("⏱️ " + now + " seconds!", "Get far away from the Police Station!", "warn", 1600);
+      if (this.headStart <= 0) { this.headStart = 0; this.setWanted(2); this.api.toast("🚨 The guards found your empty cell!", "★★ The cops are looking for you!", "warn", 3600); }
     }
     // knocked out
     if (this.ko) {
@@ -693,7 +717,7 @@ export class Crime {
   hud() {
     const r = this.call && this.call.robber;
     return {
-      wanted: S.wanted, evade: S.wanted ? clamp(this.evadeT / (6 + S.wanted * 2), 0, 1) : 0, hidden: this.hidden, loot: S.loot, cap: lootCap(),
+      headStart: this.headStart > 0 ? Math.ceil(this.headStart) : 0, wanted: S.wanted, evade: S.wanted ? clamp(this.evadeT / (6 + S.wanted * 2), 0, 1) : 0, hidden: this.hidden, loot: S.loot, cap: lootCap(),
       jail: this.jail, ko: !!this.ko, call: this.call ? { what: this.call.what, state: r.state } : null,
       target: this.call ? (r.state === "carried" || r.state === "cuffed" ? { x: PLACES.police.x, z: PLACES.police.z } : r.state === "fleeing" ? { x: r.car.b.x, z: r.car.b.z } : { x: r.w.x, z: r.w.z }) : null,
     };

@@ -128,13 +128,13 @@ function mapPos() { const c = mine(), b = c ? c.b : G.me.w; if (inside()) { cons
 const MENUS = { pawn: () => UI.pawn(), dealer: () => UI.dealer(), jobs: () => UI.jobs(), gear: () => UI.gear(), blasters: () => UI.blasters(), bait: () => UI.bait(), police: () => UI.police(), hideout: () => UI.hideout() };
 function insideActions(out) {
   const R = interiors.cur, w = G.me.w, l = interiors.local(w), bd = R.bd;
+  if (itemsOwned().includes("blaster")) out.Q = { text: "Shoot", fn: useItem };
   if (l.z > bd.d / 2 - 1.7 && Math.abs(l.x) < 1.5) { out.E = { text: "Leave " + bd.name, fn: goOutside }; return out; }
-  if (S.equip === "blaster") out.Q = { text: "Shoot", fn: useItem };
   out.E = crime.robAction({ x: l.x, z: l.z, room: bd.id }) || heist.action(l);
   if (out.E) return out;
   for (const sp of R.spots) {
     if (Math.hypot(sp.x - l.x, sp.z - l.z) > sp.r) continue;
-    if (sp.act === "menu") out.E = { text: { dealer: "Talk to the sales clerk (buy rides)", jobs: "Look at the Job Board", gear: "Shop for robber gear", blasters: "Shop for blasters", bait: "Buy rods + sell your fish", police: "Talk to the desk sergeant", pawn: "Sell stuff to the pawn broker 💰", hideout: "Look at the secret map (stash loot)" }[bd.menu] || "Talk", fn: MENUS[bd.menu] };
+    if (sp.act === "menu") out.E = { text: { dealer: "Talk to the sales clerk (buy rides)", jobs: "Look at the Job Board", gear: "Shop for robber gear", blasters: "Shop for guns", bait: "Buy rods + sell your fish", police: "Talk to the desk sergeant", pawn: "Sell stuff to the pawn broker 💰", hideout: "Look at the secret map (stash loot)" }[bd.menu] || "Talk", fn: MENUS[bd.menu] };
     else if (sp.act === "chat") out.E = { text: "Say hi to the " + (bd.keeper || "neighbor").toLowerCase(), fn: () => { SFX.phone(); H.toast("“" + (sp.say || "Hi there! Welcome to " + bd.name + "!") + "”", bd.keeper || "", "", 3200); } };
     else if (sp.act === "snack") out.E = { text: "Buy a snack ($5)", fn: () => { if (spend(5)) { SFX.cash(); H.bumpMoney(); H.toast("Yum! 🍪", "That hit the spot.", "good", 1800); save(); } else SFX.nope(); } };
     else if (sp.act === "sleep") out.E = { text: S.houses.includes(bd.house.id) ? "Take a nap" : "Test the bed", fn: () => { H.flash("#000"); SFX.phone(); H.toast("Zzz... good morning!", "Nothing beats a nap.", "good", 2400); } };
@@ -174,7 +174,8 @@ function cycleItem() {
 }
 function useItem() {
   const c = mine();
-  if (inside()) { if (S.equip === "blaster" && !crime.ko && !crime.jail) { const y = cam.yaw; if (heist.fire(y)) { G.me.w.yaw = y; G.aimT = 0.4; } } return; }
+  if (inside()) { if (S.equip !== "blaster" && itemsOwned().includes("blaster") && !crime.jail) { S.equip = "blaster"; applyItem(); } // (Q indoors: out comes your gun)
+    if (S.equip === "blaster" && !crime.ko && !crime.jail) { const y = cam.yaw; if (heist.fire(y)) { G.me.w.yaw = y; G.aimT = 0.4; } } return; }
   if (c) { if (S.role === "cop") crime.dropSpikes(); return; }
   if (crime.ko || crime.jail) return;
   if (S.equip === "blaster") { const y = cam.yaw; if (crime.fire(y)) { G.me.w.yaw = y; G.aimT = 0.4; } }
@@ -500,6 +501,7 @@ export const GAME = {
   },
   wipe() { wipe(); location.reload(); },
   get crime() { return crime; }, get fishing() { return fishing; }, get mp() { return mp; },
+  copAtStation() { const why = crime.copAtStation(); if (why) { SFX.nope(); H.toast("Can’t switch right now", why, "warn"); return false; } return true; },
   setRole(r) { const why = crime.setRole(r); if (why) { SFX.nope(); H.toast("Can’t switch right now", why, "warn"); return false; } return true; },
   buyGear(g) { if (S.gear[g.id]) return false; if (!spend(g.price)) { SFX.nope(); H.toast("Not enough money", "You need " + money(g.price - S.money) + " more.", "warn"); return false; } S.gear[g.id] = true; SFX.buy(); H.bumpMoney(); if (g.id === "mask") G.me.p.setLook(lookFor(S.role, true)); save(); return true; },
   buyBlaster(bl) { if (!S.blasters.includes(bl.id)) { if (!spend(bl.price)) { SFX.nope(); H.toast("Not enough money", "You need " + money(bl.price - S.money) + " more.", "warn"); return false; } S.blasters.push(bl.id); SFX.buy(); H.bumpMoney(); } S.blaster = bl.id; S.equip = "blaster"; applyItem(); save(); return true; },

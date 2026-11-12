@@ -34,6 +34,8 @@ export class FX {
     const cols = [0xff3a5a, 0xffd23a, 0x3aa0ff, 0x4adf6a, 0xff7ad8, 0xffffff];
     for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 2 + Math.random() * 6; this.chunk(x, y, z, Math.cos(a) * s, 5 + Math.random() * 8, Math.sin(a) * s, 0.1 + Math.random() * 0.08, cols[i % cols.length], 1.6 + Math.random(), 0.45, 12); }
   }
+  // a red spray when somebody gets shot (drops that fall to the ground)
+  blood(x, y, z, n = 14) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 1 + Math.random() * 3.5; this.chunk(x, y, z, Math.cos(a) * s, 1 + Math.random() * 3.5, Math.sin(a) * s, 0.05 + Math.random() * 0.07, [0xb0101a, 0x8a0a12, 0xd02028][i % 3], 0.5 + Math.random() * 0.4); } }
   sparks(x, y, z, n = 10) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 3 + Math.random() * 6; this.chunk(x, y, z, Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s, 0.06, [0xffe14a, 0xffa020, 0xffffff][i % 3], 0.35 + Math.random() * 0.3); } }
   smoke(x, y, z, n = 1) { for (let i = 0; i < n; i++) this.puff(x, y, z, (Math.random() - 0.5) * 0.6, 1.2 + Math.random(), (Math.random() - 0.5) * 0.6, 0.5, 0x8a8a8a, 1.6, 2.2); }
   update(dt) {

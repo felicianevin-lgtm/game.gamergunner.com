@@ -42,7 +42,9 @@ function vaultDoor() {
 export class Heist {
   constructor(api) {
     this.api = api; // { scene, crime, interiors, me() (your walker), toast, banner, bumpMoney, aim() }
-    this.cur = null; this.hold = null; this.flying = []; this.bits = []; this.shots = [];
+    this.cur = null; this.hold = null; this.flying = []; this.bits = []; this.shots = []; this.pools = [];
+    this.poolMesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x7a0a10, transparent: true, opacity: 0.85, depthWrite: false }), 12);
+    this.poolMesh.count = 0; this.poolMesh.frustumCulled = false; api.scene.add(this.poolMesh);
     this.bitMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.22, 0.11), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), 120);
     this.bitMesh.count = 0; this.bitMesh.frustumCulled = false; this.bitMesh.setColorAt(0, new THREE.Color()); api.scene.add(this.bitMesh);
     this.shotMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), 24);
@@ -76,7 +78,7 @@ export class Heist {
   leave() {
     if (this.hold && this.hold.paid && !this.hold.done) this.finish(); // (you ran off in the middle: you keep what you caught)
     for (const f of this.flying) this.api.scene.remove(f.m);
-    this.cur = null; this.hold = null; this.flying.length = 0; this.shots.length = 0; this.bits.length = 0; this.stars.visible = false; this.bitMesh.count = 0; this.shotMesh.count = 0;
+    this.cur = null; this.hold = null; this.flying.length = 0; this.shots.length = 0; this.bits.length = 0; this.pools.length = 0; this.poolMesh.count = 0; this.stars.visible = false; this.bitMesh.count = 0; this.shotMesh.count = 0;
   }
   // the vault door swings open (after drilling)
   openVault() {
@@ -132,7 +134,7 @@ export class Heist {
     const cr = this.api.crime; if (cr.fireT > 0) return false; cr.fireT = bl.rate;
     const me = this.local();
     let dx = Math.sin(yaw), dy = 0, dz = Math.cos(yaw);
-    if (c.keeper && !this.isKO()) { const k = this.keeperSpot(), kd = Math.hypot(k.x - me.x, k.z - me.z), a = Math.atan2(k.x - me.x, k.z - me.z); if (kd < bl.range && Math.abs(wrap(a - yaw)) < 0.6) { dx = (k.x - me.x) / kd; dz = (k.z - me.z) / kd; dy = -0.02; } }
+    if (c.keeper && !this.isKO()) { const k = this.keeperSpot(), kd = Math.hypot(k.x - me.x, k.z - me.z), a = Math.atan2(k.x - me.x, k.z - me.z); if (kd < bl.range && Math.abs(wrap(a - yaw)) < 1.3) { dx = (k.x - me.x) / kd; dz = (k.z - me.z) / kd; dy = -0.02; } }
     const col = 0xffe6a0, sp = 90;
     this.shots.push({ x: me.x + dx * 0.6, y: 1.35, z: me.z + dz * 0.6, vx: dx * sp, vy: dy * sp, vz: dz * sp, life: 0.5, color: col, stun: bl.stun });
     this.api.crime.muzzle(POCKET.x + me.x + dx * 0.7, 1.35, POCKET.z + me.z + dz * 0.7, bl.tier);
@@ -167,7 +169,7 @@ export class Heist {
       if (hit || wall) {
         this.shots.splice(i, 1); SFX.ricochet();
         for (let j = 0; j < 6; j++) this.bits.push({ x: POCKET.x + s.x, y: s.y, z: POCKET.z + s.z, vx: rnd(-2, 2), vy: rnd(1, 4), vz: rnd(-2, 2), life: 0.35, color: j % 2 ? 0xffd060 : 0x8a8a8a, spin: rnd(4, 9), r: 0, flat: false });
-        if (hit) this.splatKeeper();
+        if (hit) { const kp = this.keeperSpot(); for (let j = 0; j < 16; j++) this.bits.push({ x: POCKET.x + kp.x + rnd(-0.15, 0.15), y: rnd(1.1, 1.6), z: POCKET.z + kp.z + rnd(-0.15, 0.15), vx: rnd(-2.5, 2.5), vy: rnd(0.5, 3), vz: rnd(-2.5, 2.5), life: rnd(0.5, 0.9), color: [0xb0101a, 0x8a0a12, 0xd02028][j % 3], spin: rnd(4, 9), r: 0, flat: false, small: true }); this.pools.push({ x: POCKET.x + kp.x + rnd(-0.3, 0.3), z: POCKET.z + kp.z + rnd(-0.2, 0.4), r: 0.15, grow: 0.7, life: 20 }); this.splatKeeper(); }
       }
     }
     // the keeper waking up
@@ -224,7 +226,9 @@ export class Heist {
         this.api.toast("+" + money(got) + " 💵", "Loot: " + money(S.loot) + " / " + money(this.api.crime.lootCap()), "cash", 1600);
       }
     }
-    // bills fluttering down, goo drops
+    // blood puddles spread out, then fade away
+    for (let i = this.pools.length - 1; i >= 0; i--) { const p = this.pools[i]; p.life -= dt; if (p.r < p.grow) p.r += dt * 0.5; if (p.life <= 0) this.pools.splice(i, 1); }
+    // bills fluttering down, blood drops
     for (let i = this.bits.length - 1; i >= 0; i--) {
       const b = this.bits[i]; b.life -= dt; if (b.life <= 0) { this.bits.splice(i, 1); continue; }
       if (b.flat) { b.vy = Math.max(b.vy - 9 * dt, -0.9); b.vx *= 1 - dt * 1.5; b.vz *= 1 - dt * 1.5; b.x += (b.vx + Math.sin(b.life * 7 + b.r) * 0.6) * dt; } else { b.vy -= 12 * dt; b.x += b.vx * dt; }
@@ -239,7 +243,9 @@ export class Heist {
     this.stars.visible = ko;
     const M = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1), col = new THREE.Color();
     let n = 0;
-    for (const b of this.bits) { if (n >= 120) break; q.setFromEuler(e.set(b.r, b.r * 0.7, b.r * 0.3)); M.compose(v.set(b.x, b.y, b.z), q, s.setScalar(b.flat ? 1 : 0.6)); this.bitMesh.setMatrixAt(n, M); this.bitMesh.setColorAt(n, col.set(b.color)); n++; }
+    for (const b of this.bits) { if (n >= 120) break; q.setFromEuler(e.set(b.r, b.r * 0.7, b.r * 0.3)); M.compose(v.set(b.x, b.y, b.z), q, s.setScalar(b.flat ? 1 : b.small ? 0.35 : 0.6)); this.bitMesh.setMatrixAt(n, M); this.bitMesh.setColorAt(n, col.set(b.color)); n++; }
+    let pn = 0; for (const p of this.pools) { const k = Math.min(1, p.life / 3); M.compose(v.set(p.x, 0.03 + pn * 0.002, p.z), q.identity(), s.set(p.r * k, 1, p.r * k)); this.poolMesh.setMatrixAt(pn++, M); if (pn >= 12) break; }
+    this.poolMesh.count = pn; this.poolMesh.instanceMatrix.needsUpdate = true; s.set(1, 1, 1);
     this.bitMesh.count = n; this.bitMesh.instanceMatrix.needsUpdate = true; if (this.bitMesh.instanceColor) this.bitMesh.instanceColor.needsUpdate = true;
     n = 0; q.identity();
     const Z = new THREE.Vector3(0, 0, 1), dir = new THREE.Vector3();

@@ -307,10 +307,10 @@ function pawn() {
 function police() {
   const rk = rankOf(), nx = nextRank(), cop = S.role === "cop";
   let html = `<h2>👮 POLICE STATION</h2><div class="bank">${money(S.money)}</div>`;
-  if (!S.cop.joined) html += `<p class="sub">Want to keep Mud Valley safe? Join the police! You get a uniform, a <b>police cruiser</b>, handcuffs, a sidearm, a taser, spike strips and a radio. Catch robbers for cash. The more you catch, the higher your rank (and your pay).</p><div class="btns"><button type="button" class="big" data-a="join" ${S.wanted ? "disabled" : ""}>JOIN THE POLICE</button>${S.wanted ? '<span class="note">Not while you’re wanted!</span>' : ""}</div>`;
+  if (!S.cop.joined) html += `<p class="sub">Want to keep Mud Valley safe? Join the police! You get a uniform, a <b>police cruiser</b>, handcuffs, a sidearm, a taser, spike strips and a radio. Catch robbers for cash. The more you catch, the higher your rank (and your pay).</p><div class="btns"><button type="button" class="big" data-a="join">${S.wanted ? "TURN YOURSELF IN + JOIN" : "JOIN THE POLICE"}</button>${S.wanted ? '<span class="note">You’re wanted: you’ll lose your stars' + (S.loot ? " and your loot" : "") + ".</span>" : ""}</div>`;
   else {
     html += `<p class="sub">Rank: <b>${rk.name}</b> · Arrests: <b>${S.cop.arrests}</b>${nx ? " · " + (nx.at - S.cop.arrests) + " more to become " + nx.name : ""} · Pay per arrest: <b>${money(Math.round(BOOK_PAY * rk.mult))}+</b></p>
-      <div class="btns">${cop ? `<button type="button" class="small" data-a="off">End shift (go civilian)</button>` : `<button type="button" class="big" data-a="on" ${S.wanted ? "disabled" : ""}>START SHIFT</button>`}</div>
+      <div class="btns">${cop ? `<button type="button" class="small" data-a="off">End shift (go civilian)</button>` : `<button type="button" class="big" data-a="on">${S.wanted ? "TURN YOURSELF IN + START SHIFT" : "START SHIFT"}</button>${S.wanted ? '<span class="note">You’re wanted: you’ll lose your stars' + (S.loot ? " and your loot" : "") + ".</span>" : ""}`}</div>
       <h3>Gear</h3><div class="list">
       <div class="item"><span class="ico">⛓️</span><span class="nm"><b>Spike strips: ${S.cop.spikes} / 3</b><small>In your car press Q to drop one behind you. Getaway cars that hit it slow way down.</small></span><button type="button" class="small" data-a="spikes" ${S.cop.spikes >= 3 ? "disabled" : ""}>Refill (free)</button></div>
       <div class="item"><span class="ico">🚓</span><span class="nm"><b>Police Cruiser${S.cop.car !== "interceptor" ? '<span class="tag">USING</span>' : ""}</b><small>Tough and steady.</small></span>${S.cop.car === "interceptor" ? `<button type="button" class="small" data-a="car" data-v="cruiser">Use</button>` : ""}</div>
@@ -320,8 +320,7 @@ function police() {
   }
   side(html, "shop");
   onAct = (a, val) => {
-    if (a === "join") { GM.crime.joinPolice(); police(); }
-    if (a === "on") { GM.setRole("cop"); police(); }
+    if (a === "join" || a === "on") { GM.copAtStation(); police(); }
     if (a === "off") { GM.setRole("civ"); police(); }
     if (a === "spikes") { GM.refillSpikes(); police(); }
     if (a === "car") { GM.copCar(val); police(); }
