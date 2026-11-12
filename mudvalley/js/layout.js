@@ -165,7 +165,7 @@ export const PLACES = {
   copper: { name: "Copper Creek", x: 452, z: -318, icon: "🏙️", color: "#e08a4a" },
   police: { name: "Police Station", x: 440, z: -332, icon: "👮", color: "#3a6aff", r: 6 },
   gear: { name: "Tool Barn (Gear Shop)", x: 330, z: -308, icon: "🧰", color: "#e0a030" },
-  blasters: { name: "Splat Blasters", x: 366, z: -308, icon: "🎯", color: "#ff5ad8" },
+  blasters: { name: "Gun Shop", x: 366, z: -308, icon: "🔫", color: "#d04030" },
   bank: { name: "Copper Creek Bank", x: 330, z: -332, icon: "🏦", color: "#4ad08a" },
   jewelry: { name: "Sparkle Jewelry", x: 366, z: -331, icon: "💎", color: "#6af0ff" },
   hospital: { name: "Hospital", x: 484, z: -331, icon: "🏥", color: "#ff6a6a" },

@@ -68,6 +68,9 @@ export const SFX = {
   jump() { tone(300, 0.15, "square", 600, 0.18); },
   phone() { tone(1046, 0.06, "sine", 0, 0.25); tone(1568, 0.08, "sine", 0, 0.25, 0.07); },
   // blasters, robbers + cops
+  // a gun going off: a sharp crack + a deep boom (bigger guns = bigger boom), and a little ricochet ping when it lands
+  bang(k = 0) { noise(0.05, 6000, 0.7, "highpass"); noise(0.22 + k * 0.08, 1800 - k * 300, 0.95, "lowpass", 0, 120); tone(110 - k * 15, 0.16 + k * 0.05, "sine", 38, 0.8); },
+  ricochet() { noise(0.05, 2600, 0.18, "bandpass"); tone(2600, 0.1, "sine", 1700, 0.08); },
   zap(k = 0) { tone(1400 - k * 200, 0.14, "square", 300, 0.22); noise(0.08, 3000, 0.25, "bandpass"); },
   splat() { noise(0.12, 900, 0.45, "lowpass", 0, 300); tone(260, 0.08, "sine", 120, 0.25); },
   stun() { [880, 660, 990, 740].forEach((f, i) => tone(f, 0.09, "triangle", 0, 0.22, i * 0.07)); },

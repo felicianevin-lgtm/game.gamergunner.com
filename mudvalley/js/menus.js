@@ -279,8 +279,8 @@ function gear() {
   onAct = (a, val) => { if (a === "buy") { GM.buyGear(GEAR.find((g) => g.id === val)); gear(); } };
 }
 function blasters() {
-  const html = `<h2>🎯 SPLAT BLASTERS</h2><div class="bank">${money(S.money)}</div><p class="sub">Cartoon goo blasters! Anyone you hit gets knocked out for a few seconds (they just see stars). Press <b>X</b> to hold your blaster, <b>Q</b> to shoot. It aims for you!</p>
-    <div class="list">${BLASTERS.map((b) => { const own = S.blasters.includes(b.id); return `<div class="item ${S.blaster === b.id ? "sel" : ""}"><span class="ico">${["🩷", "🫧", "⚡", "🟡"][b.tier]}</span><span class="nm"><b>${b.name}${own ? '<span class="tag">' + (S.blaster === b.id ? "HOLDING" : "OWNED") + "</span>" : ""}</b><small>${esc(b.desc)} · range ${b.range} m · knocks out for ${b.stun}s</small></span>${own ? (S.blaster === b.id ? "" : `<button type="button" class="small" data-a="buy" data-v="${b.id}">Use</button>`) : `<button type="button" class="mid" data-a="buy" data-v="${b.id}" ${S.money >= b.price ? "" : "disabled"}>${money(b.price)}</button>`}</div>`; }).join("")}</div>`;
+  const html = `<h2>🔫 GUN SHOP</h2><div class="bank">${money(S.money)}</div><p class="sub">Anyone you hit gets knocked out for a few seconds (they see stars, then get back up). Press <b>X</b> to hold your gun, <b>Q</b> to shoot. It aims for you!</p>
+    <div class="list">${BLASTERS.map((b) => { const own = S.blasters.includes(b.id); return `<div class="item ${S.blaster === b.id ? "sel" : ""}"><span class="ico">${["🔫", "🔫", "🎯", "💥"][b.tier]}</span><span class="nm"><b>${b.name}${own ? '<span class="tag">' + (S.blaster === b.id ? "HOLDING" : "OWNED") + "</span>" : ""}</b><small>${esc(b.desc)} · range ${b.range} m · knocks out for ${b.stun}s</small></span>${own ? (S.blaster === b.id ? "" : `<button type="button" class="small" data-a="buy" data-v="${b.id}">Use</button>`) : `<button type="button" class="mid" data-a="buy" data-v="${b.id}" ${S.money >= b.price ? "" : "disabled"}>${money(b.price)}</button>`}</div>`; }).join("")}</div>`;
   side(html, "shop");
   onAct = (a, val) => { if (a === "buy") { GM.buyBlaster(BLASTERS.find((b) => b.id === val)); blasters(); } };
 }
@@ -295,7 +295,7 @@ function bait() {
   onAct = (a, val) => { if (a === "sell") { GM.sellFish(); bait(); } if (a === "rod") { GM.buyRod(RODS.find((r) => r.id === val)); bait(); } };
 }
 // ---------------------------------------------------------------- pawn shops + your backpack (npcs.js)
-const packList = (sell) => S.backpack.length ? `<div class="list">${S.backpack.map((it, i) => { const I = itemById(it.id); return `<div class="item"><span class="ico">${I.icon}</span><span class="nm"><b>${esc(I.name)}</b></span><span class="pr">${money(it.v)}</span>${sell ? `<button type="button" class="small" data-a="sell" data-v="${i}">Sell</button>` : ""}</div>`; }).join("")}</div>` : `<p class="note">Your backpack is empty. Splat people (they drop their stuff) and pick up their backpacks with E.</p>`;
+const packList = (sell) => S.backpack.length ? `<div class="list">${S.backpack.map((it, i) => { const I = itemById(it.id); return `<div class="item"><span class="ico">${I.icon}</span><span class="nm"><b>${esc(I.name)}</b></span><span class="pr">${money(it.v)}</span>${sell ? `<button type="button" class="small" data-a="sell" data-v="${i}">Sell</button>` : ""}</div>`; }).join("")}</div>` : `<p class="note">Your backpack is empty. Knock people out (they drop their stuff) and pick up their backpacks with E.</p>`;
 const packValue = () => S.backpack.reduce((a, it) => a + it.v, 0);
 function pawn() {
   const html = `<h2>💰 PAWN SHOP</h2><div class="bank">${money(S.money)}</div><p class="sub">“I’ll buy anything in that backpack of yours. No questions asked!” 🎒 ${S.backpack.length} / ${packCap()}</p>
@@ -307,7 +307,7 @@ function pawn() {
 function police() {
   const rk = rankOf(), nx = nextRank(), cop = S.role === "cop";
   let html = `<h2>👮 POLICE STATION</h2><div class="bank">${money(S.money)}</div>`;
-  if (!S.cop.joined) html += `<p class="sub">Want to keep Mud Valley safe? Join the police! You get a uniform, a <b>police cruiser</b>, handcuffs, a stun blaster, spike strips and a radio. Catch robbers for cash. The more you catch, the higher your rank (and your pay).</p><div class="btns"><button type="button" class="big" data-a="join" ${S.wanted ? "disabled" : ""}>JOIN THE POLICE</button>${S.wanted ? '<span class="note">Not while you’re wanted!</span>' : ""}</div>`;
+  if (!S.cop.joined) html += `<p class="sub">Want to keep Mud Valley safe? Join the police! You get a uniform, a <b>police cruiser</b>, handcuffs, a sidearm, a taser, spike strips and a radio. Catch robbers for cash. The more you catch, the higher your rank (and your pay).</p><div class="btns"><button type="button" class="big" data-a="join" ${S.wanted ? "disabled" : ""}>JOIN THE POLICE</button>${S.wanted ? '<span class="note">Not while you’re wanted!</span>' : ""}</div>`;
   else {
     html += `<p class="sub">Rank: <b>${rk.name}</b> · Arrests: <b>${S.cop.arrests}</b>${nx ? " · " + (nx.at - S.cop.arrests) + " more to become " + nx.name : ""} · Pay per arrest: <b>${money(Math.round(BOOK_PAY * rk.mult))}+</b></p>
       <div class="btns">${cop ? `<button type="button" class="small" data-a="off">End shift (go civilian)</button>` : `<button type="button" class="big" data-a="on" ${S.wanted ? "disabled" : ""}>START SHIFT</button>`}</div>

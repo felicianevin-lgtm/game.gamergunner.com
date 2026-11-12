@@ -108,10 +108,10 @@ const icons = () => {
   return out;
 };
 let ICONS = null;
-// the career's main places glow on the maps: robbers = Splat Blasters (the blaster store), the Tool Barn, the bank + the
+// the career's main places glow on the maps: robbers = the Gun Shop, the Tool Barn, the bank + the
 // hideout; cops = the Police Station
 // (label, which side of the icon it goes on: the Copper Creek shops are close together)
-export const HOT = { robber: { blasters: ["BLASTERS", "up"], gear: ["TOOLS", "left"], bank: ["BANK", "down"], hideout: ["HIDEOUT", "up"], ...Object.fromEntries([0, 1, 2, 3, 4, 5].map((i) => ["pawn" + i, ["PAWN", "up"]])) }, cop: { police: ["POLICE", "up"] } };
+export const HOT = { robber: { blasters: ["GUNS", "up"], gear: ["TOOLS", "left"], bank: ["BANK", "down"], hideout: ["HIDEOUT", "up"], ...Object.fromEntries([0, 1, 2, 3, 4, 5].map((i) => ["pawn" + i, ["PAWN", "up"]])) }, cop: { police: ["POLICE", "up"] } };
 const hotOf = (ic) => (ic.id && HOT[S.role] && HOT[S.role][ic.id]) || null;
 function glow(g, x, y, r, hot, t, big, labels) {
   // the pulsing gold ring (labels are saved and drawn after all the icons, so nothing covers them)

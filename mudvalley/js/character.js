@@ -69,7 +69,7 @@ export function makePerson(look = LOOKS.you, scale = 1) {
   // put a thing in the right hand (null = empty hands)
   P.hold = (obj) => { if (P.item === obj) return; if (P.item) hand.remove(P.item); P.item = obj || null; if (obj) hand.add(obj); };
   // poses: "stand", "walk", "run", "sit" (driving), "ride" (on a bike/ATV), "wave", "jump", "cheer",
-  // "aim" (blaster), "rod" (holding a rod), "cast" (amt = 0..1 through the throw), "reel", "show" (holding up a fish),
+  // "aim" (gun), "rod" (holding a rod), "cast" (amt = 0..1 through the throw), "reel", "show" (holding up a fish),
   // "ko" (knocked out on the ground), "handsup", "cuffed"
   P.pose = (kind, t = 0, amt = 1) => {
     const sw = Math.sin(t * (kind === "run" ? 11 : 8)) * amt;
@@ -147,18 +147,34 @@ export function makeRod(color = 0x3a7ad0) {
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
-// a cartoon paint/stun blaster (a bright toy, nothing real!). tier 0..3 changes the colors and size
+// a realistic-looking gun (made-up models, no real brands). tier 0 pistol, 1 SMG, 2 scoped rifle, 3 pump shotgun.
+// (the hand holds it at the grip = the origin; it points down +z)
 export function makeBlaster(tier = 0) {
-  const g = new THREE.Group(), C = [[0xff5ad8, 0xffe14a], [0x3ad0ff, 0xff8a1a], [0x7aff5a, 0x6a3ad0], [0xffd23a, 0xff3a5a]][tier] || [0xff5ad8, 0xffe14a];
-  const a = mat(C[0]), b = mat(C[1]), glow = new THREE.MeshBasicMaterial({ color: C[1] });
-  const L = 0.42 + tier * 0.08;
-  const body = box(0.12, 0.16, L, a); body.position.set(0, 0.08, L / 2 - 0.05); g.add(body);
-  const grip = box(0.09, 0.2, 0.1, b); grip.position.set(0, -0.05, 0); grip.rotation.x = 0.3; g.add(grip);
-  const tank = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), glow); tank.position.set(0, 0.2, L * 0.35); g.add(tank);
-  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.12, 8), b); nozzle.rotation.x = Math.PI / 2; nozzle.position.set(0, 0.08, L); g.add(nozzle);
-  for (let i = 0; i < tier; i++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.015, 6, 12), b); ring.position.set(0, 0.08, 0.1 + i * 0.09); g.add(ring); }
-  const tip = new THREE.Object3D(); tip.position.set(0, 0.08, L + 0.08); g.add(tip);
-  g.userData = { tip, color: C[0] };
+  const g = new THREE.Group(), steel = mat(0x2a2c30), black = mat(0x141416), dark = mat(0x3a3d42), wood = mat(0x6a4426);
+  const add = (w, h, d, m, x, y, z, rx = 0) => { const o = box(w, h, d, m); o.position.set(x, y, z); o.rotation.x = rx; g.add(o); return o; };
+  const tube = (r, len, m, y, z) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), m); o.rotation.x = Math.PI / 2; o.position.set(0, y, z); g.add(o); return o; };
+  let tipZ = 0.3, tipY = 0.08;
+  add(0.06, 0.17, 0.08, black, 0, -0.04, 0, 0.25); // grip
+  add(0.012, 0.05, 0.06, black, 0, 0.0, 0.08); // trigger guard
+  if (tier === 0) { // pistol
+    add(0.055, 0.06, 0.24, dark, 0, 0.075, 0.07); add(0.05, 0.035, 0.2, steel, 0, 0.035, 0.06);
+    tube(0.012, 0.03, black, 0.075, 0.2); add(0.01, 0.015, 0.012, black, 0, 0.112, 0.17); tipZ = 0.22; tipY = 0.075;
+  } else if (tier === 1) { // SMG
+    add(0.06, 0.09, 0.36, dark, 0, 0.07, 0.1); add(0.04, 0.16, 0.05, black, 0, -0.06, 0.16, -0.15); // magazine
+    tube(0.016, 0.16, steel, 0.08, 0.34); add(0.02, 0.03, 0.22, black, 0, 0.12, 0.06);
+    add(0.015, 0.05, 0.2, steel, 0, 0.06, -0.16); add(0.04, 0.09, 0.02, black, 0, 0.04, -0.26); tipZ = 0.43; tipY = 0.08;
+  } else if (tier === 2) { // scoped rifle
+    add(0.06, 0.08, 0.5, dark, 0, 0.07, 0.15); add(0.055, 0.1, 0.3, wood, 0, 0.03, -0.22, 0.1); // stock
+    add(0.05, 0.06, 0.26, wood, 0, 0.04, 0.3); tube(0.014, 0.42, steel, 0.08, 0.6);
+    tube(0.028, 0.26, black, 0.16, 0.12); tube(0.034, 0.03, black, 0.16, 0.25); tube(0.034, 0.03, black, 0.16, -0.0); add(0.02, 0.04, 0.03, black, 0, 0.125, 0.22); add(0.02, 0.04, 0.03, black, 0, 0.125, 0.02);
+    add(0.035, 0.12, 0.04, black, 0, -0.04, 0.14); tipZ = 0.82; tipY = 0.08;
+  } else { // pump shotgun
+    add(0.065, 0.09, 0.3, dark, 0, 0.07, 0.08); add(0.06, 0.11, 0.32, wood, 0, 0.03, -0.22, 0.1);
+    tube(0.022, 0.62, steel, 0.095, 0.5); tube(0.018, 0.5, black, 0.05, 0.42);
+    add(0.06, 0.06, 0.16, wood, 0, 0.05, 0.42); tipZ = 0.82; tipY = 0.095;
+  }
+  const tip = new THREE.Object3D(); tip.position.set(0, tipY, tipZ); g.add(tip);
+  g.userData = { tip, color: 0x2a2c30 };
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }

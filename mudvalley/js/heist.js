@@ -1,4 +1,4 @@
-// MUD VALLEY RP: robbing INSIDE buildings (all cartoon: goo blasters, and anyone who gets splatted just sees stars).
+// MUD VALLEY RP: robbing INSIDE buildings (guns, but nobody gets hurt for real: anyone who gets hit just sees stars).
 //  - Hold-ups: a robber holding a blaster walks up to the teller / cashier and holds E. They put their hands up,
 //    go to the cash register, scoop out the cash and throw the bundles to you (each one lands in your loot bag).
 //  - Splat the teller with your blaster (Q) and they're knocked out for a while: then you can empty the register.
@@ -45,7 +45,7 @@ export class Heist {
     this.cur = null; this.hold = null; this.flying = []; this.bits = []; this.shots = [];
     this.bitMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.22, 0.11), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }), 120);
     this.bitMesh.count = 0; this.bitMesh.frustumCulled = false; this.bitMesh.setColorAt(0, new THREE.Color()); api.scene.add(this.bitMesh);
-    this.shotMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), 24);
+    this.shotMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), 24);
     this.shotMesh.count = 0; this.shotMesh.frustumCulled = false; this.shotMesh.setColorAt(0, new THREE.Color()); api.scene.add(this.shotMesh);
     // big spinning stars over a knocked-out keeper (so you can see them over the counter)
     this.stars = new THREE.Group();
@@ -105,7 +105,7 @@ export class Heist {
     }
     if (d > 6) return null;
     if (this.t < (this.heldUp[c.bd.id] || 0)) return { text: "The " + H.who + " has no cash left. Come back later!", warn: true, fn: () => SFX.nope() };
-    if (S.equip !== "blaster" || !S.blaster) return { text: S.blaster ? "Take out your blaster (X) to hold up the " + H.who : "Get a blaster at Splat Blasters to hold up the " + H.who, warn: true, fn: () => SFX.nope() };
+    if (S.equip !== "blaster" || !S.blaster) return { text: S.blaster ? "Take out your gun (X) to hold up the " + H.who : "Get a gun at the Gun Shop to hold up the " + H.who, warn: true, fn: () => SFX.nope() };
     if (S.loot >= this.api.crime.lootCap()) return { text: "Your bag is full! Stash it at the hideout", warn: true, fn: () => SFX.nope() };
     return { id: "holdup_" + c.bd.id, text: "Hold E: “Hands up! Give me the cash!”", hold: 0.8, tick: () => {}, done: () => this.startHold() };
   }
@@ -113,7 +113,7 @@ export class Heist {
     const c = this.cur, H = HOLDUP[c.bd.id];
     c.busy = true; this.heldUp[c.bd.id] = this.t + COOLDOWN;
     this.hold = { phase: "handsup", t: 0, throws: 0, total: Math.round(rnd(H.loot[0], H.loot[1]) / 5) * 5, paid: 0, H, done: false };
-    SFX.alarm(); this.api.toast("“Okay, okay! Don’t splat me!”", "The " + H.who + " is getting the cash...", "warn", 3000);
+    SFX.alarm(); this.api.toast("“Okay, okay! Don’t shoot!”", "The " + H.who + " is getting the cash...", "warn", 3000);
   }
   give(n) { // add to the loot bag (up to the bag size), returns how much fit
     const cr = this.api.crime, got = Math.max(0, Math.min(cr.lootCap() - S.loot, Math.round(n / 5) * 5));
@@ -128,22 +128,23 @@ export class Heist {
   fire(yaw) {
     const c = this.cur; if (!c) return false;
     const bl = blasterById(S.blaster) || (S.role === "cop" ? STUN_BLASTER : null);
-    if (!bl) { this.api.toast("No blaster", "Buy one at Splat Blasters in Copper Creek.", "warn"); return false; }
+    if (!bl) { this.api.toast("No gun", "Buy one at the Gun Shop in Copper Creek.", "warn"); return false; }
     const cr = this.api.crime; if (cr.fireT > 0) return false; cr.fireT = bl.rate;
     const me = this.local();
     let dx = Math.sin(yaw), dy = 0, dz = Math.cos(yaw);
     if (c.keeper && !this.isKO()) { const k = this.keeperSpot(), kd = Math.hypot(k.x - me.x, k.z - me.z), a = Math.atan2(k.x - me.x, k.z - me.z); if (kd < bl.range && Math.abs(wrap(a - yaw)) < 0.6) { dx = (k.x - me.x) / kd; dz = (k.z - me.z) / kd; dy = -0.02; } }
-    const col = [0xff5ad8, 0x3ad0ff, 0x7aff5a, 0xffd23a][bl.tier];
-    this.shots.push({ x: me.x + dx * 0.6, y: 1.35, z: me.z + dz * 0.6, vx: dx * bl.speed * 0.6, vy: dy * bl.speed, vz: dz * bl.speed * 0.6, life: 1.2, color: col, stun: bl.stun });
-    SFX.zap(bl.tier); return true;
+    const col = 0xffe6a0, sp = 90;
+    this.shots.push({ x: me.x + dx * 0.6, y: 1.35, z: me.z + dz * 0.6, vx: dx * sp, vy: dy * sp, vz: dz * sp, life: 0.5, color: col, stun: bl.stun });
+    this.api.crime.muzzle(POCKET.x + me.x + dx * 0.7, 1.35, POCKET.z + me.z + dz * 0.7, bl.tier);
+    SFX.bang(bl.tier); return true;
   }
   splatKeeper() {
     const c = this.cur, id = c.bd.id;
-    if (id === "police") { SFX.nope(); this.api.toast("The desk sergeant ducked!", "Nice try. (You can’t splat a cop in their own station.)", "warn"); return; }
+    if (id === "police") { SFX.nope(); this.api.toast("The desk sergeant ducked!", "Nice try. (You can’t shoot a cop in their own station.)", "warn"); return; }
     if (this.hold && !this.hold.done) this.finish();
     this.ko[id] = this.t + KO_TIME; c.busy = true; SFX.stun(); SFX.bonk();
     const H = HOLDUP[id];
-    if (S.role === "robber") { this.api.crime.setWanted(S.wanted + 1); this.api.toast("SPLAT! The " + (H ? H.who : "shopkeeper") + " is seeing stars!", H && c.register ? "Quick: hold E at the cash register to empty it!" : "They’ll wake up soon...", "good", 3600); }
+    if (S.role === "robber") { this.api.crime.setWanted(S.wanted + 1); this.api.toast("BANG! The " + (H ? H.who : "shopkeeper") + " is seeing stars!", H && c.register ? "Quick: hold E at the cash register to empty it!" : "They’ll wake up soon...", "good", 3600); }
     else this.api.toast("Oops! 😵 They’re seeing stars.", "Only robbers get anything for that. They’ll wake up soon.", "warn", 3200);
   }
 
@@ -155,13 +156,17 @@ export class Heist {
     if (c.vault && c.vaultAnim !== undefined && c.vaultAnim < 1) { c.vaultAnim = Math.min(1, c.vaultAnim + dt / 1.6); const k = c.vaultAnim; c.vault.rotation.y = -1.75 * (k * k * (3 - 2 * k)); c.vault.userData.wheel.rotation.z = k * 9; }
     // goo balls flying across the room
     for (let i = this.shots.length - 1; i >= 0; i--) {
-      const s = this.shots[i]; s.life -= dt; s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt; s.vy -= 3 * dt;
-      let hit = false, wall = Math.abs(s.x) > c.bd.w / 2 - 0.1 || Math.abs(s.z) > c.bd.d / 2 - 0.1 || s.y < 0.05 || s.y > 4.3 || s.life <= 0;
-      if (c.keeper && !this.isKO()) { const k = this.keeperSpot(); if (Math.hypot(k.x - s.x, k.z - s.z) < 0.55 && s.y < 2.1) hit = true; }
-      if (c.vault && c.C.includes(c.vaultC) && Math.abs(s.z - VAULT.z) < 0.4 && s.x > VAULT.door0 && s.x < VAULT.door1) wall = true;
+      const s = this.shots[i]; s.life -= dt;
+      let hit = false, wall = false; const n = Math.max(1, Math.ceil(90 * dt / 0.3)), h = dt / n;
+      for (let k = 0; k < n && !hit && !wall; k++) {
+        s.x += s.vx * h; s.y += s.vy * h; s.z += s.vz * h;
+        wall = Math.abs(s.x) > c.bd.w / 2 - 0.1 || Math.abs(s.z) > c.bd.d / 2 - 0.1 || s.y < 0.05 || s.y > 4.3 || s.life <= 0;
+        if (c.keeper && !this.isKO()) { const kp = this.keeperSpot(); if (Math.hypot(kp.x - s.x, kp.z - s.z) < 0.55 && s.y < 2.1) hit = true; }
+        if (c.vault && c.C.includes(c.vaultC) && Math.abs(s.z - VAULT.z) < 0.4 && s.x > VAULT.door0 && s.x < VAULT.door1) wall = true;
+      }
       if (hit || wall) {
-        this.shots.splice(i, 1); SFX.splat();
-        for (let j = 0; j < 10; j++) this.bits.push({ x: POCKET.x + s.x, y: s.y, z: POCKET.z + s.z, vx: rnd(-2, 2), vy: rnd(1, 4), vz: rnd(-2, 2), life: 0.6, color: s.color, spin: rnd(4, 9), r: 0, flat: false });
+        this.shots.splice(i, 1); SFX.ricochet();
+        for (let j = 0; j < 6; j++) this.bits.push({ x: POCKET.x + s.x, y: s.y, z: POCKET.z + s.z, vx: rnd(-2, 2), vy: rnd(1, 4), vz: rnd(-2, 2), life: 0.35, color: j % 2 ? 0xffd060 : 0x8a8a8a, spin: rnd(4, 9), r: 0, flat: false });
         if (hit) this.splatKeeper();
       }
     }
@@ -237,7 +242,8 @@ export class Heist {
     for (const b of this.bits) { if (n >= 120) break; q.setFromEuler(e.set(b.r, b.r * 0.7, b.r * 0.3)); M.compose(v.set(b.x, b.y, b.z), q, s.setScalar(b.flat ? 1 : 0.6)); this.bitMesh.setMatrixAt(n, M); this.bitMesh.setColorAt(n, col.set(b.color)); n++; }
     this.bitMesh.count = n; this.bitMesh.instanceMatrix.needsUpdate = true; if (this.bitMesh.instanceColor) this.bitMesh.instanceColor.needsUpdate = true;
     n = 0; q.identity();
-    for (const sh of this.shots) { M.compose(v.set(POCKET.x + sh.x, sh.y, POCKET.z + sh.z), q, s.setScalar(1)); this.shotMesh.setMatrixAt(n, M); this.shotMesh.setColorAt(n, col.set(sh.color)); n++; }
+    const Z = new THREE.Vector3(0, 0, 1), dir = new THREE.Vector3();
+    for (const sh of this.shots) { const sp = Math.hypot(sh.vx, sh.vy, sh.vz) || 1; dir.set(sh.vx / sp, sh.vy / sp, sh.vz / sp); q.setFromUnitVectors(Z, dir); M.compose(v.set(POCKET.x + sh.x - dir.x * 0.6, sh.y - dir.y * 0.6, POCKET.z + sh.z - dir.z * 0.6), q, s.set(0.04, 0.04, 1.2)); this.shotMesh.setMatrixAt(n, M); this.shotMesh.setColorAt(n, col.set(sh.color)); n++; }
     this.shotMesh.count = n; this.shotMesh.instanceMatrix.needsUpdate = true; if (this.shotMesh.instanceColor) this.shotMesh.instanceColor.needsUpdate = true;
   }
 }

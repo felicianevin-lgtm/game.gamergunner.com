@@ -38,7 +38,7 @@ export const BUILDINGS = [
   T("police", "Police Station", "police", 428, -349, 0, [-6, 9.6], 22, 14, { menu: "police", keeper: "Desk sergeant" }),
   T("hospital", "Hospital", "hospital", 484, -344, 0, [0, 8.6], 18, 12, { keeper: "Nurse" }),
   T("gear", "Tool Barn", "shop", 330, -300, Math.PI, [0, 7.6], 16, 12, { menu: "gear", keeper: "Shopkeeper", goods: "tools" }),
-  T("blasters", "Splat Blasters", "shop", 366, -300, Math.PI, [0, 7.6], 16, 12, { menu: "blasters", keeper: "Shopkeeper", goods: "blasters" }),
+  T("blasters", "Gun Shop", "shop", 366, -300, Math.PI, [0, 7.6], 16, 12, { menu: "blasters", keeper: "Shopkeeper", goods: "blasters" }),
   T("cafe", "Copper Cafe", "cafe", 418, -301, Math.PI, [0, 6.6], 12, 10, { keeper: "Barista" }),
   T("toys", "Toy Train Shop", "shop", 436, -301, Math.PI, [0, 6.6], 12, 10, { keeper: "Toy maker", goods: "toys" }),
   ...PAWNS.map((p, i) => T("pawn" + i, "Pawn Shop", "shop", p.x, p.z, p.yaw, [0, 6.6], 12, 10, { menu: "pawn", keeper: "Pawn broker", goods: "pawn" })),
@@ -103,7 +103,7 @@ function counter(b, C, x, z, len, color = 0x8a5a30, top = 0xe8e2d4) { b.box(len,
 function shelf(b, C, x, z, len, goods, rot = 0) {
   const sx = rot ? 0.5 : len, sz = rot ? len : 0.5;
   b.box(sx, 2.4, sz, x, 0, z, 0x9a7a52); for (const y of [0.5, 1.2, 1.9]) b.box(sx + 0.05, 0.06, sz + 0.05, x, y, z, 0x7a5a32);
-  const cols = { tools: [0xff8a1a, 0x3a7ad0, 0xc8ccd2, 0xffd23a], blasters: [0xff5ad8, 0x3ad0ff, 0x7aff5a, 0xffd23a], fish: [0x3a8ad0, 0xff7aa8, 0xc8a060, 0x2aa04a], toys: [0xff3a3a, 0x3aa0ff, 0xffd23a, 0x4adf6a], boxes: [0xb08a5a, 0x9a7448, 0xc8a070], papers: [0xffffff, 0xf4f0c8], cars: [0xe0203a, 0x2a7ad0, 0xffd23a], pawn: [0xffd23a, 0xc8ccd2, 0x2a2a2a, 0x8a4ad8, 0xe0203a] }[goods] || [0xd04030, 0x3a7ad0, 0xf0c030, 0x40a050];
+  const cols = { tools: [0xff8a1a, 0x3a7ad0, 0xc8ccd2, 0xffd23a], blasters: [0x2a2c30, 0x3a3d42, 0x6a4426, 0x141416], fish: [0x3a8ad0, 0xff7aa8, 0xc8a060, 0x2aa04a], toys: [0xff3a3a, 0x3aa0ff, 0xffd23a, 0x4adf6a], boxes: [0xb08a5a, 0x9a7448, 0xc8a070], papers: [0xffffff, 0xf4f0c8], cars: [0xe0203a, 0x2a7ad0, 0xffd23a], pawn: [0xffd23a, 0xc8ccd2, 0x2a2a2a, 0x8a4ad8, 0xe0203a] }[goods] || [0xd04030, 0x3a7ad0, 0xf0c030, 0x40a050];
   for (const y of [0.56, 1.26, 1.96]) for (let i = 0; i < 5; i++) { const t = -0.4 + i * 0.2; b.box(rot ? 0.3 : 0.3, 0.38, rot ? 0.3 : 0.3, x + (rot ? 0 : t * len), y, z + (rot ? t * len : 0), cols[(i + Math.round(y * 3)) % cols.length]); }
   solid(C, x, z, sx / 2, sz / 2);
 }

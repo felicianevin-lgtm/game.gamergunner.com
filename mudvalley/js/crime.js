@@ -1,4 +1,4 @@
-// MUD VALLEY RP: robbers and cops! (all cartoon: blasters shoot paint + stun goo, and anyone who gets hit is just
+// MUD VALLEY RP: robbers and cops! (guns with bullet tracers, but nobody gets hurt for real: anyone who gets hit is just
 // "knocked out" for a bit, seeing stars. Nobody gets hurt.)
 //  - Robber career: buy gear at the Tool Barn, rob registers / ATMs / the jewelry store / the bank vault (hold E),
 //    get a wanted level (1-5 stars), lose the cops, then stash your loot at the hideout to turn it into money.
@@ -33,14 +33,15 @@ export const GEAR = [
   { id: "duffel", name: "Big Duffel Bag", price: 800, icon: "👜", desc: "Carry way more loot: $5,000 instead of $1,500." },
   { id: "mask", name: "Ski Mask", price: 250, icon: "🎭", desc: "Robberies give 1 less star, and you lose the cops faster." },
 ];
-// cartoon blasters: they shoot paint + stun goo. Anyone hit is knocked out for a few seconds (stars spin around their head)
+// guns (made-up models). Real-looking with bullet tracers + a bang, but anyone hit is just knocked out for a few
+// seconds (stars spin around their head). (The ids are the old blaster ids so saves keep what you bought.)
 export const BLASTERS = [
-  { id: "splat", name: "Splat Pistol", price: 500, tier: 0, rate: 0.55, range: 32, stun: 4, speed: 44, desc: "A pink paint pistol. Point, splat, done!" },
-  { id: "rapid", name: "Bubble Rapid-Fire", price: 1800, tier: 1, rate: 0.16, range: 28, stun: 2.5, speed: 48, desc: "Fires tons of goo bubbles really fast." },
-  { id: "long", name: "Long-Range Zapper", price: 3500, tier: 2, rate: 1.0, range: 75, stun: 6, speed: 80, desc: "Zaps targets from super far away." },
-  { id: "mega", name: "Mega Goo Cannon", price: 6000, tier: 3, rate: 0.9, range: 40, stun: 8, speed: 36, splash: 5, desc: "A huge goo ball that splats everyone nearby." },
+  { id: "splat", name: "Ridgeback 9 Pistol", price: 500, tier: 0, rate: 0.45, range: 34, stun: 4, speed: 170, desc: "A compact 9mm handgun. Quick and easy." },
+  { id: "rapid", name: "Hornet SMG", price: 1800, tier: 1, rate: 0.11, range: 30, stun: 2.5, speed: 170, desc: "Full-auto. Sprays bullets really fast." },
+  { id: "long", name: "Longhorn Scoped Rifle", price: 3500, tier: 2, rate: 1.1, range: 90, stun: 6, speed: 260, desc: "Bolt-action with a scope. Hits from super far away." },
+  { id: "mega", name: "Thunder Pump Shotgun", price: 6000, tier: 3, rate: 0.95, range: 26, stun: 8, speed: 150, splash: 3, desc: "One blast hits everybody in front of you." },
 ];
-export const STUN_BLASTER = { id: "stun", name: "Police Stun Blaster", price: 0, tier: 1, rate: 0.5, range: 36, stun: 5, speed: 50, desc: "Every cop gets one." };
+export const STUN_BLASTER = { id: "stun", name: "Police Sidearm", price: 0, tier: 0, rate: 0.45, range: 36, stun: 5, speed: 170, desc: "Every cop carries one." };
 export const blasterById = (id) => BLASTERS.find((b) => b.id === id) || (id === "stun" ? STUN_BLASTER : null);
 export const RANKS = [{ name: "Rookie", at: 0, mult: 1 }, { name: "Officer", at: 3, mult: 1.25 }, { name: "Sergeant", at: 8, mult: 1.5 }, { name: "Detective", at: 15, mult: 1.8 }, { name: "Chief", at: 25, mult: 2.2 }];
 export const rankOf = (n = S.cop.arrests) => { let r = RANKS[0]; for (const k of RANKS) if (n >= k.at) r = k; return r; };
@@ -89,10 +90,12 @@ export class Crime {
     this.bolts = [[0xffe14a, 0.11, 0.5], [0xffffff, 0.045, 1]].map(([c, w, o]) => { const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: c, transparent: o < 1, opacity: o, depthWrite: o === 1 }), 11); m.userData.w = w; m.frustumCulled = false; m.visible = false; scene.add(m); return m; });
     this.bolt = null; this.patrols = []; this.pull = null; this.ticketCool = 0; this.patrolT = 0;
     for (const s of ROB_SPOTS) s.readyAt = 0;
-    // flying goo balls + paint splats (instanced: one draw call each)
-    this.shotMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), 80);
-    this.splatMesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }), 60);
-    for (const m of [this.shotMesh, this.splatMesh]) { m.count = 0; m.frustumCulled = false; m.setColorAt(0, new THREE.Color()); scene.add(m); }
+    // bullet tracers (glowing streaks), muzzle flashes + bullet marks on the ground (instanced: one draw call each)
+    this.shotMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), 80);
+    this.splatMesh = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 8).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }), 60);
+    this.flashMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }), 20);
+    for (const m of [this.shotMesh, this.splatMesh, this.flashMesh]) { m.count = 0; m.frustumCulled = false; m.setColorAt(0, new THREE.Color()); scene.add(m); }
+    this.flashes = [];
     // a spike strip (copied each time a cop drops one)
     const sp = new THREE.Group(), dark = new THREE.MeshLambertMaterial({ color: 0x2a2a2e }), metal = new THREE.MeshLambertMaterial({ color: 0xc8ccd2 }), yel = new THREE.MeshLambertMaterial({ color: 0xffd23a });
     const base = new THREE.Mesh(new THREE.BoxGeometry(7, 0.12, 0.6), dark); base.position.y = 0.06; sp.add(base);
@@ -234,7 +237,7 @@ export class Crime {
     this.api.exitCar(); SFX.stun();
     this.ko = { t: 0, why, soft: !!soft, by };
     if (!(why === "cop" && S.role === "robber" && S.wanted > 0) && !this.api.indoors()) { const me = this.api.me(); this.api.dropMine(me.x, me.z); }
-    this.api.toast(by ? "SPLAT! " + by + " got you!" : "KNOCKED OUT!", soft ? "You see stars for a second..." : why === "cop" ? "Stun goo! You see stars..." : "Bonk! You see stars...", "warn", 2400);
+    this.api.toast(by ? "HIT! " + by + " got you!" : "KNOCKED OUT!", soft ? "You see stars for a second..." : why === "cop" ? "You got hit! You see stars..." : "Bonk! You see stars...", "warn", 2400);
   }
   // a lobby friend zapped you (mp.js: they're a cop and you're a robber, or the other way around). k: 1 blaster, 2 taser
   zappedBy(p, k) {
@@ -242,8 +245,8 @@ export class Crime {
     const ok = (p.role === "cop" && S.role === "robber") || (p.role === "robber" && S.role === "cop"); if (!ok) return;
     const me = this.api.me(); if (Math.hypot((p.x ?? 1e9) - me.x, (p.z ?? 1e9) - me.z) > 90) return; // (they have to be near you)
     if (me.inCar && k === 1) { // in a car it takes 3 splats
-      this.carHits = (this.carHits || 0) + 1; this.carHitT = 12; if (me.body) { me.body.vx *= 0.5; me.body.vz *= 0.5; } SFX.splat(); this.api.shake(0.35);
-      if (this.carHits < 3) { this.api.toast("SPLAT!", p.n + " is shooting your ride! (" + (3 - this.carHits) + " more and you’re out)", "warn", 1800); return; }
+      this.carHits = (this.carHits || 0) + 1; this.carHitT = 12; if (me.body) { me.body.vx *= 0.5; me.body.vz *= 0.5; } SFX.ricochet(); this.api.shake(0.35);
+      if (this.carHits < 3) { this.api.toast("BANG!", p.n + " is shooting your ride! (" + (3 - this.carHits) + " more and you’re out)", "warn", 1800); return; }
     }
     this.carHits = 0;
     if (p.role === "cop" && S.wanted > 0) this.knockOut("cop", false, p.n); // (then busted!)
@@ -281,7 +284,7 @@ export class Crime {
   // ------------------------------------------------------------ shooting
   fire(aimYaw) {
     const bl = blasterById(S.blaster) || (S.role === "cop" ? STUN_BLASTER : null);
-    if (!bl) { this.api.toast("No blaster", "Buy one at Splat Blasters in Copper Creek.", "warn"); return false; }
+    if (!bl) { this.api.toast("No gun", "Buy one at the Gun Shop in Copper Creek.", "warn"); return false; }
     if (this.fireT > 0) return false;
     this.fireT = bl.rate;
     const me = this.api.me();
@@ -294,17 +297,21 @@ export class Crime {
     const ox = me.x + Math.sin(aimYaw) * 0.7, oz = me.z + Math.cos(aimYaw) * 0.7, oy = me.y + 1.35;
     let dx = Math.sin(aimYaw), dy = 0.04, dz = Math.cos(aimYaw);
     if (best) { const tx = best.x + (best.vx || 0) * bd / bl.speed, tz = best.z + (best.vz || 0) * bd / bl.speed, ty = best.y + 1; const l = Math.hypot(tx - ox, ty - oy, tz - oz); dx = (tx - ox) / l; dy = (ty - oy) / l; dz = (tz - oz) / l; }
-    const col = [0xff5ad8, 0x3ad0ff, 0x7aff5a, 0xffd23a][bl.tier];
-    this.shots.push({ x: ox, y: oy, z: oz, vx: dx * bl.speed, vy: dy * bl.speed, vz: dz * bl.speed, life: bl.range / bl.speed + 0.15, mine: true, stun: bl.stun, splash: bl.splash || 0, color: col });
-    SFX.zap(bl.tier); this.api.alarm(me.x, me.z, 18);
+    const col = 0xffe6a0;
+    this.shots.push({ x: ox, y: oy, z: oz, vx: dx * bl.speed, vy: dy * bl.speed, vz: dz * bl.speed, life: bl.range / bl.speed + 0.05, mine: true, stun: bl.stun, splash: bl.splash || 0, color: col });
+    if (bl.splash) for (let k = 0; k < 5; k++) { const a = (k - 2) * 0.07 + (Math.random() - 0.5) * 0.04, ca = Math.cos(a), sa = Math.sin(a), ex = dx * ca + dz * sa, ez = -dx * sa + dz * ca; this.shots.push({ x: ox, y: oy, z: oz, vx: ex * bl.speed, vy: (dy + (Math.random() - 0.5) * 0.05) * bl.speed, vz: ez * bl.speed, life: bl.range / bl.speed, mine: false, vis: true, stun: 0, splash: 0, color: col }); }
+    this.muzzle(ox, oy, oz, bl.tier); this.api.shake(0.06 + bl.tier * 0.04);
+    SFX.bang(bl.tier); this.api.alarm(me.x, me.z, 30);
     this.api.shared(ox, oy, oz, ox + dx * bl.range, oy + dy * bl.range, oz + dz * bl.range, bl.tier);
     return true;
   }
   // a friend's shot (just to see it: their game decides who it hits)
   friendShot(p, x, w) {
     if (w === 15) { this.zapBolt({ x: p[0], y: p[1], z: p[2] }, { x: x[0], y: x[1], z: x[2] }); SFX.zap(3); return; }
-    const l = Math.hypot(x[0] - p[0], x[1] - p[1], x[2] - p[2]) || 1, sp = 44;
-    this.shots.push({ x: p[0], y: p[1], z: p[2], vx: (x[0] - p[0]) / l * sp, vy: (x[1] - p[1]) / l * sp, vz: (x[2] - p[2]) / l * sp, life: l / sp, mine: false, vis: true, stun: 0, splash: 0, color: [0xff5ad8, 0x3ad0ff, 0x7aff5a, 0xffd23a][w] || 0xff5ad8 });
+    const l = Math.hypot(x[0] - p[0], x[1] - p[1], x[2] - p[2]) || 1, sp = 170;
+    this.shots.push({ x: p[0], y: p[1], z: p[2], vx: (x[0] - p[0]) / l * sp, vy: (x[1] - p[1]) / l * sp, vz: (x[2] - p[2]) / l * sp, life: l / sp, mine: false, vis: true, stun: 0, splash: 0, color: 0xffe6a0 });
+    this.muzzle(p[0], p[1], p[2], w || 0);
+    const me = this.api.me(); if (Math.hypot(me.x - p[0], me.z - p[2]) < 120) SFX.bang(w || 0);
   }
   // ------------------------------------------------------------ the cop's taser: a crackling lightning bolt (short range)
   tase(aimYaw) {
@@ -321,13 +328,15 @@ export class Crime {
     return true;
   }
   zapBolt(from, to, target) { this.bolt = { from, to, t: 0, target }; }
+  muzzle(x, y, z, tier = 0) { if (this.flashes.length >= 20) this.flashes.shift(); this.flashes.push({ x, y, z, life: 0.06, r: 0.13 + tier * 0.04 }); }
   // who can splat whom in a lobby: cops vs robbers only (civilians can't be hit and can't hit anyone)
   static canHit(a, b) { return (a === "cop" && b === "robber") || (a === "robber" && b === "cop"); }
-  npcShoot(from, to, speed = 26) {
-    const ox = from.x, oy = from.y + 1.6, oz = from.z, tx = to.x + (to.vx || 0) * 0.35, ty = to.y + 1, tz = to.z + (to.vz || 0) * 0.35;
+  npcShoot(from, to, speed = 120) {
+    const miss = Math.random() < 0.5 ? 0 : 1.6; // (NPC cops aren't great shots: about half of them miss)
+    const ox = from.x, oy = from.y + 1.6, oz = from.z, tx = to.x + (Math.random() - 0.5) * 2 * miss, ty = to.y + 1, tz = to.z + (Math.random() - 0.5) * 2 * miss;
     const l = Math.hypot(tx - ox, ty - oy, tz - oz) || 1;
-    this.shots.push({ x: ox, y: oy, z: oz, vx: (tx - ox) / l * speed, vy: (ty - oy) / l * speed, vz: (tz - oz) / l * speed, life: 1.6, mine: false, stun: 3, splash: 0, color: 0x3a8aff });
-    SFX.zap(1);
+    this.shots.push({ x: ox, y: oy, z: oz, vx: (tx - ox) / l * speed, vy: (ty - oy) / l * speed, vz: (tz - oz) / l * speed, life: 0.6, mine: false, stun: 3, splash: 0, color: 0xffe6a0 });
+    this.muzzle(ox, oy, oz, 0); SFX.bang(0);
   }
   // who your blaster can hit
   targets() {
@@ -341,31 +350,34 @@ export class Crime {
   }
   hit(t, s) {
     if (t.kind === "cop") {
-      if (S.role !== "robber") { if (this.warnT <= 0) { this.warnT = 4; this.api.toast("Hey, that’s a cop!", "Only robbers fight the cops. (Splat!)", "warn"); } return; }
+      if (S.role !== "robber") { if (this.warnT <= 0) { this.warnT = 4; this.api.toast("Hey, that’s a cop!", "Only robbers fight the cops.", "warn"); } return; }
       t.ref.stunT = Math.max(t.ref.stunT, s.stun); SFX.stun();
     } else if (t.kind === "robcar") { t.ref.stunT = Math.max(t.ref.stunT || 0, s.stun * 0.7); t.ref.car.b.vx *= 0.4; t.ref.car.b.vz *= 0.4; SFX.stun(); }
     else if (t.kind === "robber") { const r = t.ref; if (r.state !== "ko") { r.state = "ko"; r.koT = s.stun + 2; SFX.stun(); this.api.toast(s.taser ? "ZAPPED! ⚡" : "Robber knocked out!", "Quick, cuff them! (hold E)", "good"); } }
     else if (t.kind === "civ") this.api.knockCiv(t.ref, S.role);
-    else if (t.kind === "player") { const p = t.ref; if ((p.hitT || 0) > this.t) return; p.hitT = this.t + 0.5; this.api.zap(p.id, s.taser ? 2 : 1); SFX.stun(); this.api.toast((s.taser ? "⚡ ZAPPED " : "SPLAT! ") + p.n, p.role === "robber" && p.wanted > 0 ? "They’re wanted: that’s a bust!" : "They’re seeing stars!", "good", 1800); }
+    else if (t.kind === "player") { const p = t.ref; if ((p.hitT || 0) > this.t) return; p.hitT = this.t + 0.5; this.api.zap(p.id, s.taser ? 2 : 1); SFX.stun(); this.api.toast((s.taser ? "⚡ ZAPPED " : "HIT! ") + p.n, p.role === "robber" && p.wanted > 0 ? "They’re wanted: that’s a bust!" : "They’re seeing stars!", "good", 1800); }
   }
   updateShots(dt) {
     const me = this.api.me(), tg = this.targets();
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const s = this.shots[i];
-      s.life -= dt; s.vy -= 4 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
-      let done = s.life <= 0 || s.y < groundAt(s.x, s.z);
-      if (s.mine) {
-        for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < t.r + 0.3 && s.y > t.y - 0.5 && s.y < t.y + 3.2) { done = true; break; }
-        if (done && s.splash) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < s.splash) this.hit(t, s); }
-        else if (done) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < t.r + 0.5 && s.y > t.y - 0.6 && s.y < t.y + 3.3) { this.hit(t, s); break; } }
-      } else if (!s.vis && !me.inCar && Math.hypot(me.x - s.x, me.z - s.z) < 0.8 && s.y > me.y && s.y < me.y + 2) {
-        done = true; this.knockOut("cop");
+      s.life -= dt;
+      const n = Math.max(1, Math.ceil(Math.hypot(s.vx, s.vy, s.vz) * dt / 0.5)), h = dt / n;
+      let done = false, hitT = null;
+      for (let k = 0; k < n && !done; k++) {
+        s.x += s.vx * h; s.y += s.vy * h; s.z += s.vz * h;
+        if (s.y < groundAt(s.x, s.z)) { done = true; break; }
+        if (s.mine) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < t.r + 0.45 && s.y > t.y - 0.6 && s.y < t.y + 3.3) { done = true; hitT = t; break; } }
+        else if (!s.vis && !me.inCar && Math.hypot(me.x - s.x, me.z - s.z) < 0.8 && s.y > me.y && s.y < me.y + 2) { done = true; this.knockOut("cop"); }
       }
+      if (s.mine && done && s.splash) { for (const t of tg) if (Math.hypot(t.x - s.x, t.z - s.z) < s.splash) this.hit(t, s); }
+      else if (hitT) this.hit(hitT, s);
+      if (s.life <= 0 && !done) { this.shots.splice(i, 1); continue; }
       if (done) {
-        this.shots.splice(i, 1); SFX.splat();
-        this.api.fx.splash(s.x, Math.max(s.y, groundAt(s.x, s.z)) + 0.2, s.z, 6, 0.5);
-        if (this.splats.length >= 60) this.splats.shift();
-        this.splats.push({ x: s.x, z: s.z, y: groundAt(s.x, s.z) + 0.06, r: s.splash ? 2.2 : 0.9, life: 8, color: s.color });
+        this.shots.splice(i, 1); SFX.ricochet();
+        const gy = groundAt(s.x, s.z);
+        this.api.fx.sparks(s.x, Math.max(s.y, gy) + 0.1, s.z, hitT ? 3 : 6); if (!hitT) this.api.fx.dust(s.x, gy, s.z, 1, 0xb0a080, 0.35);
+        if (!hitT && s.y < gy + 0.6) { if (this.splats.length >= 60) this.splats.shift(); this.splats.push({ x: s.x, z: s.z, y: gy + 0.05, r: 0.13, life: 8, color: 0x1a1a1a }); }
       }
     }
     for (let i = this.splats.length - 1; i >= 0; i--) { this.splats[i].life -= dt; if (this.splats[i].life <= 0) this.splats.splice(i, 1); }
@@ -666,11 +678,16 @@ export class Crime {
     if (this.call) { const r = this.call.robber; if (r.state === "fleeing" || r.state === "robbing") { placeModel(r.car.b); animateCar(r.car.m, { speed: speedOf(r.car.b), steer: r.car.b.steer, wheelDrop: r.car.b.wheelDrop }, dt); r.stars.rotation.y += dt * 4; } }
     const M = new THREE.Matrix4(), col = new THREE.Color(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
     let n = 0;
-    for (const s of this.shots) { M.compose(v.set(s.x, s.y, s.z), q, sc.setScalar(s.splash ? 2.2 : 1)); this.shotMesh.setMatrixAt(n, M); this.shotMesh.setColorAt(n, col.set(s.color)); n++; }
+    const Z = new THREE.Vector3(0, 0, 1), dir = new THREE.Vector3();
+    for (const s of this.shots) { const sp = Math.hypot(s.vx, s.vy, s.vz) || 1, len = Math.min(3.2, sp * 0.018); dir.set(s.vx / sp, s.vy / sp, s.vz / sp); q.setFromUnitVectors(Z, dir); M.compose(v.set(s.x - dir.x * len / 2, s.y - dir.y * len / 2, s.z - dir.z * len / 2), q, sc.set(0.045, 0.045, len)); this.shotMesh.setMatrixAt(n, M); this.shotMesh.setColorAt(n, col.set(s.color)); n++; }
+    q.identity();
     this.shotMesh.count = n; this.shotMesh.instanceMatrix.needsUpdate = true; if (this.shotMesh.instanceColor) this.shotMesh.instanceColor.needsUpdate = true;
     n = 0;
     for (const s of this.splats) { const k = Math.min(1, s.life / 2); M.compose(v.set(s.x, s.y, s.z), q, sc.set(s.r * k, 1, s.r * k)); this.splatMesh.setMatrixAt(n, M); this.splatMesh.setColorAt(n, col.set(s.color)); n++; }
     this.splatMesh.count = n; this.splatMesh.instanceMatrix.needsUpdate = true; if (this.splatMesh.instanceColor) this.splatMesh.instanceColor.needsUpdate = true;
+    n = 0;
+    for (let i = this.flashes.length - 1; i >= 0; i--) { const f = this.flashes[i]; f.life -= dt; if (f.life <= 0) { this.flashes.splice(i, 1); continue; } q.setFromAxisAngle(Z, Math.random() * 6); M.compose(v.set(f.x, f.y, f.z), q, sc.setScalar(f.r * (0.7 + Math.random() * 0.6))); this.flashMesh.setMatrixAt(n, M); this.flashMesh.setColorAt(n, col.set(i % 2 ? 0xffd060 : 0xffa030)); n++; }
+    this.flashMesh.count = n; this.flashMesh.instanceMatrix.needsUpdate = true; if (this.flashMesh.instanceColor) this.flashMesh.instanceColor.needsUpdate = true;
   }
   // what to show on the HUD
   hud() {

@@ -109,9 +109,9 @@ export class NPCs {
     if (c.state === "ko") return;
     c.state = "ko"; c.koT = 20; SFX.stun(); SFX.bonk();
     this.alarm(c.x, c.z, 30);
-    if (byRole === "cop") { const f = Math.min(S.money, 100); S.money -= f; this.api.bumpMoney(); this.api.toast("Hey! That’s a civilian!", "Cops don’t splat regular people. Fine: -" + money(f), "warn", 3200); save(); return; }
+    if (byRole === "cop") { const f = Math.min(S.money, 100); S.money -= f; this.api.bumpMoney(); this.api.toast("Hey! That’s a civilian!", "Cops don’t shoot regular people. Fine: -" + money(f), "warn", 3200); save(); return; }
     if (c.items.length) { this.dropBag(c.x + rnd(-0.6, 0.6), c.z + rnd(-0.6, 0.6), c.items, false); c.items = []; }
-    this.api.toast("SPLAT! They dropped their stuff!", "Walk over to the backpack and press E. Sell it at a Pawn Shop. 🎒", "good", 3000);
+    this.api.toast("They dropped their stuff!", "Walk over to the backpack and press E. Sell it at a Pawn Shop. 🎒", "good", 3000);
     if (S.role !== "cop") this.api.crime.setWanted(S.wanted + 1);
   }
   dropBag(x, z, items, mine) {

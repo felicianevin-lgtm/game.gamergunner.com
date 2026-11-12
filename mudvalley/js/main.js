@@ -129,7 +129,7 @@ const MENUS = { pawn: () => UI.pawn(), dealer: () => UI.dealer(), jobs: () => UI
 function insideActions(out) {
   const R = interiors.cur, w = G.me.w, l = interiors.local(w), bd = R.bd;
   if (l.z > bd.d / 2 - 1.7 && Math.abs(l.x) < 1.5) { out.E = { text: "Leave " + bd.name, fn: goOutside }; return out; }
-  if (S.equip === "blaster") out.Q = { text: "Shoot the blaster", fn: useItem };
+  if (S.equip === "blaster") out.Q = { text: "Shoot", fn: useItem };
   out.E = crime.robAction({ x: l.x, z: l.z, room: bd.id }) || heist.action(l);
   if (out.E) return out;
   for (const sp of R.spots) {
@@ -166,8 +166,8 @@ function applyItem() {
 function cycleItem() {
   if (fishing.busy) fishing.cancel();
   let L = itemsOwned();
-  if (inside()) { L = L.filter((k) => k === "none" || k === "blaster"); if (L.length < 2) { SFX.nope(); H.toast("Not inside!", "Only a blaster can come out indoors.", "warn", 1800); return; } }
-  if (L.length < 2) { SFX.nope(); H.toast("Nothing to hold yet", "Buy a blaster at Splat Blasters or a fishing rod at the Bait & Tackle.", "warn"); return; }
+  if (inside()) { L = L.filter((k) => k === "none" || k === "blaster"); if (L.length < 2) { SFX.nope(); H.toast("Not inside!", "Only a gun can come out indoors.", "warn", 1800); return; } }
+  if (L.length < 2) { SFX.nope(); H.toast("Nothing to hold yet", "Buy a gun at the Gun Shop or a fishing rod at the Bait & Tackle.", "warn"); return; }
   S.equip = L[(L.indexOf(S.equip) + 1) % L.length]; applyItem(); SFX.click();
   const tip = { none: "", blaster: "Q = shoot (it aims for you!)", rod: "Face the water and press Q to cast", spikes: "Q = drop a spike strip", taser: "Q = zap! (short range, it aims for you)" }[S.equip];
   H.toast("🔄 " + ITEM_NAME[S.equip], tip, "", 2200);
@@ -209,7 +209,7 @@ function roleChanged(r) {
   hotBeacons(r);
   if (r === "robber") {
     const shop = !S.blaster ? "blasters" : !S.gear.drill ? "gear" : null;
-    if (shop) { GAME.setWaypoint({ x: PLACES[shop].x, z: PLACES[shop].z, name: PLACES[shop].name }); setTimeout(() => H.toast("🌟 " + (shop === "blasters" ? "Splat Blasters" : "The Tool Barn") + " is on your map!", shop === "blasters" ? "Get a blaster to hold up the teller. Then get tools at the Tool Barn next door." : "Get the Super Drill for the bank vault.", "good", 5000), 1600); }
+    if (shop) { GAME.setWaypoint({ x: PLACES[shop].x, z: PLACES[shop].z, name: PLACES[shop].name }); setTimeout(() => H.toast("🌟 " + (shop === "blasters" ? "The Gun Shop" : "The Tool Barn") + " is on your map!", shop === "blasters" ? "Get a gun to hold up the teller. Then get tools at the Tool Barn next door." : "Get the Super Drill for the bank vault.", "good", 5000), 1600); }
   }
   if (r === "cop") { const c = spawnPoliceCar(); H.toast("👮 Your police car is ready", "It’s parked at the Police Station. Hop in (F) and press G for the siren!", "good", 4200); }
   else removePoliceCar();
@@ -327,7 +327,7 @@ function actions() {
   if (inside()) return insideActions(out);
   // Q: use what you're holding
   if (c) { if (S.role === "cop") out.Q = { text: "Drop a spike strip (" + S.cop.spikes + ")", fn: useItem }; }
-  else if (S.equip === "blaster") out.Q = { text: "Shoot the blaster", fn: useItem };
+  else if (S.equip === "blaster") out.Q = { text: "Shoot", fn: useItem };
   else if (S.equip === "rod") out.Q = fishing.state === "bite" ? { text: "HOOK IT!", fn: useItem } : fishing.state === "reel" ? { text: "Hold to reel in", fn: () => {} } : fishing.state === "wait" ? { text: "Waiting for a bite... (Q = reel in)", fn: useItem } : fishing.busy ? null : { text: fishing.waterAhead() ? "Cast your line" : "Face the water to fish", warn: !fishing.waterAhead(), fn: useItem };
   else if (S.equip === "spikes") out.Q = { text: "Drop a spike strip (" + S.cop.spikes + ")", fn: useItem };
   else if (S.equip === "taser") out.Q = { text: "Zap with the taser ⚡", fn: useItem };
@@ -384,7 +384,7 @@ function actions() {
       if (raceById(id)) { out.E = { text: "Race: " + raceById(id).name, fn: () => UI.raceInfo(raceById(id)) }; break; }
       if (id === "police") { out.E = { text: "Enter the Police Station", fn: () => UI.police() }; break; }
       if (id === "gear") { out.E = { text: "Shop at the Tool Barn", fn: () => UI.gear() }; break; }
-      if (id === "blasters") { out.E = { text: "Shop at Splat Blasters", fn: () => UI.blasters() }; break; }
+      if (id === "blasters") { out.E = { text: "Shop at the Gun Shop", fn: () => UI.blasters() }; break; }
       if (id === "bait") { out.E = { text: "Bait & Tackle: rods + sell fish", fn: () => UI.bait() }; break; }
       if (id === "hideout") { out.E = S.role === "robber" ? { text: S.loot ? "Stash your loot (" + money(S.loot) + ")" : "Robber Hideout", fn: () => UI.hideout() } : { text: "A spooky old shack...", fn: () => UI.hideout() }; break; }
     }

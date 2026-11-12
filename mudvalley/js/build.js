@@ -502,7 +502,7 @@ export function gearShop(scene, b) {
   bsign(scene, b, "TOOL BARN", 12, 2, 0, 9.0, 7.3, { bg: "#ffb020", fg: "#3a1a00" });
 }
 export function blasterShop(scene, b) {
-  shop(scene, b, "SPLAT BLASTERS", 0xfff2a0, 0xff5ad8, 18, 14, 6, { bg: "#ff5ad8", fg: "#ffffff", stroke: "#6a0a4a" });
+  shop(scene, b, "GUN SHOP", 0xd8d2c4, 0x3a3a3a, 18, 14, 6, { bg: "#2a2a2a", fg: "#ffd23a", stroke: "#000000" });
   // paint splats all over the walls
   const cols = [0x3ad0ff, 0x7aff5a, 0xff8a1a, 0x9a5aff, 0xff3a5a];
   for (let i = 0; i < 12; i++) b.add(new THREE.CylinderGeometry(0.5 + (i % 3) * 0.3, 0.5 + (i % 3) * 0.3, 0.05, 9), cols[i % 5], -8 + (i * 1.47) % 16, 1 + ((i * 2.3) % 4.6), 7.06, Math.PI / 2, 0, 0);
