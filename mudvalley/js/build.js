@@ -186,7 +186,7 @@ export function postOffice(scene, b) {
 }
 export function pizza(scene, b) {
   b.box(20, 6, 18, 0, 0, 0, 0xf3e3c3).solid(0, 0, 10, 9); b.box(20.6, 0.6, 18.6, 0, 6, 0, 0x8a2a1a);
-  for (let i = 0; i < 10; i++) b.add(new THREE.BoxGeometry(2, 0.12, 2.4), i % 2 ? 0xffffff : 0xe0302a, -9 + i * 2, 4.2, 10.1, -0.5, 0, 0);
+  for (let i = 0; i < 10; i++) b.add(new THREE.BoxGeometry(2, 0.12, 2.4), i % 2 ? 0xffffff : 0xe0302a, -9 + i * 2, 4.2, 10.1, 0.5, 0, 0);
   windows(b, 16, 2.4, 9.05, 3, 1.8, 3.2, 0xffe9a8); b.box(2.6, 3.4, 0.2, 7.5, 0, 9.1, 0x6a2a1a);
   b.cyl(4, 0.5, 0, 6.6, 0, 0xf0b040, 16); b.cyl(3.6, 0.2, 0, 7.1, 0, 0xffd860, 16);
   for (let i = 0; i < 7; i++) { const a = i * 0.9; b.cyl(0.5, 0.12, Math.cos(a) * 2.2, 7.3, Math.sin(a) * 2.2, 0xc8301a, 8); }
@@ -448,7 +448,7 @@ export function shop(scene, b, text, wall, trim, w = 18, d = 14, h = 6, signOpts
   b.box(w, h, d, 0, 0, 0, wall).solid(0, 0, w / 2, d / 2);
   b.box(w + 0.6, 0.6, d + 0.6, 0, h, 0, trim);
   windows(b, w - 4, 2.4, d / 2 + 0.05, 2, 2, (w - 8) / 2.4, 0xbfe8ff, trim); b.box(2.4, 3.4, 0.2, 0, 0, d / 2 + 0.1, 0x3a3a3a);
-  for (let i = 0; i < 8; i++) b.add(new THREE.BoxGeometry(w / 8, 0.12, 2.2), i % 2 ? 0xffffff : trim, -w / 2 + w / 16 + (i * w) / 8, 3.9, d / 2 + 1.0, -0.45, 0, 0);
+  for (let i = 0; i < 8; i++) b.add(new THREE.BoxGeometry(w / 8, 0.12, 2.2), i % 2 ? 0xffffff : trim, -w / 2 + w / 16 + (i * w) / 8, 3.9, d / 2 + 1.0, 0.45, 0, 0); // (slopes down and away from the wall)
   bsign(scene, b, text, Math.min(w - 2, 16), 2.2, 0, h - 1.4, d / 2 + 0.35, { bg: signOpts.bg || "#ffffff", fg: signOpts.fg || "#222222", stroke: signOpts.stroke });
 }
 export function bank(scene, b) {
