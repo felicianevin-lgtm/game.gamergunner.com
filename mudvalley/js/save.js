@@ -9,8 +9,13 @@ export const START_MONEY = 800;
 function fresh() {
   const truck = newCar("pickup", 1); Object.assign(truck, { x: -94, z: 32, yaw: Math.PI });
   return {
-    v: 1, money: START_MONEY, cars: [truck], trailers: [], houses: ["lot"], home: "lot", nextId: 2,
-    driving: 1, px: -90, pz: 24, best: {}, wins: {}, stats: { jobs: 0, earned: 0, races: 0, bigAir: 0, played: 0 }, intro: false, muted: false,
+    v: 2, money: START_MONEY, cars: [truck], trailers: [], houses: ["lot"], home: "lot", nextId: 2,
+    driving: 1, px: -90, pz: 24, best: {}, wins: {}, stats: { jobs: 0, earned: 0, races: 0, bigAir: 0, played: 0, robberies: 0, stolen: 0, busted: 0, arrests: 0, fish: 0 }, intro: false, muted: false,
+    // careers: "civ" (civilian), "robber" or "cop"
+    role: "civ", gear: {}, blasters: [], blaster: null, rods: [], rod: null, equip: "none", loot: 0, wanted: 0,
+    cop: { joined: false, arrests: 0, spikes: 3, car: "cruiser", interceptor: false },
+    fish: [], fishLog: {},
+    chatOn: false, // typing to friends in a lobby (off until you turn it on; quick texts always work)
   };
 }
 export const S = load();
@@ -18,8 +23,13 @@ function load() {
   let s = fresh();
   try {
     const j = JSON.parse(localStorage.getItem(KEY) || "null");
-    if (j && typeof j === "object" && j.v === 1) s = { ...s, ...j, stats: { ...s.stats, ...(j.stats || {}) }, best: { ...(j.best || {}) }, wins: { ...(j.wins || {}) } };
+    // (version 1 saves are from before the big update: they load fine, the new stuff just starts empty)
+    if (j && typeof j === "object" && (j.v === 1 || j.v === 2)) s = { ...s, ...j, v: 2, stats: { ...s.stats, ...(j.stats || {}) }, best: { ...(j.best || {}) }, wins: { ...(j.wins || {}) }, cop: { ...s.cop, ...(j.cop || {}) }, gear: { ...(j.gear || {}) }, fishLog: { ...(j.fishLog || {}) } };
   } catch {}
+  if (!["civ", "robber", "cop"].includes(s.role)) s.role = "civ";
+  for (const k of ["blasters", "rods", "fish"]) if (!Array.isArray(s[k])) s[k] = [];
+  s.loot = Math.max(0, Math.floor(+s.loot || 0)); s.wanted = 0; // (the cops forget about you when you leave the game)
+  if (s.role === "cop" && !s.cop.joined) s.role = "civ";
   if (!Array.isArray(s.cars) || !s.cars.length) s.cars = fresh().cars;
   if (!Array.isArray(s.trailers)) s.trailers = [];
   if (!Array.isArray(s.houses) || !s.houses.includes("lot")) s.houses = ["lot", ...(Array.isArray(s.houses) ? s.houses : [])];

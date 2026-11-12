@@ -7,6 +7,9 @@ import { RACES } from "./races.js";
 import { S, money, slots, save } from "./save.js";
 import { SFX } from "./sfx.js";
 import * as H from "./hud.js";
+import { GEAR, BLASTERS, RANKS, rankOf, nextRank, lootCap, BOOK_PAY } from "./crime.js";
+import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } from "./fishing.js";
+import { QUICK } from "./mp.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
@@ -50,7 +53,7 @@ let dSel = "atv", dTab = "rides";
 function dealer() {
   if (!VEHICLES.some((v) => v.id === dSel) && !trailerById(dSel)) dSel = "atv";
   const own = (id) => S.cars.filter((c) => c.id === id).length;
-  const list = dTab === "rides" ? VEHICLES.filter((v) => v.price > 0 || own(v.id)) : TRAILERS;
+  const list = dTab === "rides" ? VEHICLES.filter((v) => !v.police && (v.price > 0 || own(v.id))) : TRAILERS;
   if (!list.some((v) => v.id === dSel)) dSel = list[0].id;
   const v = vehicleById(dSel), T = trailerById(dSel), it = T || v;
   const st = T ? null : statBars(v.id);
@@ -135,6 +138,7 @@ function jobsPanel(fromPhone) {
   const act = J.active;
   const html = `<h2>💼 JOB BOARD</h2><p class="sub">Pick a job, drive to the <b style="color:#ffd23a">yellow arrow</b>, then drop it off. Be quick for a speed bonus. Don't crash for a no-crash bonus!</p>
     ${act ? `<div class="item sel"><span class="ico">${act.T.icon}</span><span class="nm"><b>Now: ${act.T.name}</b><small>${esc(act.goal || "")}</small></span><button type="button" class="small" data-a="quit">Quit job</button></div>` : ""}
+    <div class="item"><span class="ico">👮</span><span class="nm"><b>Police Patrol ${S.role === "cop" ? '<span class="tag">ON DUTY</span>' : ""}</b><small>${S.cop.joined ? "Answer radio calls, chase getaway cars, cuff robbers. " + money(Math.round(BOOK_PAY * rankOf().mult)) + "+ per arrest (" + rankOf().name + ")." : "Sign up at the Police Station in Copper Creek. You get a uniform + a police car!"}</small></span>${S.cop.joined ? (S.role === "cop" ? `<button type="button" class="small" data-a="offduty">End shift</button>` : `<button type="button" class="mid" data-a="patrol">Start shift</button>`) : `<button type="button" class="small" data-a="gpsPolice">📍 GPS</button>`}</div>
     <div class="list jobs" style="margin-top:10px">${J.offers.map((o, i) => { const T = JOB_TYPES[o.type], why = J.blocked(o); return `<div class="item ${why ? "lock" : ""}"><span class="ico">${T.icon}</span><span class="nm"><b>${T.name}</b><small>${esc(o.from.name)} → ${esc(o.to.name)} · ${o.dist} m · ⏱ ${Math.round(o.time)} s${why ? "<br>🔒 " + esc(why) : ""}</small></span><span class="pr">${money(o.pay)}</span><button type="button" class="mid" data-a="take" data-v="${i}" ${act || why ? "disabled" : ""}>Take</button></div>`; }).join("")}</div>
     <div class="btns"><button type="button" class="small" data-a="new">🔄 New jobs</button><span class="note">Hauling (needs a trailer) and tow jobs (needs a truck) pay the most!</span></div>`;
   modal(html);
@@ -142,6 +146,9 @@ function jobsPanel(fromPhone) {
     if (a === "take") { if (GM.takeJob(+val)) close(); }
     if (a === "quit") { GM.cancelJob(); jobsPanel(fromPhone); }
     if (a === "new") { J.offers = []; J.refill(); SFX.click(); jobsPanel(fromPhone); }
+    if (a === "patrol") { if (GM.setRole("cop")) close(); }
+    if (a === "offduty") { if (GM.setRole("civ")) jobsPanel(fromPhone); }
+    if (a === "gpsPolice") { GM.setWaypoint({ x: PLACES.police.x, z: PLACES.police.z, name: "the Police Station" }); close(); }
   };
 }
 
@@ -171,15 +178,21 @@ function phone(view = "home") {
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? H.fmtTime(S.best[r.id]) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
   if (view === "houses") html = `<h2>🏠 HOUSES</h2>${back}<div class="list" style="margin-top:10px">${HOUSES.filter((h) => h.price).map((h) => `<div class="item"><span class="ico">🏠</span><span class="nm"><b>${esc(h.name)}${S.houses.includes(h.id) ? '<span class="tag">YOURS</span>' : ""}</b><small>${h.slots} rides · ${esc(h.desc)}</small></span><span class="pr">${money(h.price)}</span><button type="button" class="small" data-a="gpsHouse" data-v="${h.id}">📍</button></div>`).join("")}</div>`;
   if (view === "gps") html = `<h2>📍 PLACES</h2>${back}<div class="list" style="margin-top:10px">${Object.entries(PLACES).map(([id, p]) => `<button type="button" class="item" data-a="gpsPlace" data-v="${id}"><span class="ico">${p.icon}</span><span class="nm"><b>${esc(p.name)}</b></span><span class="pr">📍</span></button>`).join("")}</div>`;
-  if (view === "stats") html = `<h2>📊 STATS</h2>${back}<div class="list" style="margin-top:10px">${[["💵", "Money earned", money(S.stats.earned)], ["💼", "Jobs done", S.stats.jobs], ["🏁", "Races", S.stats.races], ["🏆", "Race wins", Object.values(S.wins).reduce((a, b) => a + b, 0)], ["🚀", "Big airs", S.stats.bigAir], ["🚗", "Rides owned", S.cars.length], ["🏠", "Houses", S.houses.length - 1]].map(([i, n, v]) => `<div class="item"><span class="ico">${i}</span><span class="nm"><b>${n}</b></span><span class="pr">${v}</span></div>`).join("")}</div>`;
-  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div><h3>Start over</h3><p class="note">This deletes your money, rides and houses in this browser.</p><div class="btns"><button type="button" class="small" data-a="wipe">🗑️ Reset my game</button></div><p class="note"><a class="back" href="../#/">← Back to GunnerVerse</a></p>`;
+  if (view === "stats") html = `<h2>📊 STATS</h2>${back}<div class="list" style="margin-top:10px">${[["💵", "Money earned", money(S.stats.earned)], ["💼", "Jobs done", S.stats.jobs], ["🏁", "Races", S.stats.races], ["🏆", "Race wins", Object.values(S.wins).reduce((a, b) => a + b, 0)], ["🚀", "Big airs", S.stats.bigAir], ["🚗", "Rides owned", S.cars.length], ["🏠", "Houses", S.houses.length - 1], ["🐟", "Fish caught", S.stats.fish], ["🦹", "Robberies", S.stats.robberies], ["💰", "Loot stashed", money(S.stats.stolen)], ["🚔", "Times busted", S.stats.busted], ["👮", "Arrests", S.cop.arrests]].map(([i, n, v]) => `<div class="item"><span class="ico">${i}</span><span class="nm"><b>${n}</b></span><span class="pr">${v}</span></div>`).join("")}</div>`;
+  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div>
+    <h3>Texting friends</h3><p class="note">Quick texts and “send my location” always work in a lobby. Typing your own texts is <b>${S.chatOn ? "ON" : "OFF"}</b> (it’s filtered: no links, no phone numbers, no bad words). Ask a grown-up before you turn it on!</p><div class="btns"><button type="button" class="small" data-a="chatOn">${S.chatOn ? "Turn typing OFF" : "Turn typing ON"}</button></div><h3>Start over</h3><p class="note">This deletes your money, rides and houses in this browser.</p><div class="btns"><button type="button" class="small" data-a="wipe">🗑️ Reset my game</button></div><p class="note"><a class="back" href="../#/">← Back to GunnerVerse</a></p>`;
   if (view === "help") html = `<h2>❓ HELP</h2>${back}${helpHtml()}`;
+  if (view === "career") html = careerHtml(back);
+  if (view === "friends") html = lobbyHtml(back);
+  if (view === "messages") { GM.mp.unread = 0; html = messagesHtml(back); }
+  phoneView = view;
+  if (view === "fishlog") html = fishLogHtml(back);
   modal(html, "phone");
   onAct = (a, val) => {
     if (a === "view") { if (val === "jobs") return jobsPanel(true); if (val === "map") { close(); return map(); } if (val === "home") { goHome(); return; } phone(val); }
@@ -189,7 +202,129 @@ function phone(view = "home") {
     if (a === "mute") { GM.muted(!S.muted); phone("settings"); }
     if (a === "wipe") { if (confirm("Really start over? Everything will be deleted!") && confirm("Are you SURE? This can't be undone.")) GM.wipe(); }
     if (a === "quitRace") { GM.quitRace(); close(); }
+    if (a === "role") { if (GM.setRole(val)) phone("career"); }
+    if (a === "chatOn") { S.chatOn = !S.chatOn; save(); phone("settings"); }
+    if (a === "mpCreate") { GM.mp.create(); phone("friends"); }
+    if (a === "mpJoin") { GM.mp.join(($("mpCode") || {}).value); phone("friends"); }
+    if (a === "mpLeave") { GM.mp.leave(); phone("friends"); }
+    if (a === "mpKick") { if (confirm("Remove this player from your lobby?")) GM.mp.kick(+val); }
+    if (a === "mpMute") { const p = GM.mp.players.get(+val); if (p) { p.mutedByMe = !p.mutedByMe; GM.mp.mute(+val, p.mutedByMe); phone("friends"); } }
+    if (a === "mpChatRoom") { GM.mp.setChatRoom(!GM.mp.chatRoom); GM.mp.chatRoom = !GM.mp.chatRoom; phone("friends"); }
+    if (a === "qt") { GM.mp.quick(+val); SFX.phone(); }
+    if (a === "pin") { GM.mp.sendPin(); SFX.phone(); }
+    if (a === "send") { const i = $("mpText"); if (i && i.value.trim()) { GM.mp.chat(i.value); i.value = ""; SFX.phone(); } }
+    if (a === "gpsPolice") { GM.setWaypoint({ x: PLACES.police.x, z: PLACES.police.z, name: "the Police Station" }); close(); }
+    if (a === "gpsHideout") { GM.setWaypoint({ x: PLACES.hideout.x, z: PLACES.hideout.z, name: "the Robber Hideout" }); close(); }
+    if (a === "gpsBait") { GM.setWaypoint({ x: PLACES.bait.x, z: PLACES.bait.z, name: "the Bait & Tackle" }); close(); }
   };
+}
+// ---------------------------------------------------------------- play with friends: the lobby + the Messages app
+let phoneView = "home";
+function lobbyHtml(back) {
+  const M = GM.mp;
+  if (M.status === "connecting") return `<h2>👥 LOBBY</h2>${back}<p class="sub">Connecting to lobby ${esc(M.code)}...</p><div class="btns"><button type="button" class="small" data-a="mpLeave">Cancel</button></div>`;
+  if (!M.on) return `<h2>👥 PLAY WITH FRIENDS</h2>${back}<p class="sub">Make a lobby and tell your friends the code, or type a friend’s code to join them. You’ll see each other driving around Mud Valley and you can text (📱 Messages). Your money and stuff stay your own.</p>
+    ${M.status === "error" ? `<p class="note" style="color:#ff9a7a">${esc(M.err || "")}</p>` : ""}
+    <div class="btns"><button type="button" class="big" data-a="mpCreate">MAKE A LOBBY</button></div>
+    <h3>Join a friend</h3><div class="btns"><input id="mpCode" inputmode="numeric" maxlength="8" placeholder="8-digit code" style="font:inherit;font-size:20px;width:170px;padding:8px;border-radius:10px;border:2px solid #6a4a28;text-align:center"><button type="button" class="mid" data-a="mpJoin">JOIN</button></div>`;
+  const host = M.host === M.id;
+  return `<h2>👥 LOBBY</h2>${back}<div class="bank" style="font-size:28px;letter-spacing:3px">${esc(M.code)}</div><p class="note">Tell your friends this code! You are <b>${esc(M.name)}</b>${host ? " (host)" : ""}.</p>
+    <div class="list"><div class="item"><span class="ico">🙂</span><span class="nm"><b>${esc(M.name)} (you)</b></span></div>${[...M.players.values()].map((p) => `<div class="item"><span class="ico">${p.v ? "🚗" : "🚶"}</span><span class="nm"><b>${esc(p.n)}${p.id === M.host ? '<span class="tag">HOST</span>' : ""}</b><small>${p.away ? "Reconnecting..." : p.v ? "Driving a " + esc((p.v.split("|")[1] || "ride")) : "On foot"}</small></span>${host ? `<button type="button" class="small" data-a="mpMute" data-v="${p.id}">${p.mutedByMe ? "Unmute" : "Mute"}</button><button type="button" class="small" data-a="mpKick" data-v="${p.id}">Remove</button>` : ""}</div>`).join("")}</div>
+    <div class="btns">${host ? `<button type="button" class="small" data-a="mpChatRoom">${M.chatRoom ? "Turn texting OFF for everyone" : "Turn texting ON"}</button>` : ""}<button type="button" class="small" data-a="view" data-v="messages">💬 Messages</button><button type="button" class="small" data-a="mpLeave">Leave lobby</button></div>`;
+}
+function messagesHtml(back) {
+  const M = GM.mp;
+  if (!M.on) return `<h2>💬 MESSAGES</h2>${back}<p class="sub">Join a lobby first (📱 Phone → Lobby) to text your friends.</p><div class="btns"><button type="button" class="mid" data-a="view" data-v="friends">👥 Lobby</button></div>`;
+  return `<h2>💬 MESSAGES</h2>${back}<div class="msgs" id="msgList">${M.msgs.slice(-25).map((m) => m.kind === "sys" ? `<div class="msg sys">${esc(m.text)}</div>` : `<div class="msg ${m.from === "You" ? "me" : ""}"><b>${esc(m.from)}</b> ${esc(m.text)}</div>`).join("") || '<div class="msg sys">No messages yet. Say hi!</div>'}</div>
+    <div class="qts">${QUICK.map((q, i) => `<button type="button" class="small" data-a="qt" data-v="${i}">${esc(q)}</button>`).join("")}</div>
+    <div class="btns"><button type="button" class="mid" data-a="pin">📍 Send my location</button></div>
+    ${S.chatOn ? `<div class="btns"><input id="mpText" maxlength="80" placeholder="Type a text (filtered)" style="flex:1;font:inherit;padding:8px;border-radius:10px;border:2px solid #4a5a70"><button type="button" class="mid" data-a="send">Send</button></div>` : `<p class="note">Typing is off. (Settings → Texting friends.)</p>`}`;
+}
+function mpChanged() {
+  if (GM.G.mode !== "modal" || !$("modalBox").classList.contains("phone")) return;
+  if (phoneView === "messages" || phoneView === "friends") {
+    const t = $("mpText"), v = t ? t.value : null, f = document.activeElement === t;
+    phone(phoneView); if (v !== null && $("mpText")) { $("mpText").value = v; if (f) $("mpText").focus(); }
+    const l = $("msgList"); if (l) l.scrollTop = l.scrollHeight;
+  }
+}
+// ---------------------------------------------------------------- careers (civilian / robber / cop)
+function careerHtml(back) {
+  const r = S.role, rk = rankOf(), nx = nextRank();
+  const card = (id, ico, name, desc, extra = "") => `<div class="item ${r === id ? "sel" : ""}"><span class="ico">${ico}</span><span class="nm"><b>${name}${r === id ? '<span class="tag">NOW</span>' : ""}</b><small>${desc}</small>${extra}</span>${r === id ? "" : `<button type="button" class="mid" data-a="role" data-v="${id}" ${(id === "cop" && !S.cop.joined) || S.wanted ? "disabled" : ""}>Switch</button>`}</div>`;
+  return `<h2>CAREER</h2>${back}<p class="note">You can be one thing at a time. ${S.wanted ? "<b style='color:#ff8a5a'>You’re wanted! Lose the cops before you switch.</b>" : ""}</p><div class="list">
+    ${card("civ", "🧑", "Civilian", "Do jobs, race, fish, build your garage.")}
+    ${card("robber", "🦹", "Robber", "Rob registers, ATMs, the jewelry store and the bank. Lose the cops, then stash your loot at the hideout.", `<small>Loot bag: ${money(S.loot)} / ${money(lootCap())} · Robberies: ${S.stats.robberies} · Busted: ${S.stats.busted}</small>`)}
+    ${card("cop", "👮", "Police Officer", S.cop.joined ? "Answer radio calls, stop getaway cars and cuff robbers." : "Sign up at the Police Station in Copper Creek first!", S.cop.joined ? `<small>Rank: <b>${rk.name}</b> · Arrests: ${S.cop.arrests}${nx ? " · " + (nx.at - S.cop.arrests) + " more for " + nx.name : " · Top rank!"} · Pay: ${money(Math.round(BOOK_PAY * rk.mult))}+ per arrest</small>` : `<button type="button" class="small" data-a="gpsPolice">📍 GPS to the station</button>`)}
+  </div>
+  <h3>How it works</h3><p class="note">🦹 <b>Robbers:</b> buy tools at the Tool Barn (Copper Creek). Walk up to a red ring and <b>hold E</b>. Robbing gives you ⭐ wanted stars. Cops chase you! Get out of sight until the bar fills up, then go to the 🎭 Robber Hideout and stash your loot for cash. If they catch you: BUSTED (jail + you lose the loot).
+  <br>👮 <b>Cops:</b> sign up at the 👮 Police Station. Press <b>G</b> for the siren, <b>Q</b> in the car to drop a spike strip. Bump the getaway car 3 times, spike it or stun it. Then <b>hold E</b> next to the robber to cuff them and drive them to the station.</p>
+  <div class="btns"><button type="button" class="small" data-a="gpsHideout">📍 Hideout</button><button type="button" class="small" data-a="gpsPolice">📍 Police Station</button></div>`;
+}
+function fishLogHtml(back) {
+  const n = Object.keys(S.fishLog).length;
+  return `<h2>🐟 FISH LOG</h2>${back}<p class="note">Species found: <b>${n} / ${FISH.length}</b> · In your cooler: <b>${S.fish.length} / ${COOLER}</b> fish worth <b>${money(coolerValue())}</b></p>
+    <div class="list">${FISH.map((f) => { const L = S.fishLog[f.id]; return `<div class="item"><span class="ico" style="filter:${L ? "none" : "grayscale(1) brightness(0.4)"}">${f.id === "boot" ? "🥾" : "🐟"}</span><span class="nm"><b>${L ? esc(f.name) : "???"}<span class="tag" style="background:${RARITY_COLOR[f.rarity]}">${f.rarity}</span></b><small>${L ? "Caught " + L.n + " · biggest " + L.best + " lb" : "Not caught yet"} · ${f.where === "both" ? "pond + river" : f.where === "pond" ? "Lily Pond" : "the river"}${f.minRod ? " · needs a " + RODS[f.minRod].name : ""}</small></span><span class="pr">${L ? "~" + money(f.price) : ""}</span></div>`; }).join("")}</div>
+    <div class="btns"><button type="button" class="small" data-a="gpsBait">📍 Bait & Tackle</button></div>`;
+}
+// ---------------------------------------------------------------- Copper Creek shops + the police station + the hideout
+function gear() {
+  const html = `<h2>🧰 TOOL BARN</h2><div class="bank">${money(S.money)}</div><p class="sub">Robber gear! (Only robbers can use it to rob things. Switch careers in 📱 Phone → Career.)</p>
+    <div class="list">${GEAR.map((g) => `<div class="item ${S.gear[g.id] ? "sel" : ""}"><span class="ico">${g.icon}</span><span class="nm"><b>${g.name}${S.gear[g.id] ? '<span class="tag">OWNED</span>' : ""}</b><small>${esc(g.desc)}</small></span>${S.gear[g.id] ? "" : `<button type="button" class="mid" data-a="buy" data-v="${g.id}" ${S.money >= g.price ? "" : "disabled"}>${money(g.price)}</button>`}</div>`).join("")}</div>
+    <p class="note">🧾 Cash registers: no tool needed · 🏧 ATMs: crowbar · 💎 Jewelry cases: lockpick set · 🏦 Bank vault: Super Drill</p>`;
+  side(html, "shop");
+  onAct = (a, val) => { if (a === "buy") { GM.buyGear(GEAR.find((g) => g.id === val)); gear(); } };
+}
+function blasters() {
+  const html = `<h2>🎯 SPLAT BLASTERS</h2><div class="bank">${money(S.money)}</div><p class="sub">Cartoon goo blasters! Anyone you hit gets knocked out for a few seconds (they just see stars). Press <b>X</b> to hold your blaster, <b>Q</b> to shoot. It aims for you!</p>
+    <div class="list">${BLASTERS.map((b) => { const own = S.blasters.includes(b.id); return `<div class="item ${S.blaster === b.id ? "sel" : ""}"><span class="ico">${["🩷", "🫧", "⚡", "🟡"][b.tier]}</span><span class="nm"><b>${b.name}${own ? '<span class="tag">' + (S.blaster === b.id ? "HOLDING" : "OWNED") + "</span>" : ""}</b><small>${esc(b.desc)} · range ${b.range} m · knocks out for ${b.stun}s</small></span>${own ? (S.blaster === b.id ? "" : `<button type="button" class="small" data-a="buy" data-v="${b.id}">Use</button>`) : `<button type="button" class="mid" data-a="buy" data-v="${b.id}" ${S.money >= b.price ? "" : "disabled"}>${money(b.price)}</button>`}</div>`; }).join("")}</div>`;
+  side(html, "shop");
+  onAct = (a, val) => { if (a === "buy") { GM.buyBlaster(BLASTERS.find((b) => b.id === val)); blasters(); } };
+}
+function bait() {
+  const v = coolerValue();
+  const html = `<h2>🪱 BAIT & TACKLE</h2><div class="bank">${money(S.money)}</div><p class="sub">Press <b>X</b> to hold your rod, face the water and press <b>Q</b> to cast. When the bobber dips and you see <b>!</b>, press <b>Q</b> fast. Then hold <b>Q</b> to reel (let go if the marker gets near the red!).</p>
+    <div class="btns"><button type="button" class="big" data-a="sell" ${S.fish.length ? "" : "disabled"}>SELL ${S.fish.length} FISH ${money(v)}</button></div>
+    ${S.fish.length ? `<p class="note">${S.fish.slice(-12).map((f) => esc(fishById(f.id).name) + " " + f.w + " lb (" + money(fishValue(f)) + ")").join(" · ")}${S.fish.length > 12 ? " ..." : ""}</p>` : ""}
+    <h3>Fishing rods</h3><div class="list">${RODS.map((r) => { const own = S.rods.includes(r.id); return `<div class="item ${S.rod === r.id ? "sel" : ""}"><span class="ico">🎣</span><span class="nm"><b>${r.name}${own ? '<span class="tag">' + (S.rod === r.id ? "USING" : "OWNED") + "</span>" : ""}</b><small>${esc(r.desc)}</small></span>${own ? (S.rod === r.id ? "" : `<button type="button" class="small" data-a="rod" data-v="${r.id}">Use</button>`) : `<button type="button" class="mid" data-a="rod" data-v="${r.id}" ${S.money >= r.price ? "" : "disabled"}>${money(r.price)}</button>`}</div>`; }).join("")}</div>
+    <p class="note">🐟 Lily Pond has perch, Golden Carp and Crystal Koi. The river has trout and pike. Legends say a Mud Monster Catfish lives in both...</p>`;
+  side(html, "shop");
+  onAct = (a, val) => { if (a === "sell") { GM.sellFish(); bait(); } if (a === "rod") { GM.buyRod(RODS.find((r) => r.id === val)); bait(); } };
+}
+function police() {
+  const rk = rankOf(), nx = nextRank(), cop = S.role === "cop";
+  let html = `<h2>👮 POLICE STATION</h2><div class="bank">${money(S.money)}</div>`;
+  if (!S.cop.joined) html += `<p class="sub">Want to keep Mud Valley safe? Join the police! You get a uniform, a <b>police cruiser</b>, handcuffs, a stun blaster, spike strips and a radio. Catch robbers for cash. The more you catch, the higher your rank (and your pay).</p><div class="btns"><button type="button" class="big" data-a="join" ${S.wanted ? "disabled" : ""}>JOIN THE POLICE</button>${S.wanted ? '<span class="note">Not while you’re wanted!</span>' : ""}</div>`;
+  else {
+    html += `<p class="sub">Rank: <b>${rk.name}</b> · Arrests: <b>${S.cop.arrests}</b>${nx ? " · " + (nx.at - S.cop.arrests) + " more to become " + nx.name : ""} · Pay per arrest: <b>${money(Math.round(BOOK_PAY * rk.mult))}+</b></p>
+      <div class="btns">${cop ? `<button type="button" class="small" data-a="off">End shift (go civilian)</button>` : `<button type="button" class="big" data-a="on" ${S.wanted ? "disabled" : ""}>START SHIFT</button>`}</div>
+      <h3>Gear</h3><div class="list">
+      <div class="item"><span class="ico">⛓️</span><span class="nm"><b>Spike strips: ${S.cop.spikes} / 3</b><small>In your car press Q to drop one behind you. Getaway cars that hit it slow way down.</small></span><button type="button" class="small" data-a="spikes" ${S.cop.spikes >= 3 ? "disabled" : ""}>Refill (free)</button></div>
+      <div class="item"><span class="ico">🚓</span><span class="nm"><b>Police Cruiser${S.cop.car !== "interceptor" ? '<span class="tag">USING</span>' : ""}</b><small>Tough and steady.</small></span>${S.cop.car === "interceptor" ? `<button type="button" class="small" data-a="car" data-v="cruiser">Use</button>` : ""}</div>
+      <div class="item ${S.cop.interceptor ? "" : "lock"}"><span class="ico">🏎️</span><span class="nm"><b>Police Interceptor${S.cop.car === "interceptor" ? '<span class="tag">USING</span>' : ""}</b><small>Super fast! Unlocks free at Sergeant rank (8 arrests), or buy it now.</small></span>${S.cop.interceptor ? (S.cop.car === "interceptor" ? "" : `<button type="button" class="small" data-a="car" data-v="interceptor">Use</button>`) : `<button type="button" class="mid" data-a="buyInt" ${S.money >= 15000 ? "" : "disabled"}>${money(15000)}</button>`}</div></div>
+      <h3>Ranks</h3><p class="note">${RANKS.map((r) => (r === rk ? "<b style='color:#ffd23a'>" + r.name + "</b>" : r.name) + " (" + r.at + ")").join(" → ")}</p>`;
+    if (cop && !GM.policeCar()) html += `<p class="note">Your police car is missing? <button type="button" class="small" data-a="car" data-v="${S.cop.car}">Bring my police car here</button></p>`;
+  }
+  side(html, "shop");
+  onAct = (a, val) => {
+    if (a === "join") { GM.crime.joinPolice(); police(); }
+    if (a === "on") { GM.setRole("cop"); police(); }
+    if (a === "off") { GM.setRole("civ"); police(); }
+    if (a === "spikes") { GM.refillSpikes(); police(); }
+    if (a === "car") { GM.copCar(val); police(); }
+    if (a === "buyInt") { GM.buyInterceptor(); police(); }
+  };
+}
+function hideout() {
+  const rob = S.role === "robber";
+  let html = `<h2>🎭 ROBBER HIDEOUT</h2><div class="bank">${money(S.money)}</div>`;
+  if (!rob) html += `<p class="sub">A creaky old shack in the woods... There’s a sign: “Robbers only! Become a robber in 📱 Phone → Career.”</p><div class="btns"><button type="button" class="mid" data-a="become" ${S.wanted ? "disabled" : ""}>Become a robber</button></div>`;
+  else html += `<p class="sub">Your secret hideout. Stash your loot here to turn it into real money. (The cops must NOT be chasing you!)</p>
+    <div class="list"><div class="item"><span class="ico">💰</span><span class="nm"><b>Loot in your bag: ${money(S.loot)}</b><small>Bag size: ${money(lootCap())}${S.gear.duffel ? "" : " (a Big Duffel Bag holds $5,000)"}</small></span><button type="button" class="big" data-a="stash" ${S.loot && !S.wanted ? "" : "disabled"}>STASH</button></div></div>
+    ${S.wanted ? `<p class="note" style="color:#ff9a7a">The cops are after you! Hide and lose them first.</p>` : ""}
+    <p class="note">Total stolen: ${money(S.stats.stolen)} · Robberies: ${S.stats.robberies} · Busted: ${S.stats.busted}</p>`;
+  side(html, "shop");
+  onAct = (a) => { if (a === "stash") { GM.crime.stash(); hideout(); } if (a === "become") { GM.setRole("robber"); hideout(); } };
 }
 function goHome() {
   const h = HOUSES.find((x) => x.id === S.home) || HOUSES[0];
@@ -205,11 +340,15 @@ function helpHtml() {
     <span><kbd>T</kbd></span><span>Hitch / unhitch a trailer (back your truck up to it)</span>
     <span><kbd>R</kbd></span><span>Flip back over / back to the race track</span>
     <span><kbd>H</kbd></span><span>Horn!</span>
+    <span><kbd>X</kbd></span><span>Switch what you hold: empty hands, blaster, fishing rod, spike strips</span>
+    <span><kbd>Q</kbd></span><span>Use it: shoot the blaster · cast / hook / hold to reel the fishing rod · drop a spike strip (cops, also in the car)</span>
+    <span><kbd>E</kbd> hold</span><span>Rob things (robbers) · put on handcuffs (cops)</span>
+    <span><kbd>G</kbd></span><span>Police siren (in a police car)</span>
     <span><kbd>M</kbd></span><span>Map (tap a spot to set your GPS)</span>
     <span><kbd>P</kbd></span><span>Phone</span>
     <span>🖱️</span><span>Hold a mouse button + move to look around. Wheel to zoom.</span>
     <span>📱</span><span>On a phone: left thumb = stick, right side = look around, buttons for the rest.</span></div>
-    <h3>Tips</h3><p class="note">💼 Jobs = money. 🛵 Buy an ATV or dirt bike for trails and mud. 🛒 Buy a trailer to carry them on your truck. 🔧 Mud tires help in mud. 🫧 Muddy? Use the car wash! 🏠 Better houses = more garage room. 🏁 Win races for big prizes.</p>`;
+    <h3>Tips</h3><p class="note">📱 Phone → Career: be a 🧑 civilian, a 🦹 robber or a 👮 cop. 🎣 Fishing: Bait & Tackle at Lily Pond. ⛰️ Thunder Peak: drive up the Summit Sprint trail, or the steep Goat Trail in a 4x4. 🏙️ Copper Creek is up Route 9 from the Motocross Park. 💼 Jobs = money. 🛵 Buy an ATV or dirt bike for trails and mud. 🛒 Buy a trailer to carry them on your truck. 🔧 Mud tires help in mud. 🫧 Muddy? Use the car wash! 🏠 Better houses = more garage room. 🏁 Win races for big prizes.</p>`;
 }
 
 // ---------------------------------------------------------------- the big map
@@ -222,13 +361,13 @@ function closeMap() { $("mapView").classList.add("hidden"); GM.G.mode = GM.G.rac
 // ---------------------------------------------------------------- welcome!
 function intro() {
   modal(`<div class="intro"><h2>WELCOME TO MUD VALLEY!</h2><p class="sub">You just moved to town with an old pickup truck and <b style="color:#7aff5a">${money(S.money)}</b>. Time to build your dream garage!</p>
-    <ol><li><b>💼 Do jobs</b> at the Job Center (or on your 📱 phone) to make money.</li><li><b>🚗 Buy rides</b> at Valley Motors: ATVs, dirt bikes, 4x4s, sports cars, a monster truck...</li><li><b>🔧 Customize</b> them at Mud & Chrome: paint, mud tires, faster (or slower!) engines, lift kits, neon.</li><li><b>🛒 Get a trailer</b> to haul your ATV or dirt bike out to the trails.</li><li><b>🏠 Buy a house</b>, from a rusty camper all the way up to the Hilltop Mansion.</li><li><b>🏁 Race</b> at the Motocross Park, the Speedway and up the mountain!</li></ol>
-    <p class="note" style="text-align:center">${document.body.classList.contains("touch") ? "🕹️ Left thumb drives · drag the right side to look around · <b>E</b> use · <b>F</b> get in/out · ⛔ brake · <b>T</b> trailer · ↻ flip · 📣 horn" : "<b>WASD</b> drive · <b>Space</b> handbrake · <b>E</b> use things · <b>F</b> get in/out · <b>T</b> trailer · <b>R</b> flip · <b>H</b> horn · <b>M</b> map · <b>P</b> phone · hold the mouse to look around"}<br>(All the controls are in 📱 Phone → Help.)</p>
+    <ol><li><b>🗺️ It’s a BIG valley:</b> Mud Valley town, Copper Creek, Thunder Peak, Lily Pond and lots of trails.</li><li><b>💼 Do jobs</b> at the Job Center (or on your 📱 phone) to make money.</li><li><b>🚗 Buy rides</b> at Valley Motors: ATVs, dirt bikes, 4x4s, sports cars, a monster truck...</li><li><b>🔧 Customize</b> them at Mud & Chrome: paint, mud tires, faster (or slower!) engines, lift kits, neon.</li><li><b>🛒 Get a trailer</b> to haul your ATV or dirt bike out to the trails.</li><li><b>🏠 Buy a house</b>, from a rusty camper all the way up to the Hilltop Mansion.</li><li><b>🏁 Race</b> at the Motocross Park, the Speedway and up the mountain!</li><li><b>👮 Be a cop or 🦹 a robber</b> (📱 Phone → Career), or go <b>🎣 fishing</b>.</li></ol>
+    <p class="note" style="text-align:center">${document.body.classList.contains("touch") ? "🕹️ Left thumb drives · drag the right side to look around · <b>E</b> use · <b>F</b> get in/out · ⛔ brake · <b>T</b> trailer · ↻ flip · 📣 horn · 🎯 use item · 🔄 switch item" : "<b>WASD</b> drive · <b>Space</b> handbrake · <b>E</b> use things · <b>F</b> get in/out · <b>T</b> trailer · <b>R</b> flip · <b>H</b> horn · <b>X</b> switch item · <b>Q</b> use item · <b>G</b> siren · <b>M</b> map · <b>P</b> phone · hold the mouse to look around"}<br>(All the controls are in 📱 Phone → Help.)</p>
     <div class="btns" style="justify-content:center"><button type="button" class="big" data-a="go">LET'S DRIVE!</button></div></div>`, "noX");
   onAct = (a) => { if (a === "go") { S.intro = true; save(); close(); GM.setWaypoint({ x: PLACES.jobs.x, z: PLACES.jobs.z, name: "the Job Center" }); H.banner("MUD VALLEY", "Follow the purple arrow to the Job Center!"); } };
 }
 
-export const UI = { close, dealer, customs, house, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro };
+export const UI = { close, dealer, customs, house, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged };
 export function initMenus(game) {
   GM = game; wire();
   $("mapClose").addEventListener("click", () => { SFX.click(); closeMap(); });

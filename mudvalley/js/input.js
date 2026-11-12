@@ -52,6 +52,9 @@ export function initInput(canvas, opts = {}) {
   });
 }
 export const isHeld = (c) => !blockKeys() && held.has(c);
+// (for tests: pretend a key is held down / was just pressed)
+export function forceHeld(c, on) { if (on) held.add(c); else held.delete(c); }
+export function forceTap(c) { tapped.add(c); }
 // true once per press
 export function pressed(c) { if (!tapped.has(c)) return false; tapped.delete(c); return !blockKeys(); }
 export function clearTaps() { tapped.clear(); }

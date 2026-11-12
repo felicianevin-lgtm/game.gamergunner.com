@@ -67,7 +67,44 @@ export const SFX = {
   step() { noise(0.04, 600, 0.12); },
   jump() { tone(300, 0.15, "square", 600, 0.18); },
   phone() { tone(1046, 0.06, "sine", 0, 0.25); tone(1568, 0.08, "sine", 0, 0.25, 0.07); },
+  // blasters, robbers + cops
+  zap(k = 0) { tone(1400 - k * 200, 0.14, "square", 300, 0.22); noise(0.08, 3000, 0.25, "bandpass"); },
+  splat() { noise(0.12, 900, 0.45, "lowpass", 0, 300); tone(260, 0.08, "sine", 120, 0.25); },
+  stun() { [880, 660, 990, 740].forEach((f, i) => tone(f, 0.09, "triangle", 0, 0.22, i * 0.07)); },
+  bonk() { tone(520, 0.12, "sine", 180, 0.4); noise(0.06, 2000, 0.3); },
+  alarm() { for (let i = 0; i < 4; i++) { tone(880, 0.16, "square", 0, 0.22, i * 0.34); tone(660, 0.16, "square", 0, 0.22, i * 0.34 + 0.17); } },
+  radio() { noise(0.12, 2500, 0.3, "bandpass"); tone(1200, 0.06, "square", 0, 0.15, 0.12); tone(900, 0.06, "square", 0, 0.15, 0.2); noise(0.2, 2500, 0.2, "bandpass", 0.28); },
+  cuff() { tone(2200, 0.04, "square", 0, 0.2); tone(1800, 0.05, "square", 0, 0.2, 0.06); tone(2400, 0.04, "square", 0, 0.2, 0.14); },
+  busted() { [523, 415, 330, 262].forEach((f, i) => tone(f, 0.28, "square", 0, 0.25, i * 0.2)); },
+  jail() { noise(0.4, 300, 0.6, "lowpass"); tone(90, 0.4, "square", 60, 0.35); },
+  escape() { [392, 523, 659, 784, 1046].forEach((f, i) => tone(f, 0.12, "square", 0, 0.22, i * 0.07)); },
+  drill() { noise(0.25, 3500, 0.25, "bandpass"); tone(180 + Math.random() * 40, 0.25, "sawtooth", 0, 0.12); },
+  pry() { tone(140, 0.1, "sawtooth", 90, 0.25); noise(0.08, 1500, 0.2, "bandpass"); },
+  smash() { noise(0.3, 5000, 0.6, "highpass", 0, 2000); [2637, 3136, 2349].forEach((f, i) => tone(f, 0.12, "triangle", 0, 0.12, i * 0.05)); },
+  spikes() { tone(300, 0.08, "square", 0, 0.2); noise(0.2, 1200, 0.3); },
+  pop() { noise(0.15, 2500, 0.7, "bandpass", 0, 400); tone(200, 0.2, "sawtooth", 60, 0.3); },
+  // fishing
+  cast() { noise(0.35, 4000, 0.25, "bandpass", 0, 1500); tone(900, 0.3, "sine", 300, 0.12); },
+  plop() { tone(500, 0.12, "sine", 160, 0.4); noise(0.18, 1400, 0.3, "lowpass", 0.02); },
+  bite() { tone(1046, 0.08, "square", 0, 0.3); tone(1046, 0.08, "square", 0, 0.3, 0.12); },
+  reel() { tone(2600 + Math.random() * 400, 0.025, "square", 0, 0.08); },
+  snap() { noise(0.12, 4000, 0.5, "highpass"); tone(300, 0.2, "triangle", 120, 0.3); },
+  fish() { [659, 784, 988, 1318].forEach((f, i) => tone(f, 0.14, "triangle", 0, 0.3, i * 0.08)); noise(0.3, 1800, 0.25, "bandpass"); },
 };
+// ---- a police siren (wee-ooo wee-ooo). vol 0 = off
+let sir = null;
+export function siren(vol = 0) {
+  if (!ac) return;
+  try {
+    if (!sir) {
+      const o = ac.createOscillator(), lfo = ac.createOscillator(), lg = ac.createGain(), g = ac.createGain();
+      o.type = "triangle"; o.frequency.value = 900; lfo.type = "triangle"; lfo.frequency.value = 0.9; lg.gain.value = 320;
+      lfo.connect(lg); lg.connect(o.frequency); o.connect(g); g.gain.value = 0; g.connect(master); o.start(); lfo.start();
+      sir = { o, g };
+    }
+    sir.g.gain.setTargetAtTime(muted ? 0 : Math.min(0.12, vol * 0.12), ac.currentTime, 0.08);
+  } catch {}
+}
 
 // ---- the engine: two buzzing oscillators through a filter, plus a rumble and a skid hiss
 export function engine(on, rpm = 0, thr = 0, base = 80, slip = 0, rough = 0) {

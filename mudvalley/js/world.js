@@ -1,17 +1,18 @@
 // MUD VALLEY RP: puts the whole valley together. Sky, sun, the land, town, houses, forests, rocks, racetrack stuff
 // and the glowing circles you drive into to do things.
 import * as THREE from "/create/vendor/three.module.js";
-import { HALF, FLATS, PLACES, HOUSES, riverX, RIVER_W } from "./layout.js";
-import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath } from "./terrain.js";
+import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, ATMS } from "./layout.js";
+import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform } from "./terrain.js";
 import * as B from "./build.js";
 import { addCircle } from "./colliders.js";
+import { bakeGroup } from "./vehicles.js";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const TOWN_Y = 1, LAWN = 0.14;
 
 // ---------------------------------------------------------------- sky + light
 export function makeSky(scene) {
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 24, 12), new THREE.ShaderMaterial({
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(820, 24, 12), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: { top: { value: new THREE.Color(0x3d98f0) }, mid: { value: new THREE.Color(0x8fcaff) }, bot: { value: new THREE.Color(0xd8efff) } },
     vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
@@ -23,8 +24,8 @@ export function makeSky(scene) {
   const r = g.createRadialGradient(64, 64, 8, 64, 64, 64); r.addColorStop(0, "#fffef0"); r.addColorStop(0.25, "#fff4c0"); r.addColorStop(0.5, "rgba(255,240,180,0.35)"); r.addColorStop(1, "rgba(255,240,180,0)");
   g.fillStyle = r; g.fillRect(0, 0, 128, 128);
   const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), fog: false, depthWrite: false, transparent: true }));
-  sunSprite.scale.set(160, 160, 1); sky.add(sunSprite); sunSprite.position.set(0.42, 0.72, 0.5).normalize().multiplyScalar(820);
-  scene.fog = new THREE.Fog(0xcfe9ff, 170, 640);
+  sunSprite.scale.set(160, 160, 1); sky.add(sunSprite); sunSprite.position.set(0.42, 0.72, 0.5).normalize().multiplyScalar(760);
+  scene.fog = new THREE.Fog(0xcfe9ff, 200, 820);
   const hemi = new THREE.HemisphereLight(0xd8eeff, 0x6a8a4a, 1.55); scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff2d8, 2.7);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
@@ -76,10 +77,10 @@ function town(scene) {
 // ---------------------------------------------------------------- the rest of the valley
 function placeAt(scene, fn, x, z, yaw, ...a) { const b = new B.Batch(); b.at(x, hAt(x, z), z, yaw); fn(scene, b, ...a); b.finish(scene); return b; }
 function houses(scene) {
-  const fns = { camper: B.camper, cabin: B.cabin, family: B.familyHouse, farm: B.farmhouse, mansion: B.mansion };
+  const fns = { camper: B.camper, cabin: B.cabin, family: B.familyHouse, farm: B.farmhouse, mansion: B.mansion, small: (sc, b, h) => B.smallHouse(sc, b, h.look || 0) };
   const signs = {};
   for (const h of HOUSES) {
-    if (fns[h.id]) placeAt(scene, fns[h.id], h.x, h.z, h.yaw);
+    if (fns[h.build]) placeAt(scene, fns[h.build], h.x, h.z, h.yaw, h);
     // the for-sale / home sign next to the garage spot
     const gy = hAt(h.garage.x, h.garage.z);
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.6, 0.2), new THREE.MeshLambertMaterial({ color: 0xffffff }));
@@ -100,9 +101,18 @@ function houses(scene) {
 function outskirts(scene) {
   placeAt(scene, B.lumberYard, -304, -10, 0);
   placeAt(scene, B.construction, 100, -180, 0);
-  placeAt(scene, B.rangerStation, -205, 236, 0.3);
+  placeAt(scene, B.rangerStation, -300, 289, 0);
+  placeAt(scene, B.lookout, -280, 312, Math.PI);
   placeAt(scene, B.campground, 300, 158, 0);
-  { const x = riverX(-40) - RIVER_W - 7; placeAt(scene, B.dock, x, -40, Math.PI / 2); }
+  { const x = riverX(-40) - RIVER_W - 7; const bt = placeAt(scene, B.dock, x, -40, Math.PI / 2); addPlatform(x + 4.6, -40, 1.5, 5.2, Math.PI / 2, bt.fy + 0.8); }
+  copperCreek(scene);
+  // Lily Pond: the bait shop and a long dock out over the water
+  placeAt(scene, B.baitShop, 404, 132, Math.PI / 2);
+  { const x = POND.x - POND.r - 1, z = 146, bt = placeAt(scene, B.longDock, x, z, Math.PI / 2); addPlatform(x + 7.5, z, 1.5, 8, Math.PI / 2, bt.fy + 0.7); }
+  placeAt(scene, B.hideout, -462, -262, Math.PI / 2);
+  for (const a of ATMS) placeAt(scene, B.atm, a.x, a.z, a.yaw);
+  // the fence all the way around the valley
+  { const b = new B.Batch(); b.at(0, 0, 0); B.borderFence(b, EDGE + 3, hAt); b.finish(scene); }
   // the speedway: grandstand, start arch, tire walls
   const sw = TRACKS.speedway, sm = TRACKS.moto;
   const si = startIndex(sw, -60, -319), mi = startIndex(sm, 247, -12);
@@ -128,6 +138,25 @@ function outskirts(scene) {
   const dir = (text, x, z, yaw) => { const y = hAt(x, z); const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.6, 0.25), new THREE.MeshLambertMaterial({ color: 0x888888 })); p.position.set(x, y + 1.8, z); scene.add(p); B.sign(scene, text, 5, 1.3, x, y + 3.6, z, yaw, { bg: "#1f7a3a", fg: "#ffffff", back: true }); addCircle(x, z, 0.3, y + 4); };
   dir("MOTOCROSS →", 124, -9, 0); dir("↑ SPEEDWAY", 8, -112, Math.PI / 2); dir("FARM ↓", 8, 112, -Math.PI / 2); dir("← MANSION HILL", -124, -9, 0); dir("MOUNTAIN TRAIL", -118, 92, Math.PI / 4);
   dir("MUD BOWL →", 232, 182, -0.6); dir("← CAMPGROUND", 288, 140, 0);
+  dir("↑ COPPER CREEK", 222, -14, -Math.PI / 2); dir("THUNDER PEAK ⛰", -138, 128, Math.PI / 4); dir("GOAT TRAIL (4x4)", -328, 36, 0.8);
+  dir("LILY POND 🎣", 392, 100, Math.PI / 2); dir("CANYON RUN", 372, 344, 0.4); dir("TIMBER RIDGE", -356, -360, 0.6);
+}
+// ---------------------------------------------------------------- Copper Creek: bank, jewelry store, police station, shops
+function copperCreek(scene) {
+  placeAt(scene, B.bank, 330, -345, 0);
+  placeAt(scene, B.jewelry, 366, -343, 0);
+  placeAt(scene, B.policeStation, 428, -349, 0);
+  placeAt(scene, B.hospital, 484, -344, 0);
+  placeAt(scene, B.gearShop, 330, -300, Math.PI);
+  placeAt(scene, B.blasterShop, 366, -300, Math.PI);
+  placeAt(scene, (s, b) => B.smallShop(s, b, "COPPER CAFE", 0xf2e0c8, 0xc0602a), 418, -301, Math.PI);
+  placeAt(scene, (s, b) => B.smallShop(s, b, "TOY TRAIN SHOP", 0xd8f0ff, 0x2a8ad0), 436, -301, Math.PI);
+  // (the two houses on Copper Lane are for sale: see HOUSES)
+  // street lamps + trees along Main Street
+  const b = new B.Batch();
+  for (let x = 304; x <= 492; x += 22) for (const z of [-311, -325]) { if (Math.abs(x - 400) < 8) continue; b.at(x, hAt(x, z), z, z < -318 ? 0 : Math.PI); B.tree(b, 0, 0, 0.7, 1); }
+  b.finish(scene);
+  B.sign(scene, "WELCOME TO COPPER CREEK", 9, 1.6, 300, hAt(300, -330) + 4, -330, Math.PI / 2, { bg: "#c0602a", fg: "#ffffff", back: true });
 }
 function startIndex(p, x, z) { let bi = 0, bd = 1e9; for (let i = 0; i < p.n; i++) { const d = (p.x[i] - x) ** 2 + (p.z[i] - z) ** 2; if (d < bd) { bd = d; bi = i; } } return bi; }
 function edgeObjects(p, off, every, out, r, outsideOnly) {
@@ -157,12 +186,14 @@ function nearPath(x, z, d) { for (const [dx, dz] of [[0, 0], [d, 0], [-d, 0], [0
 function forestDensity(x, z) {
   const h = hAt(x, z);
   let d = Math.max(0, fbm(x / 90 + 3, z / 90 - 5, 3)) * 0.9;
-  const dm = Math.hypot(x + 200, z - 230); if (dm > 25 && dm < 160 && h < 52) d += 0.45;
+  const dm = Math.hypot(x - MOUNTAIN.x, z - MOUNTAIN.z); if (dm > 40 && dm < 200 && h < 105) d += 0.45 * (1 - h / 140);
+  if (x < -330 && z < -180) d += 0.5; // Timber Ridge woods
+  if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 6) return 0;
   if (Math.hypot(x + 300, z + 10) < 90) d += 0.5;
   if (x > 200 && z > 60) d += 0.3 * (0.6 + fbm(x / 40, z / 40, 2));
   const rd = Math.abs(x - riverX(z)); if (rd > RIVER_W + 8 && rd < 45) d += 0.3;
   if (Math.hypot(x + 215, z + 128) < 80) d += 0.3;
-  if (Math.abs(x) > 340 || Math.abs(z) > 340) d += 0.4;
+  const m = Math.max(Math.abs(x), Math.abs(z)); if (m > EDGE + 40) return 0; if (m > 470) d += 0.4;
   return d;
 }
 function forests(scene) {
@@ -177,16 +208,24 @@ function forests(scene) {
       const s = 0.8 + rnd() * 0.7, h = hAt(x, z);
       (h > 20 || rnd() < 0.6 ? pines : rounds).push({ x, z, s, y: h, c: rnd() });
       addCircle(x, z, 0.5 * s, h + 7);
-    } else if (r > 0.992 - (x > 180 ? 0.006 : 0) - (Math.hypot(x + 200, z - 230) < 140 ? 0.01 : 0)) {
+    } else if (r > 0.992 - (x > 180 ? 0.006 : 0) - (Math.hypot(x - MOUNTAIN.x, z - MOUNTAIN.z) < 190 ? 0.01 : 0)) {
+      if (Math.max(Math.abs(x), Math.abs(z)) > EDGE + 30) continue;
       if (inFlat(x, z) || nearPath(x, z, 5)) continue;
       const s = 0.6 + rnd() * 1.8; const h = hAt(x, z); rocks.push({ x, z, s, y: h, c: rnd() }); addCircle(x, z, s * 0.85, h + s * 1.1);
     }
   }
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
-  const make = (geo, color, list, y, ys, cv) => {
-    const m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), list.length);
-    list.forEach((t, i) => { M.compose(v.set(t.x, t.y + y * t.s, t.z), q.setFromAxisAngle(up, t.c * 6.28), sc.set(t.s, t.s * ys, t.s)); m.setMatrixAt(i, M); m.setColorAt(i, col.set(color).offsetHSL(cv ? (t.c - 0.5) * 0.04 : 0, 0, cv ? (t.c - 0.5) * 0.12 : 0)); });
-    m.castShadow = true; m.receiveShadow = true; scene.add(m); return m;
+  // (cut into 3 x 3 big squares: the computer skips the squares the camera can't see)
+  const R = (HALF * 2) / 3, reg = (t) => Math.min(2, Math.floor((t.x + HALF) / R)) + 3 * Math.min(2, Math.floor((t.z + HALF) / R));
+  const mats = {};
+  const make = (geo, color, all, y, ys, cv) => {
+    const mat = mats[color] || (mats[color] = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }));
+    for (let r = 0; r < 9; r++) {
+      const list = all.filter((t) => reg(t) === r); if (!list.length) continue;
+      const m = new THREE.InstancedMesh(geo, mat, list.length);
+      list.forEach((t, i) => { M.compose(v.set(t.x, t.y + y * t.s, t.z), q.setFromAxisAngle(up, t.c * 6.28), sc.set(t.s, t.s * ys, t.s)); m.setMatrixAt(i, M); m.setColorAt(i, col.set(color).offsetHSL(cv ? (t.c - 0.5) * 0.04 : 0, 0, cv ? (t.c - 0.5) * 0.12 : 0)); });
+      m.computeBoundingSphere(); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+    }
   };
   const trunks = pines.concat(rounds);
   make(new THREE.CylinderGeometry(0.2, 0.32, 2.2, 6), 0x7a5232, trunks, 1.0, 1, false);
@@ -197,13 +236,15 @@ function forests(scene) {
   return { trees: trunks.length, rocks: rocks.length };
 }
 // big blue-ish mountains far away all around the valley
-function farMountains(scene) {
-  const g = [], mat = new THREE.MeshLambertMaterial({ color: 0x7aa6a0, flatShading: true });
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * Math.PI * 2 + Math.sin(i * 3.1) * 0.08, r = 560 + Math.sin(i * 1.7) * 50, h = 110 + Math.abs(Math.sin(i * 2.3)) * 120;
+function farMountains(scene0) {
+  const scene = new THREE.Group(); scene0.add(scene);
+  const g = [], mat = new THREE.MeshLambertMaterial({ color: 0x7aa6a0, flatShading: true }), capMat = new THREE.MeshLambertMaterial({ color: 0xf4f8ff, flatShading: true });
+  for (let i = 0; i < 30; i++) {
+    const a = (i / 30) * Math.PI * 2 + Math.sin(i * 3.1) * 0.08, r = HALF + 200 + Math.sin(i * 1.7) * 50, h = 150 + Math.abs(Math.sin(i * 2.3)) * 140;
     const m = new THREE.Mesh(new THREE.ConeGeometry(150 + Math.cos(i) * 40, h, 7), mat); m.position.set(Math.cos(a) * r, h / 2 - 20, Math.sin(a) * r); m.rotation.y = i; scene.add(m); g.push(m);
-    const cap = new THREE.Mesh(new THREE.ConeGeometry((150 + Math.cos(i) * 40) * 0.28, h * 0.28, 7), new THREE.MeshLambertMaterial({ color: 0xf4f8ff, flatShading: true })); cap.position.set(m.position.x, h - 20 - h * 0.14 + 0.5, m.position.z); cap.rotation.y = i; if (h > 170) scene.add(cap);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry((150 + Math.cos(i) * 40) * 0.28, h * 0.28, 7), capMat); cap.position.set(m.position.x, h - 20 - h * 0.14 + 0.5, m.position.z); cap.rotation.y = i; if (h > 170) scene.add(cap);
   }
+  bakeGroup(scene); for (const c of scene.children) c.castShadow = false;
   return g;
 }
 function clouds(scene) {
@@ -211,7 +252,7 @@ function clouds(scene) {
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3();
   let k = 0;
   for (let c = 0; c < 20; c++) {
-    const cx = (Math.sin(c * 12.9) * 0.5 + 0.5) * 900 - 450, cz = (Math.sin(c * 78.2) * 0.5 + 0.5) * 900 - 450, cy = 130 + (c % 4) * 15;
+    const cx = (Math.sin(c * 12.9) * 0.5 + 0.5) * 1300 - 650, cz = (Math.sin(c * 78.2) * 0.5 + 0.5) * 1300 - 650, cy = 230 + (c % 4) * 15;
     for (let i = 0; i < 7 && k < 140; i++, k++) { const r = 8 + ((i * 37 + c * 11) % 9); M.compose(v.set(cx + (i - 3) * 9, cy + ((i * 7) % 5), cz + ((i * 13) % 7) - 3), q, s.set(r * 1.4, r * 0.8, r)); m.setMatrixAt(k, M); }
   }
   m.count = k; scene.add(m); list.push(m);

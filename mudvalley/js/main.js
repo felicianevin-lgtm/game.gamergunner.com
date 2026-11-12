@@ -3,15 +3,20 @@
 // buy houses and win races. Progress is saved in this browser. Test hook: window.MV (see the bottom). ?thumb draws the thumbnail.
 // Files: layout.js (the map plan), terrain.js (the ground), build.js + world.js (buildings, trees, the valley),
 // vehicles.js (rides + models), physics.js (driving + walking), trailer.js, character.js (people), jobs.js, races.js,
-// save.js, hud.js (on-screen info + maps), menus.js (shop screens), input.js (controls), sfx.js (sounds), fx.js (mud + dust).
+// save.js, hud.js (on-screen info + maps), menus.js (shop screens), input.js (controls), sfx.js (sounds), fx.js (mud + dust),
+// crime.js (robber + cop careers, blasters, wanted stars, jail), fishing.js (rods, casting, reeling, fish).
 import * as THREE from "/create/vendor/three.module.js";
-import { buildWorld, makeSky, animateWorld, recolorMarker } from "./world.js";
-import { groundAt, mapCanvas, PATHS, SURF } from "./terrain.js";
-import { PLACES, HOUSES, WATER_Y } from "./layout.js";
+import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./world.js";
+import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth } from "./terrain.js";
+import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
 import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf } from "./physics.js";
 import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable } from "./trailer.js";
-import { makePerson, LOOKS } from "./character.js";
+import { makePerson, LOOKS, lookFor, makeRod, makeBlaster } from "./character.js";
+import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js";
+import { Fishing, rodById } from "./fishing.js";
+import { Interiors, buildingById, JAIL_SPOT } from "./interiors.js";
+import { MP } from "./mp.js";
 import { FX } from "./fx.js";
 import { SFX, audio, setMuted, engine } from "./sfx.js";
 import { S, save, uid, slots, pay, spend, money, wipe } from "./save.js";
@@ -36,7 +41,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(58, 1, 0.3, 1500);
+const camera = new THREE.PerspectiveCamera(58, 1, 0.3, 900);
 let quality = Q.has("low") ? 0 : 1;
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, quality ? 1.5 : 1);
@@ -50,11 +55,11 @@ if (IN.touch) document.body.classList.add("touch");
 const G = {
   mode: "play", // play | side (shop screens) | modal | map | race | thumb
   time: 0, CARS: new Map(), TRS: new Map(), me: null, race: null, tow: null, waypoint: null, panel: null, preview: null,
-  shake: 0, hint: null, hintT: 0,
+  shake: 0, hint: null, hintT: 0, siren: false, hold: null, lockWalk: false, aimT: 0, deepT: 0, rescueT: 0,
   // fast travel to your home (from the phone)
   goHome(h) { const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
 };
-let sky, world, fx, jobs;
+let sky, world, fx, jobs, crime, fishing, interiors, mp;
 const cam = { yaw: Math.PI, pitch: 0.3, zoom: 1, x: 0, y: 5, z: 0, tx: 0, ty: 0, tz: 0, snap: true };
 
 // ---------------------------------------------------------------- your vehicles + trailers in the world
@@ -98,11 +103,105 @@ function freeSpot(x, z, yaw, len = 5) {
 
 // ---------------------------------------------------------------- you
 function makeMe() {
-  const p = makePerson(LOOKS.you); scene.add(p.root);
+  const p = makePerson(lookFor(S.role, S.gear.mask)); scene.add(p.root);
   G.me = { p, w: makeWalker(S.px, S.pz), car: null };
+  G.me.w.isWalker = true;
+}
+// ---------------- going inside buildings (E at the front door)
+const inside = () => !!(interiors && interiors.cur);
+function goInside(bd, spot) {
+  if (mine()) exitCar();
+  if (fishing.busy) fishing.cancel();
+  const p = interiors.enter(bd, spot), w = G.me.w;
+  w.x = p.x; w.z = p.z; w.y = 0; w.vx = w.vz = w.vy = 0; w.air = false; w.yaw = p.yaw; cam.yaw = p.yaw; cam.pitch = 0.32; cam.snap = true;
+  SFX.door(); H.flash("#000"); G.me.p.hold(null); // (you put your stuff away inside)
+}
+function goOutside() {
+  const p = interiors.leaveRoom(); if (!p) return;
+  const w = G.me.w; w.x = p.x; w.z = p.z; w.y = groundAt(p.x, p.z); w.vx = w.vz = 0; w.yaw = p.yaw; cam.yaw = p.yaw; cam.snap = true;
+  SFX.door(); H.flash("#fff"); applyItem();
+}
+// where you are on the map (inside a building = at its front door)
+function mapPos() { const c = mine(), b = c ? c.b : G.me.w; if (inside()) { const bd = interiors.cur.bd; return { x: bd.dx, y: groundAt(bd.dx, bd.dz), z: bd.dz, vx: 0, vz: 0, yaw: bd.out }; } return b; }
+const MENUS = { dealer: () => UI.dealer(), jobs: () => UI.jobs(), gear: () => UI.gear(), blasters: () => UI.blasters(), bait: () => UI.bait(), police: () => UI.police(), hideout: () => UI.hideout() };
+function insideActions(out) {
+  const R = interiors.cur, w = G.me.w, l = interiors.local(w), bd = R.bd;
+  if (l.z > bd.d / 2 - 1.7 && Math.abs(l.x) < 1.5) { out.E = { text: "Leave " + bd.name, fn: goOutside }; return out; }
+  out.E = crime.robAction({ x: l.x, z: l.z, room: bd.id });
+  if (out.E) return out;
+  for (const sp of R.spots) {
+    if (Math.hypot(sp.x - l.x, sp.z - l.z) > sp.r) continue;
+    if (sp.act === "menu") out.E = { text: { dealer: "Talk to the sales clerk (buy rides)", jobs: "Look at the Job Board", gear: "Shop for robber gear", blasters: "Shop for blasters", bait: "Buy rods + sell your fish", police: "Talk to the desk sergeant", hideout: "Look at the secret map (stash loot)" }[bd.menu] || "Talk", fn: MENUS[bd.menu] };
+    else if (sp.act === "chat") out.E = { text: "Say hi to the " + (bd.keeper || "neighbor").toLowerCase(), fn: () => { SFX.phone(); H.toast("“" + (sp.say || "Hi there! Welcome to " + bd.name + "!") + "”", bd.keeper || "", "", 3200); } };
+    else if (sp.act === "snack") out.E = { text: "Buy a snack ($5)", fn: () => { if (spend(5)) { SFX.cash(); H.bumpMoney(); H.toast("Yum! 🍪", "That hit the spot.", "good", 1800); save(); } else SFX.nope(); } };
+    else if (sp.act === "sleep") out.E = { text: S.houses.includes(bd.house.id) ? "Take a nap" : "Test the bed", fn: () => { H.flash("#000"); SFX.phone(); H.toast("Zzz... good morning!", "Nothing beats a nap.", "good", 2400); } };
+    else if (sp.act === "tour") out.E = { text: "Buy this house (" + money(bd.house.price) + ")", fn: () => UI.house(bd.house) };
+    if (out.E) break;
+  }
+  if (!out.E && bd.kind === "home" && !S.houses.includes(bd.house.id)) G.hint = G.hint || null;
+  return out;
+}
+// ---------------- things you hold (X switches: empty hands -> blaster -> fishing rod -> spike strips)
+const itemModels = {};
+function itemsOwned() {
+  const L = ["none"];
+  if (S.blaster || S.role === "cop") L.push("blaster");
+  if (S.rod) L.push("rod");
+  if (S.role === "cop") L.push("spikes");
+  return L;
+}
+const ITEM_NAME = { none: "Empty hands", blaster: "Blaster", rod: "Fishing rod", spikes: "Spike strips" };
+function applyItem() {
+  if (!itemsOwned().includes(S.equip)) S.equip = "none";
+  let m = null;
+  if (S.equip === "blaster") { const bl = blasterById(S.blaster) || STUN_BLASTER, k = "b" + bl.id; m = itemModels[k] || (itemModels[k] = makeBlaster(bl.tier)); }
+  if (S.equip === "rod") { const r = rodById(S.rod), k = "r" + r.id; m = itemModels[k] || (itemModels[k] = makeRod(r.color)); }
+  G.me.p.hold(m);
+  document.body.classList.toggle("hasItem", S.equip !== "none");
+}
+function cycleItem() {
+  if (inside()) { SFX.nope(); H.toast("Not inside!", "Take out your stuff when you’re outdoors.", "warn", 1800); return; }
+  if (fishing.busy) fishing.cancel();
+  const L = itemsOwned();
+  if (L.length < 2) { SFX.nope(); H.toast("Nothing to hold yet", "Buy a blaster at Splat Blasters or a fishing rod at the Bait & Tackle.", "warn"); return; }
+  S.equip = L[(L.indexOf(S.equip) + 1) % L.length]; applyItem(); SFX.click();
+  const tip = { none: "", blaster: "Q = shoot (it aims for you!)", rod: "Face the water and press Q to cast", spikes: "Q = drop a spike strip" }[S.equip];
+  H.toast("🔄 " + ITEM_NAME[S.equip], tip, "", 2200);
+}
+function useItem() {
+  const c = mine();
+  if (inside()) return;
+  if (c) { if (S.role === "cop") crime.dropSpikes(); return; }
+  if (crime.ko || crime.jail) return;
+  if (S.equip === "blaster") { const y = cam.yaw; if (crime.fire(y)) { G.me.w.yaw = y; G.aimT = 0.4; } }
+  else if (S.equip === "rod") fishing.press();
+  else if (S.equip === "spikes") crime.dropSpikes();
+  else if (itemsOwned().length > 1) H.toast("Your hands are empty", "Press X to take out your " + itemsOwned().slice(1).map((k) => ITEM_NAME[k].toLowerCase()).join(" or ") + ".", "", 2600);
+}
+// the police car you get as a cop (it isn't one of your garage rides)
+const POLICE_UID = -1;
+function policeCar() { return G.CARS.get(POLICE_UID) || null; }
+function spawnPoliceCar(x = 420, z = -333, yaw = Math.PI / 2) {
+  if (policeCar()) return policeCar();
+  const id = S.cop.car === "interceptor" && S.cop.interceptor ? "interceptor" : "cruiser";
+  const s = newCar(id, POLICE_UID); Object.assign(s, { x, z, yaw, tires: "allterrain" });
+  const c = spawnCar(s); c.police = true; if (c.m.rider) c.m.rider.root.visible = false; return c;
+}
+function removePoliceCar() {
+  const c = policeCar(); if (!c) return;
+  if (c === mine()) exitCar();
+  for (const t of G.TRS.values()) if (t.hitched === c.b) { t.hitched = null; t.s.hitched = null; }
+  scene.remove(c.m.root); G.CARS.delete(POLICE_UID); G.siren = false;
+}
+function roleChanged(r) {
+  G.me.p.setLook(lookFor(r, S.gear.mask)); if (mp) mp.sendLook();
+  if (r === "cop") { const c = spawnPoliceCar(); H.toast("👮 Your police car is ready", "It’s parked at the Police Station. Hop in (F) and press G for the siren!", "good", 4200); }
+  else removePoliceCar();
+  applyItem();
 }
 function enterCar(c) {
   if (c.on) return;
+  if (fishing && fishing.busy) fishing.cancel();
   G.me.car = c; G.me.p.root.visible = false; c.m.rider && (c.m.rider.root.visible = true);
   cam.yaw = c.b.yaw; SFX.door(); setTimeout(() => SFX.start(), 120);
   S.driving = c.s.uid;
@@ -114,11 +213,12 @@ function exitCar() {
   if (pushOut(px, pz, 0.5, b.y + 0.5).hit > 0.1) { px = b.x - sx * d; pz = b.z - sz * d; }
   const w = G.me.w; w.x = px; w.z = pz; w.y = groundAt(px, pz); w.vx = w.vz = 0; w.yaw = b.yaw;
   G.me.car = null; G.me.p.root.visible = true; if (c.m.rider) c.m.rider.root.visible = false;
-  b.vx *= 0.3; b.vz *= 0.3;
+  b.vx *= 0.3; b.vz *= 0.3; if (c.police) G.siren = false;
   SFX.door(); engine(false);
   S.driving = null;
 }
 function teleportMe(x, z, yaw) {
+  if (interiors && interiors.cur && Math.abs(x) < 1000) interiors.leaveRoom();
   const c = mine();
   if (c) { const b = c.b; b.x = x; b.z = z; b.yaw = yaw; b.vx = b.vz = b.vy = 0; b.yawRate = 0; b.flipped = false; b.pitch = b.roll = 0; b.y = groundAt(x, z); b.air = false; placeModel(b); const t = myTrailer(); if (t) { t.x = x - Math.sin(yaw) * (t.T.len + 3); t.z = z - Math.cos(yaw) * (t.T.len + 3); t.yaw = yaw; stepTrailer(t, DT); } }
   else { const w = G.me.w; w.x = x; w.z = z; w.y = groundAt(x, z); w.vx = w.vz = 0; w.yaw = yaw; }
@@ -203,8 +303,17 @@ function houseSigns() {
 // ---------------------------------------------------------------- what you can do nearby (E / F / T)
 const near = (a, b, r) => Math.hypot(a.x - b.x, a.z - b.z) < r;
 function actions() {
-  const out = { E: null, F: null, T: null };
+  const out = { E: null, F: null, T: null, Q: null };
   const c = mine(), me = c ? c.b : G.me.w;
+  // jail + knocked out: not much you can do
+  if (crime.jail) { out.E = { text: "Jail break! Press E when the needle is in the green", fn: () => crime.jailTry() }; return out; }
+  if (crime.ko) return out;
+  if (inside()) return insideActions(out);
+  // Q: use what you're holding
+  if (c) { if (S.role === "cop") out.Q = { text: "Drop a spike strip (" + S.cop.spikes + ")", fn: useItem }; }
+  else if (S.equip === "blaster") out.Q = { text: "Shoot the blaster", fn: useItem };
+  else if (S.equip === "rod") out.Q = fishing.state === "bite" ? { text: "HOOK IT!", fn: useItem } : fishing.state === "reel" ? { text: "Hold to reel in", fn: () => {} } : fishing.state === "wait" ? { text: "Waiting for a bite... (Q = reel in)", fn: useItem } : fishing.busy ? null : { text: fishing.waterAhead() ? "Cast your line" : "Face the water to fish", warn: !fishing.waterAhead(), fn: useItem };
+  else if (S.equip === "spikes") out.Q = { text: "Drop a spike strip (" + S.cop.spikes + ")", fn: useItem };
   // F: get in / out
   if (c) out.F = { text: "Get out", fn: exitCar };
   else {
@@ -240,6 +349,10 @@ function actions() {
     }
   }
   if (!c) for (const tr of G.TRS.values()) if (tr.loaded.length && near(tr, me, 6.5)) { const last = tr.loaded[tr.loaded.length - 1]; out.E = { text: "Unload " + vehicleById(G.CARS.get(last.uid).s.id).name, fn: () => unloadCar(tr) }; break; }
+  // E: robbing, cuffing, booking (hold E)
+  const cme = { x: me.x, z: me.z, inCar: !!c };
+  if (!out.E) out.E = crime.bookAction(cme) || crime.cuffAction(cme) || (c ? null : crime.robAction(cme));
+  if (!out.E && !c) { const bd = interiors.doorNear(me.x, me.z); if (bd) out.E = { text: (bd.kind === "home" ? (S.houses.includes(bd.house.id) ? "Go inside your house" : "Take a tour: " + bd.name) : "Go inside " + bd.name), fn: () => goInside(bd) }; }
   // E: places
   if (!out.E) {
     for (const [id, mk] of Object.entries(world.markers)) {
@@ -252,6 +365,11 @@ function actions() {
       if (id === "wash") { out.E = c ? { text: "Car wash (free!)", fn: washCar } : { text: "Drive in to wash your ride", warn: true, fn: () => SFX.nope() }; break; }
       if (id === "lot") { out.E = { text: "Open garage", fn: () => UI.house(HOUSES[0]) }; break; }
       if (raceById(id)) { out.E = { text: "Race: " + raceById(id).name, fn: () => UI.raceInfo(raceById(id)) }; break; }
+      if (id === "police") { out.E = { text: "Enter the Police Station", fn: () => UI.police() }; break; }
+      if (id === "gear") { out.E = { text: "Shop at the Tool Barn", fn: () => UI.gear() }; break; }
+      if (id === "blasters") { out.E = { text: "Shop at Splat Blasters", fn: () => UI.blasters() }; break; }
+      if (id === "bait") { out.E = { text: "Bait & Tackle: rods + sell fish", fn: () => UI.bait() }; break; }
+      if (id === "hideout") { out.E = S.role === "robber" ? { text: S.loot ? "Stash your loot (" + money(S.loot) + ")" : "Robber Hideout", fn: () => UI.hideout() } : { text: "A spooky old shack...", fn: () => UI.hideout() }; break; }
     }
   }
   return out;
@@ -362,6 +480,16 @@ export const GAME = {
     m.root.position.set(-36, 1.45, -18); scene.add(m.root); G.preview = m;
   },
   wipe() { wipe(); location.reload(); },
+  get crime() { return crime; }, get fishing() { return fishing; }, get mp() { return mp; },
+  setRole(r) { const why = crime.setRole(r); if (why) { SFX.nope(); H.toast("Can’t switch right now", why, "warn"); return false; } return true; },
+  buyGear(g) { if (S.gear[g.id]) return false; if (!spend(g.price)) { SFX.nope(); H.toast("Not enough money", "You need " + money(g.price - S.money) + " more.", "warn"); return false; } S.gear[g.id] = true; SFX.buy(); H.bumpMoney(); if (g.id === "mask") G.me.p.setLook(lookFor(S.role, true)); save(); return true; },
+  buyBlaster(bl) { if (!S.blasters.includes(bl.id)) { if (!spend(bl.price)) { SFX.nope(); H.toast("Not enough money", "You need " + money(bl.price - S.money) + " more.", "warn"); return false; } S.blasters.push(bl.id); SFX.buy(); H.bumpMoney(); } S.blaster = bl.id; S.equip = "blaster"; applyItem(); save(); return true; },
+  buyRod(r) { if (!S.rods.includes(r.id)) { if (!spend(r.price)) { SFX.nope(); H.toast("Not enough money", "You need " + money(r.price - S.money) + " more.", "warn"); return false; } S.rods.push(r.id); SFX.buy(); H.bumpMoney(); } S.rod = r.id; S.equip = "rod"; applyItem(); save(); return true; },
+  sellFish() { const { n, c } = fishing.sellAll(); if (!c) { SFX.nope(); return 0; } pay(n); SFX.cash(); H.bumpMoney(); H.toast("+" + money(n), "Sold " + c + " fish!", "cash"); save(); return n; },
+  copCar(id) { S.cop.car = id; const c = policeCar(); if (c) { const { x, z } = c.b, yaw = c.b.yaw, was = c === mine(); removePoliceCar(); const n = spawnPoliceCar(x, z, yaw); if (was) enterCar(n); } save(); },
+  refillSpikes() { S.cop.spikes = 3; SFX.load(); save(); },
+  buyInterceptor() { if (S.cop.interceptor) return true; if (!spend(15000)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.cop.interceptor = true; SFX.buy(); H.bumpMoney(); GAME.copCar("interceptor"); return true; },
+  policeCar,
   muted(m) { S.muted = m; setMuted(m); $("bMute").textContent = m ? "🔇" : "🔊"; save(); },
 };
 function trailerModel(id) { const tm = makeTrailer({ type: id, x: 0, z: 0, yaw: 0 }, new THREE.Group()); tm.model.root.position.set(0, 0, 0); tm.model.root.rotation.set(0, 0, 0); return tm.model.root; }
@@ -392,9 +520,21 @@ function tick(dt) {
   // keys that work anytime you're playing
   if (!blocked) {
     const A = actions(); G.actions = A;
-    if (IN.pressed("KeyF") && A.F && !G.race) A.F.fn();
-    if (IN.pressed("KeyE") && A.E && !G.race) A.E.fn();
+    if (IN.pressed("KeyF") && A.F && !G.race && !crime.jail && !crime.ko) A.F.fn();
+    // E: tap, or hold for things like robbing + cuffing
+    const eTap = IN.pressed("KeyE");
+    if (A.E && A.E.hold && !G.race) {
+      const h = G.hold && G.hold.id === A.E.id ? G.hold : null;
+      if (IN.isHeld("KeyE")) {
+        if (!h) { G.hold = { id: A.E.id, t: 0 }; A.E.start && A.E.start(); }
+        G.hold.t += dt; A.E.tick && A.E.tick(G.hold.t / A.E.hold);
+        if (G.hold.t >= A.E.hold) { G.hold = null; A.E.done(); }
+      } else if (h) { h.t = Math.max(0, h.t - dt * 0.5); }
+    } else { G.hold = null; if (eTap && A.E && !G.race) A.E.fn(); }
     if (IN.pressed("KeyT") && A.T && !G.race) A.T.fn();
+    if (IN.pressed("KeyQ") && !G.race) useItem();
+    if (IN.pressed("KeyX") && !G.race && !c) cycleItem();
+    if (IN.pressed("KeyG")) { if (c && c.police) { G.siren = !G.siren; SFX.click(); H.toast(G.siren ? "🚨 Siren ON" : "Siren off", "", "", 1200); } else if (c) SFX.nope(); }
     if (IN.pressed("KeyH")) (c && ["hauler", "monster"].includes(c.s.id) ? SFX.hornBig : SFX.horn)();
     if (IN.pressed("KeyR")) resetVehicle();
   }
@@ -406,10 +546,13 @@ function tick(dt) {
     carEffects(c, b, inp, dt);
   } else {
     const w = IN.walk(); const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
-    const mx = blocked ? 0 : -fz * w.x + fx * w.y, mz = blocked ? 0 : fx * w.x + fz * w.y;
-    const jump = !blocked && IN.pressed("Space");
+    const frozen = blocked || G.lockWalk || !!crime.ko || (fishing.busy && fishing.state !== "wait");
+    if (fishing.state === "wait" && Math.hypot(w.x, w.y) > 0.3) fishing.cancel(); // (walking away reels the line in)
+    const mx = frozen ? 0 : -fz * w.x + fx * w.y, mz = frozen ? 0 : fx * w.x + fz * w.y;
+    const jump = !frozen && !fishing.busy && IN.pressed("Space");
     if (jump) SFX.jump();
-    stepWalker(G.me.w, mx, mz, w.run, jump, dt);
+    if (inside()) interiors.step(G.me.w, G.lockWalk ? 0 : mx, G.lockWalk ? 0 : mz, w.run, jump && !G.lockWalk, dt);
+    else if (!G.lockWalk) stepWalker(G.me.w, mx, mz, w.run, jump, dt);
   }
   // bumping into other vehicles / trailers
   const me = c ? c.b : G.me.w;
@@ -419,10 +562,33 @@ function tick(dt) {
   if (G.tow) stepTrailer(G.tow, dt);
   if (G.race) raceTick(dt);
   jobs.update(dt);
-  if (G.waypoint && Math.hypot(G.waypoint.x - me.x, G.waypoint.z - me.z) < 14) { G.waypoint = null; setBeacon(gpsBeacon, null); H.toast("You made it!", "", "good"); SFX.check(); }
+  crime.update(dt);
+  fishing.update(dt, !blocked && IN.isHeld("KeyQ"));
+  mp.update(dt);
+  if (G.aimT > 0) G.aimT -= dt;
+  G.rescueT -= dt; if (G.rescueT <= 0 && !inside()) { G.rescueT = 0.5; rescue(); }
+  if (G.waypoint && !inside() && Math.hypot(G.waypoint.x - me.x, G.waypoint.z - me.z) < 14) { G.waypoint = null; setBeacon(gpsBeacon, null); H.toast("You made it!", "", "good"); SFX.check(); }
   if (G.hintT > 0) G.hintT -= dt;
   fx.update(dt);
   saveT += dt; if (saveT > 6) { saveT = 0; syncSave(); }
+}
+// ---------------- the safety net: anything that leaves the valley, falls through the ground or sinks in deep water
+// gets put back on the nearest road (or trail)
+const lost = (o, y) => !Number.isFinite(o.x) || !Number.isFinite(o.z) || !Number.isFinite(y) || Math.abs(o.x) > EDGE + 3 || Math.abs(o.z) > EDGE + 3 || y < groundAt(o.x, o.z) - 2.5;
+function rescue() {
+  const c = mine(), me = c ? c.b : G.me.w;
+  // stuck in deep water (the pond, the deep part of the river)
+  const deep = c ? waterDepth(me.x, me.z) > (c.m.liftY || 0) + 1.3 && !me.air : false;
+  G.deepT = deep ? G.deepT + 0.5 : 0;
+  if (lost(me, me.y) || G.deepT > 3) {
+    const p = nearestRoad(Number.isFinite(me.x) ? me.x : 0, Number.isFinite(me.z) ? me.z : 0);
+    G.deepT = 0; teleportMe(p.x, p.z, p.yaw);
+    H.toast(deep ? "Glub glub! Towed out of the water" : "Whoa! Back on solid ground", "We put you back on the nearest road.", "warn", 3200);
+  }
+  for (const o of G.CARS.values()) if (o !== c && !o.on && (lost(o.b, o.b.y) || waterDepth(o.b.x, o.b.z) > 2.2)) { const p = nearestRoad(Number.isFinite(o.b.x) ? o.b.x : 0, Number.isFinite(o.b.z) ? o.b.z : 0); const f = freeSpot(p.x, p.z, p.yaw, o.m.len); Object.assign(o.b, { x: f.x, z: f.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, flipped: false }); settle(o.b); }
+  for (const t of G.TRS.values()) if (!t.hitched && lost(t, t.y)) { const p = nearestRoad(Number.isFinite(t.x) ? t.x : 0, Number.isFinite(t.z) ? t.z : 0); t.x = p.x; t.z = p.z; t.yaw = p.yaw; stepTrailer(t, DT); }
+  for (const k of crime.cops) if (lost(k.b, k.b.y)) { const p = nearestRoad(k.b.x || 0, k.b.z || 0); Object.assign(k.b, { x: p.x, z: p.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, y: groundAt(p.x, p.z) }); }
+  const rc = crime.call && crime.call.robber.car.b; if (rc && lost(rc, rc.y)) { const p = nearestRoad(rc.x || 0, rc.z || 0); Object.assign(rc, { x: p.x, z: p.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, y: groundAt(p.x, p.z) }); }
 }
 // push the driven vehicle off parked ones (a simple version of bumpPair that moves the car body)
 function carVsStuff(b) {
@@ -512,24 +678,26 @@ function updateCamera(dt) {
     if (sp > 1.5) cam.yaw += wrap(goal - cam.yaw) * Math.min(1, dt * (1.2 + sp * 0.08));
     cam.pitch += ((tw ? 0.4 : 0.28) - cam.pitch) * Math.min(1, dt * 0.8);
   }
+  if (inside()) dist = 3.6 * Math.min(1.2, cam.zoom);
   let tx = t.x, ty = t.y + (c ? 1.2 + (c.m.liftY || 0) : 1.4), tz = t.z;
-  let px = tx - Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist, pz = tz - Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist, py = ty + Math.sin(cam.pitch) * dist + 1.2;
+  let px = tx - Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist, pz = tz - Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist, py = ty + Math.sin(cam.pitch) * dist + (inside() ? 0.5 : 1.2);
+  if (inside() && G.mode !== "side") { [px, py, pz] = interiors.clampCam(px, py, pz); }
   // shop screens get their own camera
   if (G.mode === "side" && G.panel === "dealer") { tx = -36; ty = 2.6; tz = -18; px = -36 + Math.sin(G.time * 0.25) * 2 + 8.5; py = 5.2; pz = -8.5; }
   if (G.mode === "side" && G.panel === "customs" && c) { const a = G.time * 0.3; tx = c.b.x; ty = c.b.y + 1.2; tz = c.b.z; px = tx + Math.sin(a) * (4 + c.m.len); pz = tz + Math.cos(a) * (4 + c.m.len); py = ty + 2.2; }
   if (G.mode === "side" && G.panel === "house" && G.houseView) {
     // look at the front of the house from a little to the side
     const h = G.houseView, fx = Math.sin(h.yaw), fz = Math.cos(h.yaw), sx = Math.cos(h.yaw), sz = -Math.sin(h.yaw);
-    const d = { mansion: 40, farm: 42, family: 26, cabin: 24, camper: 18, lot: 30 }[h.id] || 26, k = h.id === "lot" ? 0 : 1;
+    const d = { mansion: 40, farm: 42, family: 26, cabin: 24, camper: 18, small: 20 }[h.build] || 30, k = h.id === "lot" ? 0 : 1;
     const hx = k ? h.x : h.garage.x, hz = k ? h.z : h.garage.z;
     tx = hx; ty = groundAt(hx, hz) + 3.5; tz = hz; px = hx + fx * d + sx * d * 0.55; pz = hz + fz * d + sz * d * 0.55; py = ty + d * 0.32;
   }
   // with a shop screen open on the left, center the view in the part you can see
   if (G.mode === "side" && innerWidth > 700) camera.setViewOffset(innerWidth, innerHeight, -Math.min(460, innerWidth) / 2, 0, innerWidth, innerHeight);
   else if (camera.view && camera.view.enabled) camera.clearViewOffset();
-  const gy = groundAt(px, pz) + 1.0; if (py < gy) py = gy;
+  const gy = inside() ? 0.6 : groundAt(px, pz) + 1.0; if (py < gy) py = gy;
   // don't let a hill get between the camera and you
-  if (G.mode !== "side") { let lift = 0; for (let k = 0.25; k < 1.01; k += 0.15) { const x = tx + (px - tx) * k, z = tz + (pz - tz) * k, y = ty + (py - ty) * k; lift = Math.max(lift, (groundAt(x, z) + 0.9 - y) / k); } py += lift; }
+  if (G.mode !== "side" && !inside()) { let lift = 0; for (let k = 0.25; k < 1.01; k += 0.15) { const x = tx + (px - tx) * k, z = tz + (pz - tz) * k, y = ty + (py - ty) * k; lift = Math.max(lift, (groundAt(x, z) + 0.9 - y) / k); } py += lift; }
   const k = cam.snap ? 1 : Math.min(1, dt * 10);
   cam.x += (px - cam.x) * k; cam.y += (py - cam.y) * k; cam.z += (pz - cam.z) * k;
   cam.tx += (tx - cam.tx) * k; cam.ty += (ty - cam.ty) * k; cam.tz += (tz - cam.tz) * k; cam.snap = false;
@@ -542,12 +710,17 @@ function updateCamera(dt) {
 function draw(dt) {
   const c = mine();
   // models
-  for (const v of G.CARS.values()) if (!v.on) { placeModel(v.b); animateCar(v.m, { speed: v === c ? speedOf(v.b) : 0, reverse: v.b.vf < 0, steer: v.b.steer, wheelDrop: v.b.wheelDrop, boost: v.b.boost }, dt); }
+  for (const v of G.CARS.values()) if (!v.on) { placeModel(v.b); animateCar(v.m, { speed: v === c ? speedOf(v.b) : 0, reverse: v.b.vf < 0, steer: v.b.steer, wheelDrop: v.b.wheelDrop, boost: v.b.boost, siren: v.police && G.siren && v === c, t: G.time }, dt); }
   if (!c) {
     const w = G.me.w, p = G.me.p;
     p.root.position.set(w.x, w.y + (Math.abs(w.x) < 116 && Math.abs(w.z) < 106 ? 0.12 : 0), w.z); p.root.rotation.y = w.yaw;
-    p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
+    if (crime.ko) p.pose("ko", G.time);
+    else if (fishing.busy) { /* (fishing.draw does the pose) */ }
+    else if (G.aimT > 0) p.pose("aim", G.time);
+    else p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
   }
+  crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); if (inside()) interiors.draw(G.time, G.me.w);
+  if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
   if (G.tow && G.tow.towCar.smoke) { G.tow.towCar.smoke.children.forEach((s, i) => { s.position.y = 1 + ((G.time * 0.8 + i * 0.4) % 1.6); s.scale.setScalar(0.6 + ((G.time * 0.8 + i * 0.4) % 1.6) * 0.6); }); }
   if (G.preview) { G.preview.root.rotation.y = G.time * 0.5; if (G.preview.wheels) animateCar(G.preview, { speed: 0, steer: 0 }, dt); }
@@ -561,14 +734,19 @@ function draw(dt) {
 function hudTick(dt) {
   if (THUMB) return;
   document.body.classList.toggle("inmenu", G.mode === "side" || G.mode === "modal" || G.mode === "map");
-  const c = mine(), b = c ? c.b : null, me = c ? c.b : G.me.w;
+  document.body.classList.toggle("copCar", !!(mine() && mine().police));
+  const c = mine(), b = c ? c.b : null, me = mapPos();
   const j = jobs.active;
   let target = null;
+  const CH = crime.hud();
   if (G.race && !G.race.finished) { const n = G.race.nextCp(); target = { x: n.x, z: n.z, kind: "race" }; }
+  else if (CH.jail) target = null;
+  else if (CH.target) target = { ...CH.target, kind: "crime" };
   else if (j) target = { ...jobs.target(), kind: "" };
   else if (G.waypoint) target = { ...G.waypoint, kind: "gps" };
   const vehicles = [...G.CARS.values()].filter((v) => !v.on && v !== c).map((v) => ({ x: v.b.x, z: v.b.z }));
-  const g = { vehLabel: c ? vehicleById(c.s.id).name : "On foot", speed: b ? speedOf(b) : 0, topSpeed: b ? b.t.top : 30, driving: !!c, reverse: b && b.vf < -0.5, job: j, race: G.race, target, px: me.x, pz: me.z, camYaw: cam.yaw, pyaw: me.yaw, vehicles, trailerDots: [...G.TRS.values()].map((t) => ({ x: t.x, z: t.z })) };
+  const role = S.role === "cop" ? "👮 " + rankOf().name : S.role === "robber" ? "🦹 Robber" : "";
+  const g = { friends: mp.dots(), pins: G.pins, crime: CH, reel: fishing.hud(), role, item: !c && S.equip !== "none" ? ITEM_NAME[S.equip] : "", cops: crime.cops.map((k) => ({ x: k.b.x, z: k.b.z })), vehLabel: (role ? role + " · " : "") + (c ? vehicleById(c.s.id).name : "On foot"), speed: b ? speedOf(b) : 0, topSpeed: b ? b.t.top : 30, driving: !!c, reverse: b && b.vf < -0.5, job: j, race: G.race, target, px: me.x, pz: me.z, camYaw: cam.yaw, pyaw: me.yaw, vehicles, trailerDots: [...G.TRS.values()].map((t) => ({ x: t.x, z: t.z })) };
   H.updateHud(g);
   miniT += dt; if (miniT > 0.08) { miniT = 0; H.drawMini(g); }
   if (G.mode === "map") H.drawBigMap(g);
@@ -578,15 +756,21 @@ function hudTick(dt) {
   if (G.mode === "play" || G.mode === "race") {
     const A = G.actions || {};
     if (G.hintT > 0 && G.hint) list.push({ key: "", text: G.hint, warn: true });
-    if (!G.race) { if (A.E) list.push({ key: "E", text: A.E.text, warn: A.E.warn }); if (A.F) list.push({ key: "F", text: A.F.text }); if (A.T) list.push({ key: "T", text: A.T.text, warn: A.T.warn }); }
+    if (!G.race) {
+      if (A.E) list.push({ key: "E", text: A.E.text, warn: A.E.warn, bar: A.E.hold && G.hold && G.hold.id === A.E.id ? G.hold.t / A.E.hold : A.E.hold ? 0 : undefined });
+      if (A.F) list.push({ key: "F", text: A.F.text }); if (A.T) list.push({ key: "T", text: A.T.text, warn: A.T.warn });
+      if (A.Q) list.push({ key: "Q", text: A.Q.text, warn: A.Q.warn, hot: fishing.state === "bite" });
+      if (c && c.police) list.push({ key: "G", text: G.siren ? "Siren off" : "Siren on" });
+    }
     if (G.race && G.race.state === "go" && c && (c.b.flipped || (G.race && Math.hypot(me.x - target?.x, me.z - target?.z) > 90))) list.push({ key: "R", text: "Back to the track" });
   }
   H.hints(list);
+  if (G.hold && G.actions && G.actions.E && G.actions.E.hold) H.holdBar(G.hold.t / G.actions.E.hold); else H.holdBar(0);
 }
 function syncSave() {
   for (const c of G.CARS.values()) { if (!c.on) { c.s.x = Math.round(c.b.x * 10) / 10; c.s.z = Math.round(c.b.z * 10) / 10; c.s.yaw = Math.round(c.b.yaw * 100) / 100; } c.s.on = c.on ? c.on.s.uid : null; }
   for (const t of G.TRS.values()) { t.s.x = t.x; t.s.z = t.z; t.s.yaw = t.yaw; let hu = null; for (const c of G.CARS.values()) if (t.hitched === c.b) hu = c.s.uid; t.s.hitched = hu; }
-  const me = mine() ? mine().b : G.me.w; S.px = me.x; S.pz = me.z; S.driving = mine() ? mine().s.uid : null;
+  const me = mapPos(); S.px = me.x; S.pz = me.z; S.driving = mine() ? mine().s.uid : null;
   if (G.race) { S.px = G.raceFrom.x; S.pz = G.raceFrom.z; }
   save();
 }
@@ -614,6 +798,26 @@ async function boot() {
   }
   for (const t of G.TRS.values()) if (t.s.hitched && G.CARS.has(t.s.hitched) && !G.CARS.get(t.s.hitched).on) t.hitched = G.CARS.get(t.s.hitched).b;
   jobs = new Jobs(jobApi);
+  crime = new Crime({
+    scene, fx, makeBeacon: (col) => beacon(col), setBeacon, toast: H.toast, banner: H.banner, bumpMoney: H.bumpMoney,
+    me() { const c = mine(), b = mapPos(), w = G.me.w; return { x: b.x, y: b.y, z: b.z, vx: b.vx, vz: b.vz, yaw: b.yaw, inCar: !!c, car: c, body: c ? c.b : null, walker: inside() ? { x: b.x, z: b.z, vx: 0, vz: 0, isWalker: true } : w, speed: inside() ? 0 : Math.hypot(b.vx || 0, b.vz || 0), len: c ? c.m.len : 1, indoors: inside() }; },
+    goJail() { goInside(buildingById("police"), JAIL_SPOT); G.lockWalk = true; cam.yaw = 0; cam.pitch = 0.25; cam.snap = true; },
+    leaveJail(p) { G.lockWalk = false; if (inside()) interiors.leaveRoom(); teleportMe(p.x, p.z, p.yaw); },
+    exitCar: () => { if (mine()) exitCar(); }, teleport: (x, z, yaw) => teleportMe(x, z, yaw), lockWalk: (v) => { G.lockWalk = v; }, roleChanged, policeCar, mySiren: () => G.siren && !!mine() && mine().police, shake: (k) => { G.shake = Math.max(G.shake, k); },
+  });
+  fishing = new Fishing({ scene, fx, toast: H.toast, banner: H.banner, me: () => G.me.w, person: () => G.me.p, rodModel: () => (S.equip === "rod" ? G.me.p.item && G.me.p.item.userData.bend ? G.me.p.item : itemModels["r" + S.rod] : null) });
+  interiors = new Interiors({ scene });
+  G.pins = [];
+  mp = new MP({
+    scene, toast: H.toast, look: () => lookFor(S.role, S.gear.mask),
+    me() { const c = mine(), p = mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint } : null }; },
+    pin(who, x, z) { G.pins.push({ x, z, name: who }); if (G.pins.length > 5) G.pins.shift(); GAME.setWaypoint({ x, z, name: who + "’s pin 📍" }); },
+    changed() { UI.mpChanged && UI.mpChanged(); $("bPhone").classList.toggle("dot", mp.unread > 0); },
+  });
+  // little red rings where robbers can rob things outside (only robbers see them)
+  G.robMarks = ROB_SPOTS.filter((sp) => !sp.room).map((sp) => { const m = makeMarker(scene, sp.x, sp.z, 1.4, "#ff4a4a", sp.icon); m.icon.scale.set(1.6, 1.6, 1); m.icon.position.y = 2.6; m.spot = sp; m.g.visible = false; return m; });
+  if (S.role === "cop") { const c = spawnPoliceCar(); if (S.driving === POLICE_UID) { Object.assign(c.b, { x: S.px, z: S.pz }); settle(c.b); } }
+  applyItem();
   houseSigns();
   setMuted(!!S.muted); $("bMute").textContent = S.muted ? "🔇" : "🔊";
   initMenus(GAME);
@@ -630,6 +834,7 @@ async function boot() {
   $("bPhone").addEventListener("click", () => { audio(); UI.phone(); });
   $("bMap").addEventListener("click", () => { audio(); UI.map(); });
   $("bMute").addEventListener("click", () => { audio(); GAME.muted(!S.muted); });
+  $("jailBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); audio(); crime.jailTry(); });
   if (S.driving && G.CARS.has(S.driving) && !G.CARS.get(S.driving).on) { const c = G.CARS.get(S.driving); G.me.car = c; G.me.p.root.visible = false; cam.yaw = c.b.yaw; }
   for (const c of G.CARS.values()) if (c.m.rider) c.m.rider.root.visible = c === mine();
   $("loading").classList.add("hidden");
@@ -652,7 +857,7 @@ function thumbnail() {
 
 // ---------------------------------------------------------------- test hook
 const MV = {
-  get state() { const c = mine(), me = c ? c.b : G.me.w; return { mode: G.mode, money: S.money, driving: c ? c.s.id : null, x: me.x, y: me.y, z: me.z, speed: c ? speedOf(c.b) : 0, surf: c ? c.b.surf : null, cars: S.cars.map((s) => s.id), trailers: S.trailers.map((t) => t.type), houses: S.houses.slice(), job: jobs.active ? { type: jobs.active.type, stage: jobs.active.stage } : null, race: G.race ? { state: G.race.state, lap: G.race.lap, place: G.race.place, next: G.race.next, time: G.race.time, finished: G.race.finished } : null, flipped: c ? c.b.flipped : false, air: c ? c.b.air : false }; },
+  get state() { const c = mine(), me = c ? c.b : G.me.w; return { role: S.role, wanted: S.wanted, loot: S.loot, cops: crime.cops.length, jail: crime.jail ? +crime.jail.t.toFixed(1) : 0, ko: !!crime.ko, fishing: fishing.state, fish: S.fish.length, equip: S.equip, mode: G.mode, money: S.money, driving: c ? c.s.id : null, x: me.x, y: me.y, z: me.z, speed: c ? speedOf(c.b) : 0, surf: c ? c.b.surf : null, cars: S.cars.map((s) => s.id), trailers: S.trailers.map((t) => t.type), houses: S.houses.slice(), job: jobs.active ? { type: jobs.active.type, stage: jobs.active.stage } : null, race: G.race ? { state: G.race.state, lap: G.race.lap, place: G.race.place, next: G.race.next, time: G.race.time, finished: G.race.finished } : null, flipped: c ? c.b.flipped : false, air: c ? c.b.air : false }; },
   S, G, GAME, UI, jobs: () => jobs, H,
   give(n) { pay(n); save(); return S.money; },
   teleport(x, z, yaw = 0) { teleportMe(x, z, yaw); },
@@ -674,6 +879,17 @@ const MV = {
   sync() { syncSave(); },
   camYaw(v) { cam.yaw = v; cam.snap = true; },
   info() { return { ...renderer.info.render, quality, pixelRatio: renderer.getPixelRatio() }; },
+  get crime() { return crime; }, get fishing() { return fishing; }, get world() { return world; }, scene, camera, renderer,
+  // hold a key for n steps (e.g. MV.hold("KeyE", 300) robs / cuffs)
+  hold(code, n = 60) { IN.forceHeld(code, true); MV.step(n); IN.forceHeld(code, false); return MV.state; },
+  tap(code) { IN.forceTap(code); MV.step(1); return MV.state; },
+  setRole(r) { return GAME.setRole(r); },
+  equip(k) { S.equip = k; applyItem(); return S.equip; },
+  cam(yaw, pitch) { cam.yaw = yaw; if (pitch !== undefined) cam.pitch = pitch; cam.snap = true; },
+  rescueNow() { G.rescueT = 0; MV.step(1); return MV.state; },
+  get interiors() { return interiors; }, get mp() { return mp; },
+  goIn(id) { const bd = buildingById(id); const w = G.me.w; if (mine()) exitCar(); teleportMe(bd.dx + Math.sin(bd.out) * 1.2, bd.dz + Math.cos(bd.out) * 1.2, bd.out + Math.PI); const a = actions(); if (a.E && a.E.text.includes(bd.name.split(" ")[0]) || (a.E && /inside|tour/i.test(a.E.text))) { a.E.fn(); return a.E.text; } return a.E && a.E.text; },
+  walkTo(lx, lz) { const w = G.me.w, P = interiors.cur ? { x: w.x - interiors.local(w).x, z: w.z - interiors.local(w).z } : { x: 0, z: 0 }; w.x = P.x + lx; w.z = P.z + lz; return MV.actions(); },
 };
 window.MV = MV;
 boot().catch((e) => { console.error(e); $("loading").querySelector("span").textContent = "Oops! Something went wrong: " + e.message; });

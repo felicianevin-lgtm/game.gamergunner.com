@@ -441,3 +441,116 @@ export function startArch(scene, b, w, text, opts = {}) {
     const s2 = new THREE.Mesh(new THREE.PlaneGeometry(w + 2, (w + 2) / 8), new THREE.MeshBasicMaterial({ map: t, transparent: true })); s2.position.set(p.x, b.fy + 9.4, p.z); s2.rotation.y = m.rotation.y; scene.add(s2);
   }
 }
+
+// ---------------------------------------------------------------- Copper Creek (the second town) and the new places
+// a simple shop: walls, a big window, an awning and a sign. (front faces +z before turning)
+export function shop(scene, b, text, wall, trim, w = 18, d = 14, h = 6, signOpts = {}) {
+  b.box(w, h, d, 0, 0, 0, wall).solid(0, 0, w / 2, d / 2);
+  b.box(w + 0.6, 0.6, d + 0.6, 0, h, 0, trim);
+  windows(b, w - 4, 2.4, d / 2 + 0.05, 2, 2, (w - 8) / 2.4, 0xbfe8ff, trim); b.box(2.4, 3.4, 0.2, 0, 0, d / 2 + 0.1, 0x3a3a3a);
+  for (let i = 0; i < 8; i++) b.add(new THREE.BoxGeometry(w / 8, 0.12, 2.2), i % 2 ? 0xffffff : trim, -w / 2 + w / 16 + (i * w) / 8, 3.9, d / 2 + 1.0, -0.45, 0, 0);
+  bsign(scene, b, text, Math.min(w - 2, 16), 2.2, 0, h - 1.4, d / 2 + 0.35, { bg: signOpts.bg || "#ffffff", fg: signOpts.fg || "#222222", stroke: signOpts.stroke });
+}
+export function bank(scene, b) {
+  b.box(26, 9, 18, 0, 0, 0, 0xe8e2d4).solid(0, 0, 13, 9); b.roof(27, 3, 19, 0, 9, 0, 0x6a7a6a);
+  b.box(22, 0.8, 4, 0, 0, 10.4, 0xdedad0); b.box(22, 1, 3, 0, 8, 10.2, 0xe8e2d4); b.roof(22, 2.2, 3, 0, 9, 10.2, 0xe8e2d4);
+  for (let x = -9; x <= 9; x += 3) b.cyl(0.55, 7.2, x, 0.8, 11, 0xffffff, 10);
+  b.box(4, 5, 0.25, 0, 0.8, 9.1, 0x4a3a2a); b.cyl(1.6, 0.4, 0, 2.6, 9.0, 0x9aa0aa, 18); // (the round vault door shows through the door!)
+  bsign(scene, b, "COPPER CREEK BANK", 18, 1.8, 0, 8.6, 11.8, { bg: "#2a6a4a", fg: "#ffe9a8" });
+  bsign(scene, b, "$", 3, 3, 0, 11.2, 9.7, { bg: null, fg: "#ffd23a", px: 128, stroke: "#3a2a00" });
+}
+export function jewelry(scene, b) {
+  shop(scene, b, "SPARKLE JEWELRY", 0xf4e4f8, 0x9a4ad8, 18, 14, 6, { bg: "#9a4ad8", fg: "#ffffff" });
+  // glass cases with glowing gems in front of the window
+  for (const x of [-5, 0, 5]) { b.box(3, 1, 1.4, x, 0, 9, 0xddddee); b.box(2.6, 0.7, 1.1, x, 1, 9, 0xbfe8ff, "glass"); for (let i = 0; i < 3; i++) b.ball(0.18, x - 0.8 + i * 0.8, 1.35, 9, [0x6af0ff, 0xff5ad8, 0x7aff5a][i], "glow"); b.solid(x, 9, 1.5, 0.7, 1.8); }
+}
+export function policeStation(scene, b) {
+  b.box(30, 8, 18, 0, 0, 0, 0xf2f2f4).solid(0, 0, 15, 9); b.box(30.6, 1, 18.6, 0, 8, 0, 0x2a4ac8); b.box(30.2, 1.6, 18.2, 0, 0, 0, 0x2a4ac8);
+  windows(b, 24, 4.6, 9.05, 6, 1.6, 2.2, 0xbfe8ff, 0x2a4ac8); b.box(4, 3.8, 0.2, -6, 0, 9.1, 0x1a2a6a);
+  b.box(8, 0.4, 4, -6, 3.9, 10.5, 0x2a4ac8); for (const x of [-9.6, -2.4]) b.cyl(0.18, 3.9, x, 0, 12.2, 0xdddddd, 6);
+  // the jail wing with bars
+  // (an open cell you can see into through the bars)
+  b.box(12, 6, 6, 21, 0, -6, 0xb8bcc4).solid(21, -6, 6, 3); b.box(12.4, 0.5, 8.4, 21, 5.6, 1, 0x9a9ea8);
+  for (const x of [15.2, 26.8]) { b.box(0.4, 6, 8, x, 0, 1, 0xb8bcc4); b.solid(x, 1, 0.2, 4); }
+  b.box(11.2, 0.1, 8, 21, 0.02, 1, 0x8a8a92); b.box(2.4, 0.5, 0.9, 24.5, 0.1, -2.4, 0x8a6a4a); // the floor and a bench
+  b.solid(21, 5.1, 6, 0.2);
+  for (let x = 16; x <= 26; x += 0.8) b.box(0.12, 4.2, 0.12, x, 0.6, 5.1, 0x3a3a44);
+  b.box(10.4, 0.25, 0.3, 21, 4.8, 5.1, 0x3a3a44); b.box(10.4, 0.25, 0.3, 21, 0.6, 5.1, 0x3a3a44);
+  // a flag and a light bar on the roof
+  b.cyl(0.12, 12, -16, 0, 12, 0xdddddd, 6); b.add(new THREE.BoxGeometry(0.05, 1.6, 2.6), 0x2a4ac8, -16, 11, 13.4); b.post(-16, 12, 0.3, 12);
+  b.box(3, 0.6, 0.8, 0, 9, 0, 0x222222); b.box(1.3, 0.5, 0.7, -0.75, 9.5, 0, 0xff2a2a, "glow"); b.box(1.3, 0.5, 0.7, 0.75, 9.5, 0, 0x2a6aff, "glow");
+  bsign(scene, b, "POLICE", 12, 2.2, -6, 6.6, 9.4, { bg: "#2a4ac8", fg: "#ffffff" });
+  bsign(scene, b, "JAIL", 5, 1.4, 21, 5.6, 5.3, { bg: "#3a3a44", fg: "#ffd23a" });
+  // parking spots out front
+  b.box(26, 0.06, 10, -2, 0.01, 17, 0x3c3f46); for (let i = 0; i < 5; i++) b.box(0.25, 0.08, 6, -12 + i * 5, 0.02, 17, 0xffffff);
+}
+export function hospital(scene, b) {
+  b.box(24, 10, 16, 0, 0, 0, 0xffffff).solid(0, 0, 12, 8); b.box(24.4, 0.6, 16.4, 0, 10, 0, 0xe04a4a);
+  windows(b, 20, 3, 8.05, 5, 1.6, 2.4); windows(b, 20, 6.8, 8.05, 5, 1.6, 2.4); b.box(4, 3.6, 0.2, 0, 0, 8.1, 0x6ad0ff, "glass");
+  b.box(1.2, 4, 0.3, 0, 10.6, 0, 0xe03a3a); b.box(4, 1.2, 0.3, 0, 12, 0, 0xe03a3a);
+  bsign(scene, b, "HOSPITAL", 10, 1.8, 0, 8.8, 8.3, { bg: "#ffffff", fg: "#e03a3a" });
+}
+export function gearShop(scene, b) {
+  // the Tool Barn: a red barn shop full of tools
+  b.box(18, 7, 14, 0, 0, 0, 0xb84a2a).solid(0, 0, 9, 7); b.add(prismGeo(19, 4, 15), 0x5a5a62, 0, 7, 0);
+  b.box(6, 5, 0.2, 0, 0, 7.05, 0x7a2a18); b.add(new THREE.BoxGeometry(0.3, 6.6, 0.25), 0xffffff, 0, 2.5, 7.15, 0, 0, 0.75); b.add(new THREE.BoxGeometry(0.3, 6.6, 0.25), 0xffffff, 0, 2.5, 7.15, 0, 0, -0.75);
+  for (const [x, c] of [[-6.5, 0xffb020], [6.5, 0x3a7ad0]]) { b.box(1.8, 1.2, 1, x, 0, 8.4, c); b.box(1.8, 0.2, 1, x, 1.2, 8.4, 0x333333); }
+  b.add(new THREE.BoxGeometry(0.3, 3.2, 0.3), 0x9a9aa0, 9.6, 4, 7.4, 0, 0, 0.6); b.box(0.9, 0.5, 0.4, 10.3, 5.2, 7.4, 0x6a6a72); // a giant wrench
+  bsign(scene, b, "TOOL BARN", 12, 2, 0, 9.0, 7.3, { bg: "#ffb020", fg: "#3a1a00" });
+}
+export function blasterShop(scene, b) {
+  shop(scene, b, "SPLAT BLASTERS", 0xfff2a0, 0xff5ad8, 18, 14, 6, { bg: "#ff5ad8", fg: "#ffffff", stroke: "#6a0a4a" });
+  // paint splats all over the walls
+  const cols = [0x3ad0ff, 0x7aff5a, 0xff8a1a, 0x9a5aff, 0xff3a5a];
+  for (let i = 0; i < 12; i++) b.add(new THREE.CylinderGeometry(0.5 + (i % 3) * 0.3, 0.5 + (i % 3) * 0.3, 0.05, 9), cols[i % 5], -8 + (i * 1.47) % 16, 1 + ((i * 2.3) % 4.6), 7.06, Math.PI / 2, 0, 0);
+  b.box(2, 0.2, 2, 6, 6.6, 0, 0x3ad0ff); b.ball(1.2, 6, 7.8, 0, 0xff5ad8);
+}
+export function smallShop(scene, b, text, wall, trim) { shop(scene, b, text, wall, trim, 14, 12, 5, { bg: "#" + trim.toString(16).padStart(6, "0"), fg: "#ffffff" }); }
+export function baitShop(scene, b) {
+  b.box(8, 3.6, 6, 0, 0, 0, 0x6a9a7a).solid(0, 0, 4, 3); b.roof(9, 1.8, 7, 0, 3.6, 0, 0x3a5a4a);
+  b.box(8, 0.3, 2.4, 0, 0, 4.2, 0xa07848); for (const x of [-3.7, 3.7]) b.cyl(0.12, 3.4, x, 0, 5.2, 0x7a5a30, 6);
+  b.box(3, 1, 0.8, -1.5, 0, 4.4, 0x5a8aaa); b.box(1, 1.2, 0.8, 2.5, 0, 4.4, 0xffffff); b.box(1, 0.3, 0.8, 2.5, 1.2, 4.4, 0x3a8ad0); // a cooler + a bait fridge
+  bsign(scene, b, "BAIT & TACKLE", 7, 1.3, 0, 4.9, 3.15, { bg: "#3a8ad0", fg: "#ffffff" });
+  b.add(new THREE.TorusGeometry(0.6, 0.15, 6, 12, Math.PI * 1.5), 0xff7aa8, 3.2, 4.2, 3.2, 0, 0, 0.6); // a giant worm
+}
+export function longDock(scene, b, len = 16) {
+  for (let i = 0; i < len / 1.15; i++) b.box(3, 0.2, 1.1, 0, 0.5, i * 1.15, 0xa07848);
+  for (let i = 0; i < len / 1.15; i += 3) for (const x of [-1.4, 1.4]) b.cyl(0.15, 3.5, x, -2.8, i * 1.15, 0x7a5a30, 6);
+  bench(b, -1.2, len - 2, Math.PI / 2);
+}
+export function hideout(scene, b) {
+  // a wobbly old shack in the woods (the secret clubhouse of the Mud Valley robbers)
+  b.box(9, 4, 7, 0, 0, 0, 0x7a6a50).solid(0, 0, 4.5, 3.5); b.add(prismGeo(10, 2, 8), 0x5a4a3a, 0, 4, 0, 0, 0, 0.06);
+  for (let i = 0; i < 8; i++) b.box(0.9, 3.8, 0.1, -3.9 + i * 1.1, 0.1, 3.56, [0x8a7a5a, 0x6a5a40][i % 2]);
+  b.box(1.4, 2.6, 0.12, 0, 0, 3.62, 0x3a2a1a); b.add(new THREE.BoxGeometry(1.6, 0.25, 0.14), 0x9a8a6a, 2.5, 2.4, 3.64, 0, 0, 0.5); b.add(new THREE.BoxGeometry(1.6, 0.25, 0.14), 0x9a8a6a, 2.5, 2.4, 3.64, 0, 0, -0.5);
+  for (let i = 0; i < 3; i++) b.box(1, 0.8, 0.8, -6 + i * 0.3, i * 0.8, 2, 0x8a6a3a); // crates
+  b.box(1.2, 0.9, 0.9, 5.6, 0, 1.6, 0x5a4a8a); b.solid(-5.7, 2, 0.7, 0.6, 2.4);
+  bsign(scene, b, "HIDEOUT\nKEEP OUT!", 3.6, 1.6, 0, 3.4, 3.7, { bg: "#3a2a1a", fg: "#ffd23a" });
+}
+export function lookout(scene, b) {
+  // a tall wooden lookout tower with a telescope (you can see all of Mud Valley from up here!)
+  for (const [x, z] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) { b.add(new THREE.CylinderGeometry(0.2, 0.25, 9, 6), 0x7a5232, x * 0.85, 4.5, z * 0.85, z * 0.05, 0, -x * 0.05); b.post(x * 0.85, z * 0.85, 0.3, 9); }
+  b.box(5.4, 0.3, 5.4, 0, 9, 0, 0x9a6a3a); for (const s of [-1, 1]) { b.box(5.4, 1, 0.12, 0, 9.3, s * 2.65, 0x8a5a30); b.box(0.12, 1, 5.4, s * 2.65, 9.3, 0, 0x8a5a30); }
+  b.add(new THREE.ConeGeometry(4.2, 2, 4), 0x2f6a3a, 0, 12.6, 0, 0, Math.PI / 4); for (const [x, z] of [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]]) b.box(0.15, 2.2, 0.15, x, 9.3, z, 0x7a5232);
+  b.add(new THREE.CylinderGeometry(0.12, 0.18, 1.2, 8), 0x3a3a44, 1.2, 10.6, 1.2, 1.2, 0, 0); b.cyl(0.05, 1, 1.2, 9.3, 1.2, 0x222222, 5);
+  // a ladder
+  for (let y = 0.5; y < 9; y += 0.6) b.box(1, 0.1, 0.1, 0, y, 2.9, 0x8a5a30);
+  b.box(0.1, 9, 0.1, -0.5, 0, 2.9, 0x7a5232); b.box(0.1, 9, 0.1, 0.5, 0, 2.9, 0x7a5232);
+  bsign(scene, b, "THUNDER PEAK", 6, 1.2, 0, 1.6, 4.2, { bg: "#2f6a3a", fg: "#ffffff", back: true });
+}
+export function atm(scene, b) {
+  b.box(1.1, 2, 0.7, 0, 0, 0, 0x2a8a5a).solid(0, 0, 0.55, 0.35, 2); b.box(0.8, 0.5, 0.05, 0, 1.3, 0.36, 0x6af0ff, "glow"); b.box(0.6, 0.08, 0.1, 0, 0.9, 0.38, 0x222222);
+  bsign(scene, b, "ATM", 0.9, 0.3, 0, 1.75, 0.37, { bg: "#ffd23a", fg: "#1a3a1a", px: 128 });
+}
+// the wooden fence all the way around the valley (gh = ground height)
+export function borderFence(b, half, gh) {
+  for (const side of [0, 1, 2, 3]) {
+    for (let t = -half; t < half; t += 6) {
+      const p = (u) => (side === 0 ? [u, -half] : side === 1 ? [half, u] : side === 2 ? [-u, half] : [-half, -u]);
+      const [x0, z0] = p(t), [x1, z1] = p(t + 6), y0 = gh(x0, z0), y1 = gh(x1, z1);
+      b.add(new THREE.BoxGeometry(0.3, 1.8, 0.3), 0x8a6a42, x0, y0 + 0.7, z0);
+      const flat = Math.hypot(x1 - x0, z1 - z0), l = Math.hypot(flat, y1 - y0), ry = Math.atan2(x1 - x0, z1 - z0), rx = -Math.atan2(y1 - y0, flat);
+      for (const y of [0.6, 1.3]) b.add(new THREE.BoxGeometry(0.12, 0.22, l).rotateX(rx).rotateY(ry), y > 1 ? 0xffd23a : 0xa07848, (x0 + x1) / 2, (y0 + y1) / 2 + y, (z0 + z1) / 2);
+    }
+  }
+}

@@ -1,6 +1,7 @@
 // MUD VALLEY RP: the things you can bump into (buildings, trees, rocks, poles), kept in a grid so checking is fast.
 // Circles: { x, z, r, top }. Boxes: { x, z, hx, hz, c, s (turn), top }. top = how tall it is (you can jump over low stuff).
-const CELL = 16, HALF = 400, NC = (HALF * 2) / CELL;
+import { HALF } from "./layout.js";
+const CELL = 16, NC = (HALF * 2) / CELL;
 const grid = Array.from({ length: NC * NC }, () => []);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 let stamp = 0;
@@ -23,10 +24,10 @@ export function near(x, z, r, out = []) {
 }
 
 // push a circle (x, z, r) out of anything it overlaps. Returns { x, z, nx, nz, hit } (hit = how deep it went)
-const res = { x: 0, z: 0, nx: 0, nz: 0, hit: 0 };
+const res = { x: 0, z: 0, nx: 0, nz: 0, hit: 0, top: 0 };
 const list = [];
 export function pushOut(x, z, r, y = 0) {
-  res.hit = 0; res.nx = 0; res.nz = 0;
+  res.hit = 0; res.nx = 0; res.nz = 0; res.top = -1e9;
   for (const o of near(x, z, r + 4, list)) {
     if (y > o.top) continue;
     if (o.box) {
@@ -40,12 +41,12 @@ export function pushOut(x, z, r, y = 0) {
         if (px < pz) { ex = Math.sign(lx) || 1; ez = 0; pen = px + r; } else { ex = 0; ez = Math.sign(lz) || 1; pen = pz + r; }
       }
       const nx = ex * o.c + ez * o.s, nz = -ex * o.s + ez * o.c;
-      x += nx * pen; z += nz * pen; res.nx += nx; res.nz += nz; res.hit = Math.max(res.hit, pen);
+      x += nx * pen; z += nz * pen; res.nx += nx; res.nz += nz; res.hit = Math.max(res.hit, pen); res.top = Math.max(res.top, o.top);
     } else {
       const dx = x - o.x, dz = z - o.z, d = Math.hypot(dx, dz), m = r + o.r;
       if (d >= m) continue;
       const nx = d > 1e-6 ? dx / d : 1, nz = d > 1e-6 ? dz / d : 0, pen = m - d;
-      x += nx * pen; z += nz * pen; res.nx += nx; res.nz += nz; res.hit = Math.max(res.hit, pen);
+      x += nx * pen; z += nz * pen; res.nx += nx; res.nz += nz; res.hit = Math.max(res.hit, pen); res.top = Math.max(res.top, o.top);
     }
   }
   const l = Math.hypot(res.nx, res.nz); if (l > 0) { res.nx /= l; res.nz /= l; }

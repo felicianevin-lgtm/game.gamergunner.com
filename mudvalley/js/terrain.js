@@ -1,7 +1,8 @@
 // MUD VALLEY RP: the ground. Builds the hills, the river, the roads and trails, mud pits and jumps,
 // and answers "how high is the ground here?" and "is this road, dirt or mud?" for the driving physics.
 import * as THREE from "/create/vendor/three.module.js";
-import { HALF, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY } from "./layout.js";
+import { bakeGroup } from "./vehicles.js";
+import { HALF, EDGE, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, POND, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY } from "./layout.js";
 
 export const CELL = 5, N = (HALF * 2) / CELL; // the height grid: N x N squares of 5 m
 const V = N + 1;
@@ -38,8 +39,10 @@ const gauss = (x, z, m) => m.h * Math.exp(-((x - m.x) ** 2 + (z - m.z) ** 2) / (
 function rawH(x, z) {
   let h = 3 + 4 * fbm(x / 150, z / 150, 3);
   h += smooth(150, 230, x) * 9 * fbm(x / 60 + 11, z / 60 - 7, 3); // bumpy off-road hills in the east
-  h += smooth(330, 405, Math.max(Math.abs(x), Math.abs(z))) * 42; // hills all around the edge of the valley
-  h += gauss(x, z, MOUNTAIN) + gauss(x, z, MANSION_HILL);
+  h += smooth(EDGE - 18, HALF, Math.max(Math.abs(x), Math.abs(z))) * 95; // big hills all around the edge of the valley
+  const mt = gauss(x, z, MOUNTAIN);
+  h += mt + gauss(x, z, MANSION_HILL);
+  h += smooth(0.08, 0.5, mt / MOUNTAIN.h) * (1 - smooth(0.8, 0.97, mt / MOUNTAIN.h)) * 9 * fbm(x / 34 + 5, z / 34 - 3, 3); // rocky bumps on the mountain sides
   const d = x - riverX(z);
   h -= 4 * Math.exp(-(d * d) / (2 * 35 * 35)); // the land dips down towards the river
   return h;
@@ -59,6 +62,12 @@ function landH(x, z) {
     const bed = d < RIVER_W ? WATER_Y - deep * (1 - (d / RIVER_W) ** 2) : WATER_Y + 0.25 * ((d - RIVER_W) / 16);
     const w = 1 - smooth(RIVER_W, RIVER_W + 16, d);
     h = Math.min(h, lerp(h, bed, w)), h = d < RIVER_W ? Math.min(h, bed) : h;
+  }
+  // Lily Pond: a round bowl of water with a sandy shore
+  const dp = Math.hypot(x - POND.x, z - POND.z);
+  if (dp < POND.r + 14) {
+    const bed = dp < POND.r ? WATER_Y - 0.4 - 2.6 * (1 - (dp / POND.r) ** 2) : WATER_Y + 0.3 + 2.4 * smooth(POND.r, POND.r + 14, dp);
+    h = dp < POND.r ? bed : Math.min(h, bed);
   }
   return h;
 }
@@ -123,29 +132,62 @@ export function buildGround() {
       let b = i; while (b < p.n - 1 && p.bridge[b]) b++;
       p.e[i] = Math.max(WATER_Y + 2.4, lerp(p.e[a], p.e[b], (p.cum[i] - p.cum[a]) / Math.max(1, p.cum[b] - p.cum[a])));
     }
-    if (p.bridge.some((v) => v)) BRIDGES.push(p);
+    // ramps up to each end of a bridge (no step where the bridge starts)
+    if (p.bridge.some((v) => v)) {
+      for (let i = 0; i < p.n; i++) if (!p.bridge[i]) {
+        let best = 1e9, top = 0;
+        for (let k = 0; k < p.n; k++) if (p.bridge[k]) { const d = Math.abs(p.cum[i] - p.cum[k]); if (d < best) { best = d; top = p.e[k]; } }
+        p.e[i] = Math.max(p.e[i], top - best * 0.07);
+      }
+      BRIDGES.push(p);
+    }
     PATHS.push(p);
     return p;
   };
   for (const r of ROADS) add(r, "road");
   for (const t of TRAILS) add(t, "trail");
   TRACKS.moto = add({ pts: MOTO_TRACK, w: 12 }, "track");
+  { let bi = 0, bd = 1e9; for (let i = 0; i < TRACKS.moto.n; i++) { const d = (TRACKS.moto.x[i] - 247) ** 2 + (TRACKS.moto.z[i] + 12) ** 2; if (d < bd) { bd = d; bi = i; } } TRACKS.moto.start0 = bi; }
   TRACKS.speedway = add({ pts: SPEEDWAY, w: 16 }, "speedway");
   TRACKS.summit = PATHS.find((p) => p.name === "mountain");
   flattenPaths();
   for (const m of MUD_LIST) dig(m);
+  // the road's height = the ground under it (bridges keep their deck height), so what you see is what you drive on
+  for (const p of PATHS) for (let i = 0; i < p.n; i++) p.e[i] = p.bridge[i] ? Math.max(p.e[i], hAt(p.x[i], p.z[i])) : hAt(p.x[i], p.z[i]);
   // jumps on the motocross track
   const mt = TRACKS.moto;
-  // (dirt "tabletop" jumps: up, a flat top, then a smooth landing slope)
-  for (const [f, h] of [[0.05, 2.0], [0.15, 2.6], [0.3, 2.2], [0.5, 2.0], [0.76, 2.4]]) {
-    const i = Math.floor(f * mt.n), j = (i + 2) % mt.n;
-    RAMP_LIST.push({ x: mt.x[i], z: mt.z[i], yaw: Math.atan2(mt.x[j] - mt.x[i], mt.z[j] - mt.z[i]), len: 7, top: 4, down: 9, w: 11.5, h, track: true });
+  // (dirt "tabletop" jumps: up, a flat top, then a smooth landing slope). They only go on straight parts of the track,
+  // so you always land back on the track (never off into the hay bales or out of the park).
+  {
+    const head = (i) => { const a = ((i % mt.n) + mt.n) % mt.n, b = (a + 1) % mt.n; return Math.atan2(mt.x[b] - mt.x[a], mt.z[b] - mt.z[a]); };
+    const turn = (i) => { let m = 0; const h0 = head(i); for (let k = -2; k <= 16; k++) { const d = head(i + k); m = Math.max(m, Math.abs(Math.atan2(Math.sin(d - h0), Math.cos(d - h0)))); } return m; };
+    const picks = [], hs = [2.0, 2.4, 2.2, 2.0, 2.3];
+    for (let i = 0; i < mt.n && picks.length < 5; i++) {
+      const ds = Math.min(Math.abs(i - mt.start0), mt.n - Math.abs(i - mt.start0));
+      if (turn(i) > 0.3 || ds < 8) continue;
+      if (picks.some((q) => Math.min(Math.abs(q - i), mt.n - Math.abs(q - i)) < mt.n / 7)) continue;
+      picks.push(i);
+    }
+    picks.forEach((i, k) => { const j = (i + 2) % mt.n; RAMP_LIST.push({ x: mt.x[i], z: mt.z[i], yaw: Math.atan2(mt.x[j] - mt.x[i], mt.z[j] - mt.z[i]), len: 7, top: 4, down: 9, w: 11.5, h: hs[k], track: true }); });
   }
   { const i = Math.floor(0.66 * mt.n); const m = { x: mt.x[i], z: mt.z[i], r: 7 }; m.y = hAt(m.x, m.z); dig(m); MUD_LIST.push(m); }
   for (const r of RAMPS) RAMP_LIST.push({ ...r });
   for (const r of RAMP_LIST) { r.top = r.top || 0; r.down = r.down || 0; r.total = r.len + r.top + r.down; r.c = Math.cos(r.yaw); r.s = Math.sin(r.yaw); r.cx = r.x + r.s * r.total / 2; r.cz = r.z + r.c * r.total / 2; r.br = Math.hypot(r.total / 2, r.w / 2) + 1; }
   paintSurfaces();
+  // spots on roads + trails (for putting lost vehicles back somewhere safe)
+  for (const p of PATHS) if (p.kind !== "speedway" && p.kind !== "track") for (let i = 2; i < p.n - 2; i += 3) if (!p.bridge[i] && !p.ford[i] && hAt(p.x[i], p.z[i]) > WATER_Y + 0.4) {
+    const j = i + 1; ROAD_PTS.push({ x: p.x[i], z: p.z[i], yaw: Math.atan2(p.x[j] - p.x[i], p.z[j] - p.z[i]), road: p.kind === "road" });
+  }
 }
+const ROAD_PTS = [];
+const inChannel = (x, z) => Math.abs(x - riverX(z)) < RIVER_W + 1.5;
+// the nearest safe spot on a road or trail (roadsOnly: paved roads only)
+export function nearestRoad(x, z, roadsOnly = false) {
+  let b = null, bd = 1e18;
+  for (const p of ROAD_PTS) { if (roadsOnly && !p.road) continue; const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; b = p; } }
+  return b || { x: 0, z: 0, yaw: 0 };
+}
+export const roadPoints = () => ROAD_PTS;
 
 // lower the land along every road / trail / track to the road's own smooth height
 function flattenPaths() {
@@ -154,9 +196,11 @@ function flattenPaths() {
     const last = p.closed ? p.n : p.n - 1;
     for (let i = 0; i < last; i++) {
       const k = (i + 1) % p.n;
-      if (p.bridge[i] || p.bridge[k] || p.ford[i] || p.ford[k]) continue;
+      if (p.ford[i] || p.ford[k]) continue;
+      const br = p.bridge[i] || p.bridge[k];
+      if (br && (inChannel(p.x[i], p.z[i]) || inChannel(p.x[k], p.z[k]))) continue; // (the bridge itself: leave the river alone)
       const reach = p.w / 2 + 15;
-      const seg = { x0: p.x[i], z0: p.z[i], x1: p.x[k], z1: p.z[k], e0: p.e[i], e1: p.e[k], hw: p.w / 2 };
+      const seg = { x0: p.x[i], z0: p.z[i], x1: p.x[k], z1: p.z[k], e0: p.e[i], e1: p.e[k], hw: p.w / 2, br };
       const bx0 = Math.floor((Math.min(seg.x0, seg.x1) - reach + HALF) / BIN), bx1 = Math.floor((Math.max(seg.x0, seg.x1) + reach + HALF) / BIN);
       const bz0 = Math.floor((Math.min(seg.z0, seg.z1) - reach + HALF) / BIN), bz1 = Math.floor((Math.max(seg.z0, seg.z1) + reach + HALF) / BIN);
       for (let bz = Math.max(0, bz0); bz <= Math.min(NB - 1, bz1); bz++) for (let bx = Math.max(0, bx0); bx <= Math.min(NB - 1, bx1); bx++) bins[bz * NB + bx].push(seg);
@@ -165,8 +209,9 @@ function flattenPaths() {
   for (let j = 0; j < V; j++) for (let i = 0; i < V; i++) {
     const x = -HALF + i * CELL, z = -HALF + j * CELL;
     const bx = clamp(Math.floor((x + HALF) / BIN), 0, NB - 1), bz = clamp(Math.floor((z + HALF) / BIN), 0, NB - 1);
-    let bw = 0, be = 0;
+    let bw = 0, be = 0; const chan = inChannel(x, z);
     for (const s of bins[bz * NB + bx]) {
+      if (s.br && chan) continue;
       const dx = s.x1 - s.x0, dz = s.z1 - s.z0, l2 = dx * dx + dz * dz || 1;
       const t = clamp(((x - s.x0) * dx + (z - s.z0) * dz) / l2, 0, 1);
       const d = Math.hypot(x - (s.x0 + dx * t), z - (s.z0 + dz * t));
@@ -200,9 +245,9 @@ function paintSurfaces() {
   for (let j = 0; j < SN; j++) for (let i = 0; i < SN; i++) {
     const x = -HALF + (i + 0.5) * SC, z = -HALF + (j + 0.5) * SC, h = hAt(x, z);
     let c = SURF.GRASS;
-    if (Math.abs(x) < 116 && Math.abs(z) < 106) c = SURF.TOWN;
-    else if (Math.abs(x - riverX(z)) < RIVER_W + 5) c = SURF.SAND;
-    else if (h > 60 || slopeAt(x, z) > 0.95) c = SURF.ROCK;
+    if ((Math.abs(x) < 116 && Math.abs(z) < 106) || inCC(x, z)) c = SURF.TOWN;
+    else if (Math.abs(x - riverX(z)) < RIVER_W + 5 || Math.abs(Math.hypot(x - POND.x, z - POND.z) - POND.r - 3) < 6) c = SURF.SAND;
+    else if (h > 100 || slopeAt(x, z) > 0.95) c = SURF.ROCK;
     S[j * SN + i] = c;
   }
   const order = [["trail", SURF.DIRT], ["track", SURF.TRACK], ["road", SURF.ROAD], ["speedway", SURF.ROAD]];
@@ -214,6 +259,7 @@ function paintSurfaces() {
   }
 }
 
+export const inCC = (x, z) => Math.abs(x - 400) < 104 && Math.abs(z + 318) < 48; // Copper Creek's paved town square
 // ---------------------------------------------------------------- questions the game asks
 // height of the bare land (exactly matches the triangles you see)
 export function hAt(x, z) {
@@ -236,24 +282,40 @@ export function rampAt(x, z) {
   }
   return best;
 }
+// the deck height of the nearest bridge piece (no gaps where the road bends a little)
 function bridgeAt(x, z) {
+  let best = -1e9, bd = 1e9;
   for (const p of BRIDGES) for (let i = 0; i < p.n - 1; i++) {
     if (!p.bridge[i] && !p.bridge[i + 1]) continue;
-    const dx = p.x[i + 1] - p.x[i], dz = p.z[i + 1] - p.z[i], l2 = dx * dx + dz * dz;
-    const t = ((x - p.x[i]) * dx + (z - p.z[i]) * dz) / l2;
-    if (t < 0 || t > 1) continue;
-    if (Math.hypot(x - p.x[i] - dx * t, z - p.z[i] - dz * t) < p.w / 2 + 0.6) return lerp(p.e[i], p.e[i + 1], t);
+    const dx = p.x[i + 1] - p.x[i], dz = p.z[i + 1] - p.z[i], l2 = dx * dx + dz * dz || 1;
+    const t = clamp(((x - p.x[i]) * dx + (z - p.z[i]) * dz) / l2, 0, 1);
+    const d = Math.hypot(x - p.x[i] - dx * t, z - p.z[i] - dz * t);
+    if (d < p.w / 2 + 0.6 && d < bd) { bd = d; best = lerp(p.e[i], p.e[i + 1], t); }
   }
-  return -1e9;
+  return best;
 }
-// the height you drive on: land, jumps and the bridge
+// flat wooden things you can stand and drive on (docks): { x, z, hx, hz, yaw, y = the top }
+const PLATFORMS = [];
+export function addPlatform(x, z, hx, hz, yaw, y) { PLATFORMS.push({ x, z, hx, hz, c: Math.cos(yaw), s: Math.sin(yaw), y, r: Math.hypot(hx, hz) }); }
+function platformAt(x, z) {
+  let best = -1e9;
+  for (const p of PLATFORMS) {
+    const dx = x - p.x, dz = z - p.z; if (Math.abs(dx) > p.r || Math.abs(dz) > p.r) continue;
+    if (Math.abs(dx * p.c - dz * p.s) < p.hx && Math.abs(dx * p.s + dz * p.c) < p.hz) best = Math.max(best, p.y);
+  }
+  return best;
+}
+// the height you drive on: land, jumps, docks and the bridges
 export function groundAt(x, z) {
-  const h = hAt(x, z) + rampAt(x, z);
+  let h = hAt(x, z) + rampAt(x, z);
+  if (PLATFORMS.length) { const p = platformAt(x, z); if (p > h) h = p; }
   const b = Math.abs(x - riverX(z)) < RIVER_W + 12 ? bridgeAt(x, z) : -1e9;
   return b > h - 0.5 ? Math.max(h, b) : h;
 }
+export const onPlatform = (x, z) => PLATFORMS.length > 0 && platformAt(x, z) > hAt(x, z);
 export function surfaceAt(x, z) {
   if (rampAt(x, z) > 0) return SURF.DIRT;
+  if (onPlatform(x, z)) return SURF.ROAD;
   const i = clamp(Math.floor((x + HALF) / SC), 0, SN - 1), j = clamp(Math.floor((z + HALF) / SC), 0, SN - 1);
   const s = S[j * SN + i];
   if (s === SURF.WATER && groundAt(x, z) > WATER_Y + 0.5) return SURF.ROAD; // on the bridge
@@ -328,13 +390,14 @@ function groundColor(x, z, h, out) {
   else if (s === SURF.DIRT || s === SURF.TRACK) out.setRGB(0.6, 0.45, 0.29);
   else if (s === SURF.MUD) out.setRGB(0.36, 0.25, 0.15);
   else if (s === SURF.ROAD) out.setRGB(0.42, 0.44, 0.38);
-  else if (s === SURF.TOWN) out.setRGB(0.47, 0.72, 0.33);
-  else if (h > 72) out.setRGB(0.95, 0.96, 1.0); // a little snow at the very top
+  else if (s === SURF.TOWN) { if (inCC(x, z)) out.setRGB(0.66, 0.62, 0.56); else out.setRGB(0.47, 0.72, 0.33); }
+  else if (h > 132 + n * 8) out.setRGB(0.95, 0.96, 1.0); // snow on top of Thunder Peak
   else if (s === SURF.ROCK || sl > 0.95) out.setRGB(0.5, 0.47, 0.43);
   else if (sl > 0.6) out.setRGB(0.36, 0.56, 0.3).lerp(tmpC.setRGB(0.5, 0.47, 0.43), (sl - 0.6) / 0.35);
   else {
     out.setRGB(0.42 + n * 0.06, 0.72 + n * 0.08, 0.3 + n * 0.05); // grass
-    if (h > 30) out.lerp(tmpC.setRGB(0.3, 0.55, 0.28), clamp((h - 30) / 30, 0, 1));
+    if (h > 30) out.lerp(tmpC.setRGB(0.3, 0.55, 0.28), clamp((h - 30) / 40, 0, 1));
+    if (h > 95) out.lerp(tmpC.setRGB(0.5, 0.47, 0.43), clamp((h - 95) / 30, 0, 1));
   }
   out.multiplyScalar(0.94 + hash(Math.floor(x), Math.floor(z)) * 0.12);
   return out;
@@ -342,9 +405,9 @@ function groundColor(x, z, h, out) {
 export function buildGroundMeshes(scene) {
   makeTextures();
   const group = new THREE.Group(); scene.add(group);
-  // the land, cut into 16 chunks so the computer only draws what the camera sees
+  // the land, cut into 36 chunks so the computer only draws what the camera sees
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const CH = 4, cs = N / CH, col = new THREE.Color();
+  const CH = 6, cs = N / CH, col = new THREE.Color();
   for (let cj = 0; cj < CH; cj++) for (let ci = 0; ci < CH; ci++) {
     const pos = [], cols = [], idx = [];
     for (let j = 0; j <= cs; j++) for (let i = 0; i <= cs; i++) {
@@ -382,6 +445,13 @@ export function buildGroundMeshes(scene) {
     const water = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ color: 0x2f9fd8, map: TEX.water, transparent: true, opacity: 0.84, shininess: 90, specular: 0xaaddff }));
     water.receiveShadow = true; group.add(water); group.userData.water = TEX.water;
   }
+  // Lily Pond
+  {
+    const g = new THREE.CircleGeometry(POND.r + 4, 40); g.rotateX(-Math.PI / 2);
+    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4, uv.getY(i) * 4);
+    const pond = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ color: 0x2aa0c8, map: TEX.water, transparent: true, opacity: 0.86, shininess: 90, specular: 0xaaddff }));
+    pond.position.set(POND.x, WATER_Y, POND.z); pond.receiveShadow = true; group.add(pond);
+  }
   // mud pits: shiny brown puddles
   const mudMat = new THREE.MeshPhongMaterial({ map: TEX.mud, shininess: 60, specular: 0x5a4a3a });
   for (const m of MUD_LIST) {
@@ -397,23 +467,25 @@ export function buildGroundMeshes(scene) {
   const mounds = RAMP_LIST.filter((r) => r.down).map(moundGeo);
   if (mounds.length) { const m = new THREE.Mesh(merge(mounds), new THREE.MeshLambertMaterial({ map: TEX.track, side: THREE.DoubleSide })); m.castShadow = m.receiveShadow = true; group.add(m); }
   // the bridge: a deck with railings
-  for (const p of BRIDGES) group.add(bridgeMesh(p));
+  for (const p of BRIDGES) { const g = bridgeMesh(p); group.add(g); bakeGroup(g); } // (glued into a few meshes: faster)
   return group;
 }
+// (the ribbon is 4 strips wide and every point sits right on the ground, the same height the cars drive on)
+const ACROSS = [-1, -0.5, 0, 0.5, 1];
 function ribbon(p, hw, lift) {
-  const pos = [], uv = [], idx = [];
+  const pos = [], uv = [], idx = [], A = ACROSS.length;
   const n = p.n + (p.closed ? 1 : 0);
   for (let k = 0; k < n; k++) {
     const i = k % p.n, a = Math.max(0, i - 1), b = Math.min(p.n - 1, i + 1);
     const i0 = p.closed ? (i - 1 + p.n) % p.n : a, i1 = p.closed ? (i + 1) % p.n : b;
     let tx = p.x[i1] - p.x[i0], tz = p.z[i1] - p.z[i0]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
     const nx = -tz, nz = tx, v = (k < p.n ? p.cum[i] : p.len) / 8;
-    for (const s of [-1, 1]) {
+    for (const s of ACROSS) {
       const x = p.x[i] + nx * hw * s, z = p.z[i] + nz * hw * s;
-      const y = p.bridge[i] ? p.e[i] : Math.max(p.e[i], hAt(x, z), hAt(p.x[i] + nx * hw * s * 0.5, p.z[i] + nz * hw * s * 0.5));
-      pos.push(x, y + lift, z); uv.push(s < 0 ? 0 : 1, v);
+      const y = p.bridge[i] && inChannel(p.x[i], p.z[i]) ? p.e[i] : groundAt(x, z);
+      pos.push(x, y + lift, z); uv.push((s + 1) / 2, v);
     }
-    if (k) { const q = (k - 1) * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+    if (k) { const q = (k - 1) * A; for (let c = 0; c < A - 1; c++) idx.push(q + c, q + c + 1, q + c + A, q + c + 1, q + c + A + 1, q + c + A); }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
@@ -459,10 +531,10 @@ function bridgeMesh(p) {
   let a = p.bridge.indexOf(true), b = p.bridge.lastIndexOf(true);
   a = Math.max(0, a - 1); b = Math.min(p.n - 1, b + 1);
   for (let i = a; i < b; i++) {
-    const dx = p.x[i + 1] - p.x[i], dz = p.z[i + 1] - p.z[i], l = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz), y = (p.e[i] + p.e[i + 1]) / 2;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(p.w + 1.2, 0.6, l + 0.1), deck); m.position.set(p.x[i] + dx / 2, y - 0.25, p.z[i] + dz / 2); m.rotation.y = yaw; m.castShadow = m.receiveShadow = true; g.add(m);
+    const dx = p.x[i + 1] - p.x[i], dz = p.z[i + 1] - p.z[i], l = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz), y = (p.e[i] + p.e[i + 1]) / 2, pitch = -Math.atan2(p.e[i + 1] - p.e[i], l);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(p.w + 1.2, 0.6, l + 0.1), deck); m.position.set(p.x[i] + dx / 2, y - 0.25, p.z[i] + dz / 2); m.rotation.set(pitch, yaw, 0, "YXZ"); m.castShadow = m.receiveShadow = true; g.add(m);
     for (const s of [-1, 1]) {
-      const r = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.0, l + 0.1), rail); r.position.set(m.position.x + Math.cos(yaw) * s * (p.w / 2 + 0.4), y + 0.5, m.position.z - Math.sin(yaw) * s * (p.w / 2 + 0.4)); r.rotation.y = yaw; r.castShadow = true; g.add(r);
+      const r = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.0, l + 0.1), rail); r.position.set(m.position.x + Math.cos(yaw) * s * (p.w / 2 + 0.4), y + 0.5, m.position.z - Math.sin(yaw) * s * (p.w / 2 + 0.4)); r.rotation.set(pitch, yaw, 0, "YXZ"); r.castShadow = true; g.add(r);
     }
   }
   // stone pillars in the water

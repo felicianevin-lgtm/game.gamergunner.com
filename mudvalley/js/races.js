@@ -137,7 +137,7 @@ export class Race {
         if (dpx * dpx + dpz * dpz < 16) a.off += (a.off > 0 ? 1 : -1) * dt * 3;
         a.off = clamp(a.off + Math.sin(this.t * 0.7 + a.skill * 40) * dt * 0.4, -(T.w / 2 - 1.8), T.w / 2 - 1.8);
         a.x = p.x; a.z = p.z;
-        let dy = p.yaw - a.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); a.yaw += dy * Math.min(1, dt * 8); a.steer = clamp(dy * 3, -1, 1);
+        let dy = p.yaw - a.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); a.yaw += dy * Math.min(1, dt * 8); a.steer = clamp(-dy * 3, -1, 1); // (same sign as the player: + = turning right)
         // gravity and jumps
         const gy = groundAt(a.x, a.z);
         if (!a.air) { const free = a.y + (a.vy - G * dt) * dt; if (free > gy + 0.09 && a.vy > 2) { a.air = true; a.y = free; a.vy -= G * dt; } else { a.vy = clamp((gy - a.y) / dt, -12, 16); a.y = gy; } }
@@ -148,7 +148,7 @@ export class Race {
         if (!a.done && (T.closed ? a.s >= this.laps * T.len : a.s >= T.len)) { a.done = true; a.ftime = this.time; this.results.push({ name: a.name, time: a.ftime, ai: true }); }
       }
       const m = a.m;
-      m.root.position.set(a.x, a.y + 0.06, a.z); m.root.rotation.set(-a.pitch, a.yaw, m.id === "bike" ? -a.steer * 0.3 : 0, "YXZ");
+      m.root.position.set(a.x, a.y + 0.06, a.z); m.root.rotation.set(-a.pitch, a.yaw, m.id === "bike" ? a.steer * 0.3 : 0, "YXZ");
       animateCar(m, { speed: a.v, steer: a.steer, boost: 0 }, dt);
     }
     // what place are you in?

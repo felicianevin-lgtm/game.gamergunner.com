@@ -1,7 +1,7 @@
 // MUD VALLEY RP: how things move. Arcade driving (gas, brakes, steering, drifting, hills, jumps, mud, water)
 // and walking around on foot. Not a real simulator, just fun!
 import { groundAt, surfaceAt, SURF, normalAt } from "./terrain.js";
-import { WATER_Y, HALF } from "./layout.js";
+import { WATER_Y, EDGE } from "./layout.js";
 import { pushOut } from "./colliders.js";
 import { tune } from "./vehicles.js";
 import * as THREE from "/create/vendor/three.module.js";
@@ -67,10 +67,20 @@ export function stepCar(b, inp, dt) {
     b.slip = Math.abs(vs);
     b.vf = vf;
     b.vx = fx * vf + sx * vs; b.vz = fz * vf + sz * vs;
-    // hills pull you back (or help you roll down). Off-road vehicles climb better.
+    // hills pull you back (or help you roll down). Off-road rides (good "crawl") grip and crawl up steep hills;
+    // road cars run out of grip on steep slopes, spin their wheels and slide back down.
     normalAt(b.x, b.z, N);
-    const k = G * (1 - t.climb * (thr > 0 && N.x * fx + N.z * fz < 0 ? 1 : 0.3));
+    const sl = Math.hypot(N.x, N.z), up = -(N.x * fx + N.z * fz), assist = 0.75 * t.crawl;
+    const climbing = thr > 0.05 && up > 0.03;
+    const k = G * (climbing ? 1 - assist : 1 - 0.3 * assist);
     b.vx += N.x * k * dt; b.vz += N.z * k * dt;
+    const maxSl = (0.3 + 0.75 * t.crawl) * (b.surf === SURF.MUD ? 0.8 : b.surf === SURF.WATER ? 0.85 : 1);
+    b.spinOut = 0;
+    if (climbing && sl > maxSl) {
+      const ex = Math.min(0.6, sl - maxSl);
+      b.vx += N.x * G * ex * 3 * dt; b.vz += N.z * G * ex * 3 * dt; // too steep: the wheels spin and you slide back
+      b.spinOut = ex; b.slip = Math.max(b.slip, 6);
+    }
     b.boost = thr > 0.5 ? Math.min(1, b.boost + dt * 2) : Math.max(0, b.boost - dt * 3);
     // little bumps on rough ground
     if (b.surf !== SURF.ROAD && b.surf !== SURF.TOWN) b.suspV += (Math.random() - 0.5) * Math.min(1, sp / 12) * 18 * dt;
@@ -83,7 +93,11 @@ export function stepCar(b, inp, dt) {
   }
   if (b.flipped) { b.vx *= Math.exp(-3 * dt); b.vz *= Math.exp(-3 * dt); }
   // move
-  b.x = clamp(b.x + b.vx * dt, -HALF + 6, HALF - 6); b.z = clamp(b.z + b.vz * dt, -HALF + 6, HALF - 6);
+  // (the fence around the valley is an invisible wall)
+  const nx0 = b.x + b.vx * dt, nz0 = b.z + b.vz * dt;
+  b.x = clamp(nx0, -EDGE, EDGE); b.z = clamp(nz0, -EDGE, EDGE);
+  if (b.x !== nx0) { b.hit = Math.max(b.hit, Math.abs(b.vx)); b.vx *= -0.3; b.atEdge = 1; }
+  if (b.z !== nz0) { b.hit = Math.max(b.hit, Math.abs(b.vz)); b.vz *= -0.3; b.atEdge = 1; }
   const gn = groundAt(b.x, b.z);
   if (!b.air) {
     const freeY = b.y + (b.vy - G * t.air * dt) * dt;
@@ -156,13 +170,20 @@ export const speedOf = (b) => Math.hypot(b.vx, b.vz);
 export function makeWalker(x, z) { return { x, z, y: groundAt(x, z), vx: 0, vz: 0, vy: 0, yaw: 0, air: false, t: 0, moving: 0 }; }
 // mx/mz = which way to go (already turned to match the camera), run = going fast, jump = jump now
 export function stepWalker(p, mx, mz, run, jump, dt) {
-  const sp = run ? 10 : 6.5, l = Math.hypot(mx, mz);
+  let sp = run ? 10 : 6.5; const l = Math.hypot(mx, mz);
+  // steep hills slow you down a bit (but you can always keep walking up)
+  if (l > 0.1 && !p.air) { normalAt(p.x, p.z, N); const up = -(N.x * mx + N.z * mz) / l; if (up > 0.45) sp *= Math.max(0.5, 1 - (up - 0.45) * 1.1); }
   const tx = l > 0.1 ? (mx / Math.max(1, l)) * sp : 0, tz = l > 0.1 ? (mz / Math.max(1, l)) * sp : 0;
   const k = Math.min(1, dt * (p.air ? 3 : 12));
   p.vx += (tx - p.vx) * k; p.vz += (tz - p.vz) * k;
   if (l > 0.1) { const ty = Math.atan2(mx, mz); let d = ty - p.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); p.yaw += d * Math.min(1, dt * 12); }
-  p.x = clamp(p.x + p.vx * dt, -HALF + 4, HALF - 4); p.z = clamp(p.z + p.vz * dt, -HALF + 4, HALF - 4);
-  const r = pushOut(p.x, p.z, 0.4, p.y + 0.3); if (r.hit) { p.x = r.x; p.z = r.z; }
+  p.x = clamp(p.x + p.vx * dt, -EDGE, EDGE); p.z = clamp(p.z + p.vz * dt, -EDGE, EDGE);
+  const r = pushOut(p.x, p.z, 0.4, p.y + 0.3);
+  if (r.hit) {
+    p.x = r.x; p.z = r.z;
+    // a low ledge (a rock, a fence, a hay bale...) in the way? hop up over it instead of getting stuck
+    if (!p.air && l > 0.1 && r.top - p.y < 1.7 && r.top - p.y > 0.25 && !p.noHop) { p.vy = 8; p.air = true; p.hopped = true; }
+  }
   const g = groundAt(p.x, p.z), water = WATER_Y - g;
   if (jump && !p.air) { p.vy = 8.5; p.air = true; }
   if (p.air) { p.vy -= G * dt; p.y += p.vy * dt; if (p.y <= g) { p.y = g; p.air = false; p.vy = 0; } }

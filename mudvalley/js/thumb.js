@@ -9,7 +9,7 @@ export function pose({ scene, camera, renderer, sky, fx }) {
   const R = RAMP_LIST.filter((r) => r.track)[1];
   const fx2 = Math.sin(R.yaw), fz2 = Math.cos(R.yaw), sx = Math.cos(R.yaw), sz = -Math.sin(R.yaw);
   const at = (f, s) => ({ x: R.x + fx2 * f + sx * s, z: R.z + fz2 * f + sz * s });
-  const car = (id, paint, extra = {}) => { const m = buildCar({ id, paint, rims: "chrome", tires: "mud", engine: 4, limit: 1, lift: 0, neon: 0, dirt: 0.15, ...extra }); scene.add(m.root); return m; };
+  const car = (id, paint, extra = {}) => { const m = buildCar({ id, paint, rims: "chrome", tires: "mud", engine: 4, limit: 1, lift: 0, neon: 0, dirt: 0.15, ...extra }, { keepRider: true }); scene.add(m.root); return m; };
   const put = (m, p, y, yaw, pitch = 0, roll = 0) => { m.root.position.set(p.x, y, p.z); m.root.rotation.set(-pitch, yaw, roll, "YXZ"); };
   camera.fov = 52; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   const cp = at(R.total + 11, -9.5), look = at(R.len + 2, 1.5);

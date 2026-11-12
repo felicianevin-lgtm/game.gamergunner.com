@@ -2,19 +2,24 @@
 // Models face +z (forward). Wheels touch the ground at y = 0.
 import * as THREE from "/create/vendor/three.module.js";
 import { makePerson, LOOKS } from "./character.js";
+import { mergeGeometries } from "/create/vendor/BufferGeometryUtils.js";
 
 // top = top speed on the road (m/s), acc = how fast it speeds up, grip = how well it sticks, turn = how fast it turns,
-// off = how well it does on dirt / grass / mud (1 = great), size = how much room it takes on a trailer, tow = what trailers it can pull
+// off = how well it does on dirt / grass / mud (1 = great), size = how much room it takes on a trailer, tow = what trailers it can pull,
+// crawl = how well it climbs steep hills (1 = a mountain goat, 0.2 = slides right back down)
 export const VEHICLES = [
-  { id: "pickup", name: "Rusty Pickup", price: 0, top: 30, acc: 9, grip: 7, turn: 1.9, off: { dirt: 0.8, grass: 0.72, mud: 0.5 }, size: 2, tow: 2, color: 0xc8502a, engine: 70, desc: "Your first truck! A bit rusty, but it can pull a trailer anywhere." },
-  { id: "atv", name: "Trail Buddy ATV", price: 1200, top: 23, acc: 12, grip: 8, turn: 2.5, off: { dirt: 1, grass: 0.95, mud: 0.82 }, size: 1, tow: 1, color: 0x3aa04a, engine: 120, open: true, climb: 0.65, desc: "A four-wheeler that LOVES mud and trails. Fits on a small trailer." },
-  { id: "bike", name: "Dirt Rocket", price: 1800, top: 27, acc: 14, grip: 7, turn: 2.6, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xff7a1a, engine: 160, open: true, bike: true, desc: "A dirt bike! Super quick, great for jumps and pizza delivery." },
-  { id: "jeep", name: "Mud Hog 4x4", price: 5500, top: 31, acc: 10, grip: 7.5, turn: 2.0, off: { dirt: 0.97, grass: 0.93, mud: 0.86 }, size: 2, tow: 2, color: 0x2a7ad0, engine: 85, open: true, climb: 0.7, desc: "Big tires, a snorkel and a light bar. Goes anywhere, pulls anything." },
-  { id: "buggy", name: "Dune Hopper", price: 8000, top: 37, acc: 13.5, grip: 6.5, turn: 2.3, off: { dirt: 1, grass: 0.9, mud: 0.66 }, size: 2, tow: 1, color: 0xffd23a, engine: 140, open: true, air: 0.85, desc: "A light dune buggy that flies off jumps. Fast on dirt!" },
-  { id: "sports", name: "Street Comet", price: 12000, top: 50, acc: 16, grip: 9, turn: 2.1, off: { dirt: 0.42, grass: 0.35, mud: 0.2 }, size: 2, tow: 0, color: 0xe0203a, engine: 110, desc: "A super fast sports car. Zooms on roads... but hates dirt and mud!" },
-  { id: "hauler", name: "Big Bertha Hauler", price: 15000, top: 30, acc: 6.5, grip: 7, turn: 1.5, off: { dirt: 0.72, grass: 0.62, mud: 0.42 }, size: 9, tow: 2, color: 0x6a3ad0, engine: 50, desc: "A giant semi truck. Slow to start, but pulls the big flatbed full of cars." },
-  { id: "monster", name: "Stomper Monster Truck", price: 22000, top: 33, acc: 11, grip: 7.5, turn: 1.8, off: { dirt: 1, grass: 1, mud: 0.93 }, size: 9, tow: 2, color: 0x2ac0a0, engine: 60, climb: 0.8, desc: "HUGE wheels. Climbs anything, crushes mud, does big jumps." },
-  { id: "hyper", name: "Thunder GT", price: 45000, top: 62, acc: 21, grip: 10, turn: 2.1, off: { dirt: 0.33, grass: 0.28, mud: 0.15 }, size: 2, tow: 0, color: 0x1a1a22, engine: 125, desc: "The fastest car in Mud Valley. Glowing lights, giant wing. Road only!" },
+  { id: "pickup", name: "Rusty Pickup", price: 0, top: 30, acc: 9, grip: 7, turn: 1.9, off: { dirt: 0.8, grass: 0.72, mud: 0.5 }, size: 2, tow: 2, color: 0xc8502a, engine: 70, crawl: 0.55, desc: "Your first truck! A bit rusty, but it can pull a trailer anywhere." },
+  { id: "atv", name: "Trail Buddy ATV", price: 1200, top: 23, acc: 12, grip: 8, turn: 2.5, off: { dirt: 1, grass: 0.95, mud: 0.82 }, size: 1, tow: 1, color: 0x3aa04a, engine: 120, open: true, crawl: 0.9, desc: "A four-wheeler that LOVES mud and trails. Fits on a small trailer." },
+  { id: "bike", name: "Dirt Rocket", price: 1800, top: 27, acc: 14, grip: 7, turn: 2.6, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xff7a1a, engine: 160, open: true, bike: true, crawl: 0.88, desc: "A dirt bike! Super quick, great for jumps and pizza delivery." },
+  { id: "jeep", name: "Mud Hog 4x4", price: 5500, top: 31, acc: 10, grip: 7.5, turn: 2.0, off: { dirt: 0.97, grass: 0.93, mud: 0.86 }, size: 2, tow: 2, color: 0x2a7ad0, engine: 85, open: true, crawl: 0.95, desc: "Big tires, a snorkel and a light bar. Goes anywhere, pulls anything." },
+  { id: "buggy", name: "Dune Hopper", price: 8000, top: 37, acc: 13.5, grip: 6.5, turn: 2.3, off: { dirt: 1, grass: 0.9, mud: 0.66 }, size: 2, tow: 1, color: 0xffd23a, engine: 140, open: true, air: 0.85, crawl: 0.75, desc: "A light dune buggy that flies off jumps. Fast on dirt!" },
+  { id: "sports", name: "Street Comet", price: 12000, top: 50, acc: 16, grip: 9, turn: 2.1, off: { dirt: 0.42, grass: 0.35, mud: 0.2 }, size: 2, tow: 0, color: 0xe0203a, engine: 110, crawl: 0.25, desc: "A super fast sports car. Zooms on roads... but hates dirt and mud!" },
+  { id: "hauler", name: "Big Bertha Hauler", price: 15000, top: 30, acc: 6.5, grip: 7, turn: 1.5, off: { dirt: 0.72, grass: 0.62, mud: 0.42 }, size: 9, tow: 2, color: 0x6a3ad0, engine: 50, crawl: 0.35, desc: "A giant semi truck. Slow to start, but pulls the big flatbed full of cars." },
+  { id: "monster", name: "Stomper Monster Truck", price: 22000, top: 33, acc: 11, grip: 7.5, turn: 1.8, off: { dirt: 1, grass: 1, mud: 0.93 }, size: 9, tow: 2, color: 0x2ac0a0, engine: 60, crawl: 1, desc: "HUGE wheels. Climbs anything, crushes mud, does big jumps." },
+  // police cars (you get these when you join the police; they never show up at the dealership)
+  { id: "cruiser", name: "Police Cruiser", price: 0, police: true, top: 40, acc: 13, grip: 8.5, turn: 2.1, off: { dirt: 0.7, grass: 0.62, mud: 0.45 }, size: 2, tow: 0, color: 0xf4f4f4, engine: 95, crawl: 0.45, desc: "A sturdy police car with a light bar and a siren (G)." },
+  { id: "interceptor", name: "Police Interceptor", price: 15000, police: true, top: 52, acc: 17, grip: 9, turn: 2.2, off: { dirt: 0.6, grass: 0.5, mud: 0.35 }, size: 2, tow: 0, color: 0x1a2a5a, engine: 115, crawl: 0.35, desc: "The super fast police car. Unlocks at Sergeant rank (or buy it at the station)." },
+  { id: "hyper", name: "Thunder GT", price: 45000, top: 62, acc: 21, grip: 10, turn: 2.1, off: { dirt: 0.33, grass: 0.28, mud: 0.15 }, size: 2, tow: 0, color: 0x1a1a22, engine: 125, crawl: 0.2, desc: "The fastest car in Mud Valley. Glowing lights, giant wing. Road only!" },
 ];
 export const vehicleById = (id) => VEHICLES.find((v) => v.id === id) || VEHICLES[0];
 
@@ -45,7 +50,8 @@ export function tune(car) {
   if (t === "mud") { off.dirt += 0.12; off.grass += 0.12; off.mud += 0.3; top *= 0.94; grip *= 0.92; }
   off.dirt += 0.03 * car.lift; off.grass += 0.03 * car.lift; off.mud += 0.04 * car.lift; grip *= 1 - 0.04 * car.lift;
   for (const k in off) off[k] = Math.min(1, off[k]);
-  return { top: top * car.limit, acc, grip, turn: v.turn, off, climb: v.climb ?? 0.5, air: v.air ?? 1, bike: !!v.bike, engine: v.engine * (1 + 0.04 * car.engine) };
+  const crawl = Math.min(1, (v.crawl ?? 0.5) + (t === "mud" ? 0.08 : t === "allterrain" ? 0.04 : 0) + 0.02 * car.lift);
+  return { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, engine: v.engine * (1 + 0.04 * car.engine) };
 }
 // 0..1 bars for the dealership
 export function statBars(id, car) {
@@ -88,13 +94,36 @@ function wheel(car, x, z, r, w, front, opts = {}) {
   const knobs = new THREE.Group(); spin.add(knobs);
   for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, k = new THREE.Mesh(new THREE.BoxGeometry(w * 1.04, r * 0.16, r * 0.3), M.tire); k.position.set(0, Math.cos(a) * r, Math.sin(a) * r); k.rotation.x = -a; knobs.add(k); }
   car.root.add(pivot);
-  const W = { pivot, spin, tire, knobs, x, z, r0: r, r, front, side: Math.sign(x) || 1, bike: !!opts.bike };
+  bakeGroup(spin, (o) => o === knobs); bakeGroup(knobs); // (glue the wheel parts together: fewer things to draw)
+  const W = { pivot, spin, knobs, x, z, r0: r, r, front, side: Math.sign(x) || 1, bike: !!opts.bike };
   car.wheels.push(W);
   return W;
 }
 
+// glue all the little meshes inside a group into one mesh per material (a car = ~25 draws instead of ~120).
+// skip(o) = true keeps that part (and everything in it) separate (things that move, blink or hide).
+export function bakeGroup(group, skip = () => false, byColor = false) {
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert(), rel = new THREE.Matrix4();
+  const by = new Map(), kill = [];
+  group.traverse((o) => {
+    if (!o.isMesh || !o.visible) return;
+    for (let q = o; q && q !== group; q = q.parent) if (skip(q) || !q.visible) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const a of Object.keys(g.attributes)) if (a !== "position" && a !== "normal") g.deleteAttribute(a);
+    g.applyMatrix4(rel.multiplyMatrices(inv, o.matrixWorld));
+    const key = byColor ? o.material.type + o.material.color.getHex() : o.material;
+    if (!by.has(key)) by.set(key, { mat: o.material, list: [] });
+    by.get(key).list.push(g); kill.push(o);
+  });
+  if (kill.length < 2) return;
+  for (const o of kill) o.parent.remove(o);
+  for (const { mat, list } of by.values()) { const m = new THREE.Mesh(list.length > 1 ? mergeGeometries(list) : list[0], mat); m.castShadow = true; group.add(m); }
+}
+
 // makes the model for an owned vehicle (or a showroom one): returns { root, body, wheels, ... }
-export function buildCar(car) {
+// opts.keepRider: leave the rider's arms and legs movable; opts.driver: who drives (a look from LOOKS)
+export function buildCar(car, opts = {}) {
   mats();
   const v = vehicleById(car.id);
   const root = new THREE.Group(), lift = new THREE.Group(), body = new THREE.Group(); root.add(lift); lift.add(body);
@@ -110,12 +139,16 @@ export function buildCar(car) {
   for (const p of C.pipes) { const f = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.7, 8), M.flame); f.rotation.x = -Math.PI / 2; f.position.set(p.x, p.y, p.z - 0.4); f.visible = false; body.add(f); C.flames.push(f); const pipe = cy(body, 0.08, 0.4, p.x, p.y, p.z, M.chrome, 8, Math.PI / 2); pipe.name = "pipe"; }
   const ng = new THREE.Mesh(new THREE.PlaneGeometry(C.wid * 1.5, C.len * 1.2), new THREE.MeshBasicMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0x3ad0ff }));
   ng.rotation.x = -Math.PI / 2; ng.position.y = 0.06; root.add(ng); C.neon = ng;
+  const look = opts.driver || LOOKS.you;
   if (v.open || car.id === "bike" || car.id === "atv") {
-    const p = makePerson(LOOKS.you, 0.85); p.pose(v.bike || car.id === "atv" ? "ride" : "sit"); p.root.position.copy(C.seat); body.add(p.root); C.rider = p;
+    const p = makePerson(look, 0.85); p.pose(v.bike || car.id === "atv" ? "ride" : "sit"); p.root.position.copy(C.seat); body.add(p.root); C.rider = p;
   } else {
     // a little driver you can see through the window
-    const p = makePerson(LOOKS.you, 0.7); p.pose("sit"); p.root.position.copy(C.seat); body.add(p.root); C.rider = p;
+    const p = makePerson(look, 0.7); p.pose("sit"); p.root.position.copy(C.seat); body.add(p.root); C.rider = p;
   }
+  if (!opts.keepRider) bakeGroup(C.rider.root, () => false, true);
+  const keep = new Set([C.scoop, C.rider.root, ...C.flames, ...(C.lights || []), ...(C.forks || [])]);
+  bakeGroup(body, (o) => keep.has(o) || o.name === "pipe" || o.name === "flag");
   root.traverse((o) => { if (o.isMesh && o !== ng) { o.castShadow = true; } });
   applyLook(C, car);
   return C;
@@ -148,9 +181,12 @@ export function applyLook(C, car) {
 export function animateCar(C, st, dt) {
   for (const w of C.wheels) {
     w.spin.rotation.x += (st.speed / w.r) * dt * (st.reverse ? -1 : 1);
-    if (w.front) w.pivot.rotation.y = st.steer * (w.bike ? 0.45 : 0.5);
+    if (w.front) w.pivot.rotation.y = -st.steer * (w.bike ? 0.45 : 0.5); // (steer + = turn right = wheels point to the right side, which is local -x)
     w.pivot.position.y = w.r + (st.wheelDrop ? st.wheelDrop[C.wheels.indexOf(w)] || 0 : 0);
   }
+  if (C.forks) for (const f of C.forks) f.rotation.y = -(st.steer || 0) * 0.45;
+  // the police light bar: red, blue, red, blue...
+  if (C.lights) { const on = st.siren, ph = Math.floor((st.t || performance.now() / 1000) * 7) % 2; C.lights[0].material.color.setHex(on && ph ? 0xff2a2a : 0x6a1a1a); C.lights[1].material.color.setHex(on && !ph ? 0x2a6aff : 0x1a2a6a); }
   const fl = C.engineLv >= 4 && st.boost > 0.6;
   for (const f of C.flames) { f.visible = fl; if (fl) f.scale.setScalar(0.7 + Math.random() * 0.6); }
 }
@@ -192,14 +228,15 @@ const BUILD = {
   bike(C) {
     const b = C.body, P = C.paint;
     C.len = 2.1; C.wid = 0.8; C.seat.set(0, 0.92, -0.2); C.hitch = null; C.hood = null;
-    tube(b, V3(0, 0.45, 0.75), V3(0, 1.15, 0.5), 0.05, M.chrome); // fork
+    // the fork + handlebars turn with the front wheel (a group pivoting on the steering head)
+    const fork = new THREE.Group(); fork.position.set(0, 0, 0.62); b.add(fork); C.forks = [fork];
+    tube(fork, V3(0, 0.45, 0.13), V3(0, 1.15, -0.12), 0.05, M.chrome);
     tube(b, V3(0, 0.55, -0.1), V3(0, 1.05, 0.45), 0.06, M.trim); tube(b, V3(0, 0.55, -0.1), V3(0, 0.45, -0.75), 0.05, M.trim);
     bx(b, 0.36, 0.3, 0.62, 0, 1.08, 0.2, P); bx(b, 0.3, 0.12, 0.85, 0, 1.0, -0.35, M.seat);
     bx(b, 0.26, 0.08, 0.5, 0, 0.98, 0.8, P, 0.4); bx(b, 0.26, 0.08, 0.6, 0, 1.0, -0.85, P, -0.3); // fenders
     bx(b, 0.32, 0.34, 0.24, 0, 0.6, 0.1, M.trim);
-    tube(b, V3(-0.38, 1.2, 0.5), V3(0.38, 1.2, 0.5), 0.03, M.trim);
-    const plate = bx(b, 0.04, 0.34, 0.3, 0.2, 1.1, 0.62, M.white); plate.rotation.y = 0;
-    bx(b, 0.42, 0.34, 0.04, 0, 1.15, 0.75, M.white);
+    tube(fork, V3(-0.38, 1.2, -0.12), V3(0.38, 1.2, -0.12), 0.03, M.trim);
+    bx(fork, 0.42, 0.34, 0.04, 0, 1.15, 0.13, M.white);
     C.pipes.push(V3(0.18, 0.7, -0.6));
     wheel(C, 0, 0.75, 0.42, 0.16, 1, { bike: true }); wheel(C, 0, -0.75, 0.42, 0.2, 0, { bike: true });
   },
@@ -295,6 +332,30 @@ const BUILD = {
   },
 };
 function P2(C) { return C.paint2; }
+// a police car: white doors, a push bar and a red + blue light bar on the roof
+function police(C, fast) {
+  const b = C.body, P = C.paint, W = M.white;
+  C.len = 4.8; C.wid = 2.1; C.seat.set(0.42, 0.25, -0.1); C.hitch = null; C.hood = null;
+  const lo = fast ? 0.48 : 0.62, top = fast ? 1.2 : 1.55;
+  bx(b, 2.0, 0.5, 4.7, 0, lo, 0, P);
+  bx(b, 1.96, 0.18, 1.3, 0, lo + 0.3, 1.55, P, fast ? 0.1 : 0.04);
+  bx(b, 2.02, 0.42, 1.9, 0, lo + 0.02, -0.1, fast ? M.dark : W); // doors
+  bx(b, 1.7, top - lo - 0.25, 2.1, 0, (lo + top) / 2 + 0.05, -0.3, M.glass); bx(b, 1.72, 0.08, 1.7, 0, top + 0.02, -0.35, P);
+  bx(b, 1.9, 0.26, 1.1, 0, lo + 0.3, -1.85, P);
+  // light bar
+  bx(b, 1.4, 0.12, 0.34, 0, top + 0.1, -0.35, M.dark);
+  const red = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0x6a1a1a })); red.position.set(-0.36, top + 0.22, -0.35); b.add(red);
+  const blue = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0x1a2a6a })); blue.position.set(0.36, top + 0.22, -0.35); b.add(blue);
+  C.lights = [red, blue];
+  // push bar, lights, a star on the door
+  bx(b, 1.6, 0.36, 0.14, 0, lo - 0.05, 2.42, M.dark); for (const s of [-1, 1]) { bx(b, 0.1, 0.5, 0.1, s * 0.6, lo, 2.4, M.dark); bx(b, 0.42, 0.14, 0.06, s * 0.68, lo + 0.12, 2.36, M.light); bx(b, 0.42, 0.14, 0.06, s * 0.68, lo + 0.12, -2.36, M.tail); }
+  for (const s of [-1, 1]) bx(b, 0.04, 0.3, 0.3, s * 1.02, lo + 0.05, -0.1, new THREE.MeshBasicMaterial({ color: 0xffd23a }));
+  C.pipes.push(V3(0.4, lo - 0.1, -2.35));
+  const r = fast ? 0.38 : 0.42;
+  for (const [x, z, f] of [[0.9, 1.5, 1], [-0.9, 1.5, 1], [0.9, -1.45, 0], [-0.9, -1.45, 0]]) wheel(C, x, z, r, 0.34, f);
+}
+BUILD.cruiser = (C) => police(C, false);
+BUILD.interceptor = (C) => police(C, true);
 
 // ---------------------------------------------------------------- the broken-down car for the tow job (no driver)
 export function brokenCar(color = 0x8a9aa8) {

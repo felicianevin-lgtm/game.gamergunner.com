@@ -35,6 +35,37 @@ b, .rus { font-family: "Russo One", sans-serif; font-weight: 400; }
 #arrow span { font-family: "Russo One", sans-serif; font-size: 15px; text-shadow: 0 2px 3px #000; }
 #arrow.gps i { border-bottom-color: #c86aff; filter: drop-shadow(0 3px 0 #3a1a5a); }
 #arrow.race i { border-bottom-color: #6af0ff; filter: drop-shadow(0 3px 0 #0a3a5a); }
+#arrow.crime i { border-bottom-color: #ff4a4a; filter: drop-shadow(0 3px 0 #5a0a0a); }
+/* robbers + cops */
+#crimeBox { padding: 6px 12px; border-radius: 14px; background: rgba(25, 18, 10, 0.72); border: 2px solid #ff6a5a; }
+#stars { font-size: 24px; letter-spacing: 2px; color: #ffd23a; text-shadow: 0 2px 0 #5a3a00; line-height: 1; }
+#stars.flash { animation: blink 0.5s infinite alternate; }
+#lootTxt { font-family: "Russo One", sans-serif; font-size: 14px; color: #7aff5a; margin-top: 3px; }
+#lootTxt:empty { display: none; }
+#evadeRow { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; margin-top: 3px; }
+#evade { width: 90px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.5); overflow: hidden; }
+#evade i { display: block; height: 100%; background: #7aff5a; }
+#callBox { width: min(300px, 72vw); padding: 7px 12px; border-radius: 14px; background: rgba(10, 18, 40, 0.78); border: 2px solid #3a6aff; }
+#callTitle { font-family: "Russo One", sans-serif; color: #8ab0ff; font-size: 15px; }
+#callGoal { font-weight: 700; font-size: 13px; margin-top: 2px; }
+#itemName:empty { display: none; }
+#itemName { font-weight: 800; font-size: 12px; padding: 2px 9px; border-radius: 99px; background: rgba(30, 20, 10, 0.5); }
+#reelUI { position: absolute; left: 50%; top: 17%; transform: translateX(-50%); width: min(90vw, 420px); padding: 10px 14px; border-radius: 16px; background: rgba(10, 30, 45, 0.82); border: 3px solid #6ad0ff; text-align: center; }
+#reelUI b { color: #6ad0ff; font-size: 18px; }
+#reelUI small { display: block; margin-top: 6px; font-weight: 700; font-size: 12px; } #reelUI kbd { background: #ffd23a; color: #3a2a00; padding: 0 5px; border-radius: 5px; font-family: "Russo One", sans-serif; }
+.rTrack { position: relative; height: 26px; margin-top: 6px; border-radius: 9px; background: linear-gradient(90deg, #2a3a4a 80%, #a83a2a); overflow: hidden; }
+#rZone { position: absolute; top: 0; bottom: 0; background: rgba(122, 255, 90, 0.75); border-radius: 6px; }
+#rMark { position: absolute; top: -2px; bottom: -2px; width: 6px; margin-left: -3px; background: #fff; box-shadow: 0 0 6px #fff; border-radius: 3px; }
+#reelUI.danger { border-color: #ff4a3a; }
+.rProgW { height: 9px; margin-top: 6px; border-radius: 5px; background: rgba(0, 0, 0, 0.45); overflow: hidden; } #rProg { display: block; height: 100%; background: linear-gradient(90deg, #ffd23a, #7aff5a); }
+#jailUI { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); width: min(90vw, 380px); padding: 12px 16px; border-radius: 18px; background: rgba(30, 30, 40, 0.88); border: 3px solid #ffd23a; text-align: center; pointer-events: auto; }
+#jailUI b { display: block; font-size: 24px; color: #ffd23a; } #jailUI span { font-weight: 800; } #jailUI em { font-style: normal; font-family: "Russo One", sans-serif; color: #7aff5a; }
+.jTrack { position: relative; height: 24px; margin: 8px 0 4px; border-radius: 9px; background: #4a4a5a; overflow: hidden; }
+#jZone { position: absolute; top: 0; bottom: 0; width: 18%; background: rgba(122, 255, 90, 0.8); }
+#jNeedle { position: absolute; top: -2px; bottom: -2px; width: 5px; margin-left: -2px; background: #ffd23a; }
+#jailWins { font-size: 20px; color: #ffd23a; letter-spacing: 4px; }
+#jailBtn { margin: 6px 0 2px; border: 0; border-radius: 12px; padding: 10px 20px; font-family: "Russo One", sans-serif; font-size: 18px; background: linear-gradient(180deg, #ffe14a, #ff9a1a); color: #3a1a00; box-shadow: 0 4px 0 #a8500a; touch-action: none; }
+#jailUI small { display: block; font-weight: 700; font-size: 12px; color: #d8ccb4; }
 #raceHud { position: absolute; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 62px); transform: translateX(-50%); display: flex; gap: 8px; }
 #raceHud div { padding: 4px 14px; border-radius: 12px; background: rgba(20, 15, 10, 0.65); border: 2px solid rgba(255, 255, 255, 0.5); text-align: center; min-width: 84px; }
 #raceHud small { display: block; font-size: 10px; letter-spacing: 0.15em; font-weight: 800; color: #ffd23a; }
@@ -45,10 +76,15 @@ b, .rus { font-family: "Russo One", sans-serif; font-weight: 400; }
 #spdN { font-size: 38px; line-height: 1; }
 #spdIn small { font-weight: 800; font-size: 11px; letter-spacing: 0.15em; color: #ffd23a; }
 #gearN { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 11px; font-weight: 800; color: #cfc; }
-#hints { position: absolute; left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.hint { display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 8px; border-radius: 99px; background: rgba(20, 15, 10, 0.72); border: 2px solid rgba(255, 255, 255, 0.6); font-weight: 800; font-size: 16px; white-space: nowrap; animation: hin 0.2s ease-out; }
-.hint kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 8px; border-radius: 9px; background: #ffd23a; color: #3a2a00; font-family: "Russo One", sans-serif; font-size: 16px; box-shadow: 0 3px 0 #a87a00; }
+/* "what you can press" prompts: small pills in the bottom-right corner (above the speedometer / the touch buttons), out of your way */
+#hints { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 142px); display: flex; flex-direction: column; gap: 5px; align-items: flex-end; max-width: min(360px, 46vw); }
+.hint { position: relative; display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 5px; border-radius: 99px; background: rgba(20, 15, 10, 0.74); border: 2px solid rgba(255, 255, 255, 0.55); font-weight: 800; font-size: 14px; line-height: 1.2; animation: hin 0.2s ease-out; overflow: hidden; }
+.hint kbd { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 8px; background: #ffd23a; color: #3a2a00; font-family: "Russo One", sans-serif; font-size: 14px; box-shadow: 0 2px 0 #a87a00; }
 .hint.warn { border-color: #ff8a5a; }
+.hint.hot { border-color: #ffd23a; background: rgba(120, 80, 0, 0.85); animation: hot 0.25s infinite alternate; font-size: 17px; }
+@keyframes hot { to { transform: scale(1.08); } }
+.hbar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, 0.4); }
+.hbar i { display: block; height: 100%; background: linear-gradient(90deg, #7aff5a, #ffd23a); }
 @keyframes hin { from { transform: translateY(10px); opacity: 0; } }
 #banner { position: absolute; left: 0; right: 0; top: 26%; text-align: center; opacity: 0; }
 #banner b { display: block; font-size: clamp(34px, 7vw, 66px); color: #fff; -webkit-text-stroke: 3px #3a2a10; paint-order: stroke fill; text-shadow: 0 5px 0 #3a2a10, 0 0 26px rgba(255, 200, 60, 0.7); }
@@ -73,7 +109,8 @@ b, .rus { font-family: "Russo One", sans-serif; font-weight: 400; }
 body.touch #touchUI { display: block; }
 body.touch #speedo { transform: scale(0.62); transform-origin: right top; bottom: auto; top: max(10px, env(safe-area-inset-top)); right: calc(max(10px, env(safe-area-inset-right)) + 196px); }
 body.inmenu #touchUI, body.inmenu #hints { display: none !important; }
-body.touch #hints { bottom: 50%; }
+body.touch #hints { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 222px); }
+#tBtns .tG { display: none; } body.copCar #tBtns .tG { display: block; background: rgba(40, 60, 200, 0.5); }
 .stick { position: absolute; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.45); background: rgba(0, 0, 0, 0.18); left: 100px; top: calc(100% - 120px); opacity: 0.6; }
 .stick i { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); }
 .stick.on { opacity: 1; }
@@ -170,12 +207,25 @@ body.thumb #hud, body.thumb #loading { display: none !important; }
   body.touch #speedo { right: calc(max(10px, env(safe-area-inset-right)) + 134px); }
   #speedo { width: 100px; height: 100px; } #spdN { font-size: 28px; }
   #side { width: 100vw; background: rgba(28, 20, 12, 0.93); }
-  .hint { font-size: 14px; }
+  .hint { font-size: 13px; } #hints { max-width: 58vw; }
 }
 @media (max-height: 500px) {
+  body.touch #tBtns { grid-template-columns: repeat(5, 54px); gap: 8px; } body.touch #tBtns button { width: 54px; height: 54px; font-size: 19px; }
+  body.touch #hints { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 132px); }
+  #reelUI { top: 20%; } #jailUI { top: 10%; }
   #miniWrap { width: 110px; height: 110px; }
   body.touch #speedo { right: calc(max(10px, env(safe-area-inset-right)) + 124px); }
   .intro ol { font-size: 13px; line-height: 1.3; } #modal h2 { font-size: 24px; } #modal > .box { padding: 12px 16px; }
   #toasts { top: 8px; width: min(60vw, 420px); } .toast { padding: 5px 12px; } .toast b { font-size: 15px; } .toast span { font-size: 12px; }
   #jobBox { width: 240px; padding: 6px 10px; }
 }
+
+/* ---------------- play with friends: messages */
+.msgs { max-height: 38vh; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin: 8px 0; padding: 8px; border-radius: 14px; background: rgba(0, 0, 0, 0.3); touch-action: pan-y; }
+.msg { align-self: flex-start; max-width: 85%; padding: 6px 10px; border-radius: 12px 12px 12px 4px; background: #3a4a62; font-weight: 600; font-size: 14px; }
+.msg b { color: #ffd23a; font-size: 13px; }
+.msg.me { align-self: flex-end; background: #2a8a4a; border-radius: 12px 12px 4px 12px; }
+.msg.sys { align-self: center; background: none; color: #b8c4d4; font-size: 12px; }
+.qts { display: flex; flex-wrap: wrap; gap: 6px; }
+#bPhone.dot::after { content: ""; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #ff3a3a; margin: -18px 0 0 14px; border: 2px solid #fff; }
+#modal input { -webkit-user-select: text; user-select: text; }
