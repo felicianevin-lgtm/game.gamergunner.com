@@ -1,7 +1,7 @@
 // MUD VALLEY RP: puts the whole valley together. Sky, sun, the land, town, houses, forests, rocks, racetrack stuff
 // and the glowing circles you drive into to do things.
 import * as THREE from "/create/vendor/three.module.js";
-import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, ATMS } from "./layout.js";
+import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, ATMS, PAWNS } from "./layout.js";
 import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform } from "./terrain.js";
 import * as B from "./build.js";
 import { addCircle } from "./colliders.js";
@@ -151,6 +151,7 @@ function copperCreek(scene) {
   placeAt(scene, B.blasterShop, 366, -300, Math.PI);
   placeAt(scene, (s, b) => B.smallShop(s, b, "COPPER CAFE", 0xf2e0c8, 0xc0602a), 418, -301, Math.PI);
   placeAt(scene, (s, b) => B.smallShop(s, b, "TOY TRAIN SHOP", 0xd8f0ff, 0x2a8ad0), 436, -301, Math.PI);
+  for (const p of PAWNS) placeAt(scene, B.pawnShop, p.x, p.z, p.yaw);
   // (the two houses on Copper Lane are for sale: see HOUSES)
   // street lamps + trees along Main Street
   const b = new B.Batch();

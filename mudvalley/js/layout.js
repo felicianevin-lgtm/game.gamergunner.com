@@ -176,7 +176,16 @@ export const PLACES = {
   timber: { name: "Timber Ridge Trails", x: -470, z: -420, icon: "🌲", color: "#3a8a4a" },
   canyon: { name: "Canyon Run", x: 400, z: 470, icon: "🏜️", color: "#d08a4a" },
   goat: { name: "Goat Trail (4x4)", x: -360, z: 64, icon: "🐐", color: "#b0b0b0" },
+  // pawn shops all around the map (sell the stuff in your backpack: npcs.js)
+  pawn0: { name: "Pawn Shop (North of Town)", x: -31, z: -106, icon: "💰", color: "#d0a030" },
+  pawn1: { name: "Pawn Shop (South Road)", x: 96, z: 396, icon: "💰", color: "#d0a030" },
+  pawn2: { name: "Pawn Shop (East Road)", x: 445, z: 50, icon: "💰", color: "#d0a030" },
+  pawn3: { name: "Pawn Shop (West Road)", x: -430, z: -64, icon: "💰", color: "#d0a030" },
+  pawn4: { name: "Pawn Shop (Timber Ridge Road)", x: -246, z: -411, icon: "💰", color: "#d0a030" },
+  pawn5: { name: "Pawn Shop (North Road)", x: 23, z: -434, icon: "💰", color: "#d0a030" },
 };
+// where the pawn shops stand (building middle; the front faces yaw, towards the road)
+export const PAWNS = [{ x: -31, z: -115, yaw: 0, area: "North of Town" }, { x: 93, z: 405, yaw: 2.827, area: "South Road" }, { x: 438, z: 45, yaw: 0.982, area: "East Road" }, { x: -438, z: -60, yaw: 2.032, area: "West Road" }, { x: -249, z: -420, yaw: 0.323, area: "Timber Ridge Road" }, { x: 24, z: -443, yaw: -0.068, area: "North Road" }];
 
 // houses for sale. slots = how many vehicles you can own while you have it. yaw = which way the front door faces.
 // build = which model (camper, cabin, family, farm, mansion, small). You can walk in and take a tour before you buy!

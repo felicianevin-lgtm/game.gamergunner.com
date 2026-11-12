@@ -10,6 +10,7 @@ import * as H from "./hud.js";
 import { GEAR, BLASTERS, RANKS, rankOf, nextRank, lootCap, BOOK_PAY } from "./crime.js";
 import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } from "./fishing.js";
 import { QUICK } from "./mp.js";
+import { itemById, packCap } from "./npcs.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
@@ -178,7 +179,7 @@ function phone(view = "home") {
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? H.fmtTime(S.best[r.id]) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
@@ -193,9 +194,11 @@ function phone(view = "home") {
   if (view === "messages") { GM.mp.unread = 0; html = messagesHtml(back); }
   phoneView = view;
   if (view === "fishlog") html = fishLogHtml(back);
+  if (view === "backpack") html = `<h2>🎒 BACKPACK</h2>${back}<p class="sub">${S.backpack.length} / ${packCap()} things · worth about ${money(packValue())} at a Pawn Shop${S.gear.duffel ? "" : " (a Big Duffel Bag from the Tool Barn makes it bigger)"}</p>${packList(false)}<div class="btns"><button type="button" class="small" data-a="gpsPawn">📍 Nearest Pawn Shop</button></div>`;
   modal(html, "phone");
   onAct = (a, val) => {
     if (a === "view") { if (val === "jobs") return jobsPanel(true); if (val === "map") { close(); return map(); } if (val === "home") { goHome(); return; } phone(val); }
+    if (a === "gpsPawn") { const me = GM.mePos(); let best = null; for (const [id, p] of Object.entries(PLACES)) if (id.startsWith("pawn") && (!best || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(best.x - me.x, best.z - me.z))) best = p; GM.setWaypoint({ x: best.x, z: best.z, name: best.name }); close(); }
     if (a === "gpsCar") { const C = GM.G.CARS.get(+val); const p = C.on ? C.on : C.b; GM.setWaypoint({ x: p.x, z: p.z, name: "your " + vehicleById(C.s.id).name }); close(); }
     if (a === "gpsPlace") { const p = PLACES[val]; GM.setWaypoint({ x: p.x, z: p.z, name: p.name }); close(); }
     if (a === "gpsHouse") { const h = HOUSES.find((x) => x.id === val); GM.setWaypoint({ x: h.garage.x, z: h.garage.z, name: h.name }); close(); }
@@ -291,6 +294,16 @@ function bait() {
   side(html, "shop");
   onAct = (a, val) => { if (a === "sell") { GM.sellFish(); bait(); } if (a === "rod") { GM.buyRod(RODS.find((r) => r.id === val)); bait(); } };
 }
+// ---------------------------------------------------------------- pawn shops + your backpack (npcs.js)
+const packList = (sell) => S.backpack.length ? `<div class="list">${S.backpack.map((it, i) => { const I = itemById(it.id); return `<div class="item"><span class="ico">${I.icon}</span><span class="nm"><b>${esc(I.name)}</b></span><span class="pr">${money(it.v)}</span>${sell ? `<button type="button" class="small" data-a="sell" data-v="${i}">Sell</button>` : ""}</div>`; }).join("")}</div>` : `<p class="note">Your backpack is empty. Splat people (they drop their stuff) and pick up their backpacks with E.</p>`;
+const packValue = () => S.backpack.reduce((a, it) => a + it.v, 0);
+function pawn() {
+  const html = `<h2>💰 PAWN SHOP</h2><div class="bank">${money(S.money)}</div><p class="sub">“I’ll buy anything in that backpack of yours. No questions asked!” 🎒 ${S.backpack.length} / ${packCap()}</p>
+    <div class="btns"><button type="button" class="big" data-a="all" ${S.backpack.length ? "" : "disabled"}>SELL EVERYTHING ${money(packValue())}</button></div>${packList(true)}
+    <p class="note">Careful: if the cops bust you, they take everything in your backpack. If you get knocked out, it falls on the ground.</p>`;
+  side(html, "shop");
+  onAct = (a, val) => { if (a === "sell") { GM.sellItem(+val); pawn(); } if (a === "all") { GM.sellItem(-1); pawn(); } };
+}
 function police() {
   const rk = rankOf(), nx = nextRank(), cop = S.role === "cop";
   let html = `<h2>👮 POLICE STATION</h2><div class="bank">${money(S.money)}</div>`;
@@ -367,7 +380,7 @@ function intro() {
   onAct = (a) => { if (a === "go") { S.intro = true; save(); close(); GM.setWaypoint({ x: PLACES.jobs.x, z: PLACES.jobs.z, name: "the Job Center" }); H.banner("MUD VALLEY", "Follow the purple arrow to the Job Center!"); } };
 }
 
-export const UI = { close, dealer, customs, house, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged };
+export const UI = { close, dealer, customs, house, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged, pawn };
 export function initMenus(game) {
   GM = game; wire();
   $("mapClose").addEventListener("click", () => { SFX.click(); closeMap(); });

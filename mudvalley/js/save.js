@@ -15,6 +15,7 @@ function fresh() {
     role: "civ", gear: {}, blasters: [], blaster: null, rods: [], rod: null, equip: "none", loot: 0, wanted: 0,
     cop: { joined: false, arrests: 0, spikes: 3, car: "cruiser", interceptor: false },
     fish: [], fishLog: {},
+    backpack: [], // stuff you picked up (npcs.js ITEMS: {id, v}); sell it at a Pawn Shop
     chatOn: true, chatV: 2, // typing to friends in a lobby (filtered by the relay; can be turned off in Settings)
   };
 }
@@ -27,7 +28,7 @@ function load() {
     if (j && typeof j === "object" && (j.v === 1 || j.v === 2)) s = { ...s, ...j, v: 2, stats: { ...s.stats, ...(j.stats || {}) }, best: { ...(j.best || {}) }, wins: { ...(j.wins || {}) }, cop: { ...s.cop, ...(j.cop || {}) }, gear: { ...(j.gear || {}) }, fishLog: { ...(j.fishLog || {}) } };
   } catch {}
   if (!["civ", "robber", "cop"].includes(s.role)) s.role = "civ";
-  for (const k of ["blasters", "rods", "fish"]) if (!Array.isArray(s[k])) s[k] = [];
+  for (const k of ["blasters", "rods", "fish", "backpack"]) if (!Array.isArray(s[k])) s[k] = [];
   s.loot = Math.max(0, Math.floor(+s.loot || 0)); s.wanted = 0; // (the cops forget about you when you leave the game)
   if (s.role === "cop" && !s.cop.joined) s.role = "civ";
   if (s.chatV !== 2) { s.chatOn = true; s.chatV = 2; } // (Nov 2026: typing is on for everyone by default)

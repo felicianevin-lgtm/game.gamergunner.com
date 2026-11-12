@@ -508,6 +508,13 @@ export function blasterShop(scene, b) {
   for (let i = 0; i < 12; i++) b.add(new THREE.CylinderGeometry(0.5 + (i % 3) * 0.3, 0.5 + (i % 3) * 0.3, 0.05, 9), cols[i % 5], -8 + (i * 1.47) % 16, 1 + ((i * 2.3) % 4.6), 7.06, Math.PI / 2, 0, 0);
   b.box(2, 0.2, 2, 6, 6.6, 0, 0x3ad0ff); b.ball(1.2, 6, 7.8, 0, 0xff5ad8);
 }
+// a pawn shop: a small shop on a stone base (it sits on hills) with the three golden balls hanging out front
+export function pawnShop(scene, b) {
+  b.box(14.6, 3, 12.6, 0, -3, 0, 0x8a8478);
+  smallShop(scene, b, "PAWN SHOP", 0xe8dcc0, 0x2a7a3a);
+  b.box(0.2, 0.2, 2.2, 5.5, 5.4, 6.9, 0x3a3a3a); for (const [x, y] of [[5.1, 4.5], [5.9, 4.5], [5.5, 3.9]]) b.ball(0.32, x, y, 7.8, 0xffd23a, "glow");
+  bsign(scene, b, "$ WE BUY STUFF $", 8, 1, 0, 3.4, 6.25, { bg: "#ffd23a", fg: "#2a3a1a" });
+}
 export function smallShop(scene, b, text, wall, trim) { shop(scene, b, text, wall, trim, 14, 12, 5, { bg: "#" + trim.toString(16).padStart(6, "0"), fg: "#ffffff" }); }
 export function baitShop(scene, b) {
   b.box(8, 3.6, 6, 0, 0, 0, 0x6a9a7a).solid(0, 0, 4, 3); b.roof(9, 1.8, 7, 0, 3.6, 0, 0x3a5a4a);

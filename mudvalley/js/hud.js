@@ -54,12 +54,12 @@ export function updateHud(g) {
   // wanted stars, loot, cop calls
   const C = g.crime;
   if (C) {
-    const show = C.wanted > 0 || C.loot > 0;
+    const show = C.wanted > 0 || C.loot > 0 || S.backpack.length > 0;
     $("crimeBox").classList.toggle("hidden", !show);
     if (show) {
       setT("stars", "★".repeat(C.wanted) + "☆".repeat(5 - C.wanted));
       $("stars").classList.toggle("flash", C.wanted > 0 && C.evade > 0);
-      setT("lootTxt", C.loot ? "💰 Loot " + money(C.loot) + " / " + money(C.cap) : "");
+      setT("lootTxt", [C.loot ? "💰 Loot " + money(C.loot) + " / " + money(C.cap) : "", S.backpack.length ? "🎒 " + S.backpack.length + " / " + (S.gear.duffel ? 16 : 10) : ""].filter(Boolean).join("  ·  "));
       $("evade").style.display = C.wanted > 0 ? "" : "none";
       $("evade").firstElementChild.style.width = Math.round(C.evade * 100) + "%";
       setT("evadeTxt", C.wanted ? (C.hidden ? "Hiding... " : C.evade > 0 ? "Losing them... " : "SPOTTED! ") : "");
@@ -111,7 +111,7 @@ let ICONS = null;
 // the career's main places glow on the maps: robbers = Splat Blasters (the blaster store), the Tool Barn, the bank + the
 // hideout; cops = the Police Station
 // (label, which side of the icon it goes on: the Copper Creek shops are close together)
-export const HOT = { robber: { blasters: ["BLASTERS", "up"], gear: ["TOOLS", "left"], bank: ["BANK", "down"], hideout: ["HIDEOUT", "up"] }, cop: { police: ["POLICE", "up"] } };
+export const HOT = { robber: { blasters: ["BLASTERS", "up"], gear: ["TOOLS", "left"], bank: ["BANK", "down"], hideout: ["HIDEOUT", "up"], ...Object.fromEntries([0, 1, 2, 3, 4, 5].map((i) => ["pawn" + i, ["PAWN", "up"]])) }, cop: { police: ["POLICE", "up"] } };
 const hotOf = (ic) => (ic.id && HOT[S.role] && HOT[S.role][ic.id]) || null;
 function glow(g, x, y, r, hot, t, big, labels) {
   // the pulsing gold ring (labels are saved and drawn after all the icons, so nothing covers them)
@@ -183,7 +183,7 @@ export function drawBigMap(g) {
   x.font = "18px sans-serif";
   if (g.target) { const [sx, sy] = toS(g.target.x, g.target.z); dot(x, sx, sy, 10, g.target.kind === "gps" ? "#c86aff" : g.target.kind === "crime" ? "#ff3a3a" : "#ffd23a", "#000", 3); x.font = "bold 14px sans-serif"; x.fillStyle = "#fff"; x.fillText("★", sx, sy + 1); x.font = "18px sans-serif"; }
   const [px, py] = toS(g.px, g.pz); arrowShape(x, px, py, Math.PI - (g.pyaw || 0), 12, "#ff3a3a");
-  $("mapLegend").innerHTML = ICONS.filter((i, n, a) => a.findIndex((o) => o.name === i.name) === n).map((i) => `<span>${i.icon} ${i.name}</span>`).join("") + `<span>🔵 your rides</span><span>🟨 trailers</span><span>🚓 cops (when you’re wanted)</span>`;
+  $("mapLegend").innerHTML = ICONS.filter((i, n, a) => a.findIndex((o) => o.name === i.name) === n).map((i) => `<span>${i.icon} ${i.name}</span>`).join("") + `<span>🔵 your rides</span><span>🟨 trailers</span><span>🚓 cops</span><span>💰 pawn shops (sell your backpack stuff)</span>`;
 }
 // big map click → world spot
 export function mapToWorld(e) { const c = $("bigMap"), r = c.getBoundingClientRect(); return { x: ((e.clientX - r.left) / r.width) * HALF * 2 - HALF, z: ((e.clientY - r.top) / r.height) * HALF * 2 - HALF }; }
