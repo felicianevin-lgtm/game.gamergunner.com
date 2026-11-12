@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Bonk Brawlers | GunnerVerse</title>
+  <meta name="description" content="Bonk Brawlers: a cartoon 1-on-1 fighting game. Pick a brawler, punch, kick, block and pull off special moves. Play the computer or a friend on the same keyboard.">
+  <meta name="theme-color" content="#1a0b2e">
+  <link rel="icon" type="image/png" href="../img/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="fighters.css?v=1">
+  <!-- module versions (tools/stamp-site.py) -->
+  <script type="importmap">{"imports":{"/create/js/animmaker.js":"/create/js/animmaker.js?v=cb3391c0f2","/create/js/assets.js":"/create/js/assets.js?v=93a42cc148","/create/js/avatar-ui.js":"/create/js/avatar-ui.js?v=24675f02a9","/create/js/avatar.js":"/create/js/avatar.js?v=4a25c02909","/create/js/collab.js":"/create/js/collab.js?v=cb5e0bf31c","/create/js/editor.js":"/create/js/editor.js?v=0b45702cbe","/create/js/files.js":"/create/js/files.js?v=7197ff9755","/create/js/filter.js":"/create/js/filter.js?v=7bb46d235b","/create/js/game.js":"/create/js/game.js?v=fe915827ef","/create/js/gui.js":"/create/js/gui.js?v=14faf8c171","/create/js/keyanim.js":"/create/js/keyanim.js?v=43e17670f1","/create/js/monster.js":"/create/js/monster.js?v=1fe3f23aa3","/create/js/motion.js":"/create/js/motion.js?v=c67bcaa62c","/create/js/net.js":"/create/js/net.js?v=79cb8352ce","/create/js/others.js":"/create/js/others.js?v=2b18ccdb6d","/create/js/play.js":"/create/js/play.js?v=25683127a6","/create/js/player.js":"/create/js/player.js?v=6cb6b0f2b7","/create/js/publish.js":"/create/js/publish.js?v=8bb4fafb84","/create/js/scare.js":"/create/js/scare.js?v=2e7f21233c","/create/js/script-editor.js":"/create/js/script-editor.js?v=ad684cbaa4","/create/js/scripts.js":"/create/js/scripts.js?v=62d538cde1","/create/js/textures.js":"/create/js/textures.js?v=5d0d52e6b3","/create/js/world.js":"/create/js/world.js?v=2205db0fc5","/create/vendor/BufferGeometryUtils.js":"/create/vendor/BufferGeometryUtils.js?v=defd1be58f","/create/vendor/FBXLoader.js":"/create/vendor/FBXLoader.js?v=eb348b6248","/create/vendor/GLTFLoader.js":"/create/vendor/GLTFLoader.js?v=0d15e0d65b","/create/vendor/NURBSCurve.js":"/create/vendor/NURBSCurve.js?v=acce859f76","/create/vendor/NURBSUtils.js":"/create/vendor/NURBSUtils.js?v=e5d24dd6d2","/create/vendor/OBJLoader.js":"/create/vendor/OBJLoader.js?v=db8ea76faf","/create/vendor/OrbitControls.js":"/create/vendor/OrbitControls.js?v=81b5fc1a5b","/create/vendor/SkeletonUtils.js":"/create/vendor/SkeletonUtils.js?v=ddf661e463","/create/vendor/TransformControls.js":"/create/vendor/TransformControls.js?v=c8f2ff8410","/create/vendor/fflate.module.js":"/create/vendor/fflate.module.js?v=634a59693a","/create/vendor/three.module.js":"/create/vendor/three.module.js?v=0399d7f2a6","/clash/js/arena.js":"/clash/js/arena.js?v=8865ade977","/clash/js/fighters.js":"/clash/js/fighters.js?v=b29e1b0743","/clash/js/main.js":"/clash/js/main.js?v=d20aa7bf32","/clash/js/moves.js":"/clash/js/moves.js?v=642c224704","/clash/js/sfx.js":"/clash/js/sfx.js?v=27a459b413","/backrooms/js/creatures.js":"/backrooms/js/creatures.js?v=7a892c4b25","/backrooms/js/levels.js":"/backrooms/js/levels.js?v=9a42bdbac5","/backrooms/js/main.js":"/backrooms/js/main.js?v=973e91875d","/lava/js/lava.js":"/lava/js/lava.js?v=e9e4564169","/lava/js/main.js":"/lava/js/main.js?v=18451aab99","/lava/js/player.js":"/lava/js/player.js?v=f6583c8bd8","/lava/js/sfx.js":"/lava/js/sfx.js?v=7fc3f14db6","/lava/js/tower.js":"/lava/js/tower.js?v=bebfd4684c","/zombies/js/fx.js":"/zombies/js/fx.js?v=7b14d81101","/zombies/js/hero.js":"/zombies/js/hero.js?v=86fcab5582","/zombies/js/main.js":"/zombies/js/main.js?v=22354536b6","/zombies/js/sfx.js":"/zombies/js/sfx.js?v=1fe3987fbd","/zombies/js/world.js":"/zombies/js/world.js?v=32232f0316","/zombies/js/zombies.js":"/zombies/js/zombies.js?v=906178f179","/dash/js/auto.js":"/dash/js/auto.js?v=467a965425","/dash/js/gen.js":"/dash/js/gen.js?v=6c4e1c56e4","/dash/js/main.js":"/dash/js/main.js?v=abc6bc56e6","/dash/js/save.js":"/dash/js/save.js?v=5ce6d616ef","/dash/js/sfx.js":"/dash/js/sfx.js?v=2eb2966a7e","/dash/js/sim.js":"/dash/js/sim.js?v=534cfe4d4e","/dash/js/world.js":"/dash/js/world.js?v=fd0a918355","/mudvalley/js/build.js":"/mudvalley/js/build.js?v=5cf3ea1257","/mudvalley/js/character.js":"/mudvalley/js/character.js?v=05388f0f5e","/mudvalley/js/colliders.js":"/mudvalley/js/colliders.js?v=2613e97a64","/mudvalley/js/crime.js":"/mudvalley/js/crime.js?v=7b38b79007","/mudvalley/js/fishing.js":"/mudvalley/js/fishing.js?v=769c76ad43","/mudvalley/js/fx.js":"/mudvalley/js/fx.js?v=aed7a55fad","/mudvalley/js/heist.js":"/mudvalley/js/heist.js?v=43b34baf04","/mudvalley/js/hud.js":"/mudvalley/js/hud.js?v=97633f3e71","/mudvalley/js/input.js":"/mudvalley/js/input.js?v=430f9bbe60","/mudvalley/js/interiors.js":"/mudvalley/js/interiors.js?v=84c9bba83e","/mudvalley/js/jobs.js":"/mudvalley/js/jobs.js?v=13b9663541","/mudvalley/js/layout.js":"/mudvalley/js/layout.js?v=f928d8a3b6","/mudvalley/js/main.js":"/mudvalley/js/main.js?v=93edd3ee2a","/mudvalley/js/menus.js":"/mudvalley/js/menus.js?v=b4bf4c6226","/mudvalley/js/mp.js":"/mudvalley/js/mp.js?v=ad780a8d45","/mudvalley/js/npcs.js":"/mudvalley/js/npcs.js?v=651ff0f31e","/mudvalley/js/physics.js":"/mudvalley/js/physics.js?v=0f4b8ab565","/mudvalley/js/races.js":"/mudvalley/js/races.js?v=397cc5ab6d","/mudvalley/js/save.js":"/mudvalley/js/save.js?v=08a1dc392f","/mudvalley/js/sfx.js":"/mudvalley/js/sfx.js?v=3a13752ab1","/mudvalley/js/terrain.js":"/mudvalley/js/terrain.js?v=6318683cba","/mudvalley/js/thumb.js":"/mudvalley/js/thumb.js?v=6c5cb6eb33","/mudvalley/js/trailer.js":"/mudvalley/js/trailer.js?v=c252ebaf90","/mudvalley/js/vehicles.js":"/mudvalley/js/vehicles.js?v=78ee26d5c1","/mudvalley/js/world.js":"/mudvalley/js/world.js?v=850e82aade","/fighters/js/main.js":"/fighters/js/main.js?v=702e16ae36","/fighters/js/roster.js":"/fighters/js/roster.js?v=1b7c75e930","/fighters/js/sfx.js":"/fighters/js/sfx.js?v=d1d70256dc"}}</script>
+  <!-- /module versions -->
+</head>
+<body>
+  <canvas id="canvas" tabindex="0"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="hBtns"><button type="button" id="bMute" title="Sound on/off (M)">🔊</button><button type="button" id="bPause" title="Pause (Esc)">⏸</button></div>
+  </div>
+
+  <div id="touch" class="hidden">
+    <div id="dpad"><i class="u">▲</i><i class="l">◀</i><i class="r">▶</i><i class="d">▼</i></div>
+    <div id="tbtns">
+      <button type="button" data-k="L" class="tL">PUNCH</button>
+      <button type="button" data-k="H" class="tH">KICK</button>
+      <button type="button" data-k="S" class="tS">SPECIAL</button>
+      <button type="button" data-k="X" class="tX" id="tX">SUPER</button>
+    </div>
+  </div>
+
+  <div id="rotate"><b>📱↻</b>Turn your device sideways to brawl!</div>
+
+  <div id="menu" class="panel">
+    <div class="box">
+      <h1><span>BONK</span> BRAWLERS</h1>
+      <p class="sub">Pick a brawler and bonk your way to the top! Punches, kicks, blocks, wild special moves and cartoon knockouts. Win 2 rounds to win the match.</p>
+      <div class="btns col">
+        <button type="button" id="b1p" class="big">🤖 1 PLAYER <small>vs the computer</small></button>
+        <button type="button" id="b2p" class="big alt">👥 2 PLAYERS <small>on one keyboard</small></button>
+      </div>
+      <div id="diff"><span>Computer:</span><button type="button" data-d="easy">Easy</button><button type="button" data-d="normal">Normal</button><button type="button" data-d="hard">Hard</button></div>
+      <p id="controls"></p>
+      <div class="foot"><a class="back" href="../#/">← GunnerVerse</a><button type="button" id="mMute" class="link">🔊 Sound on</button></div>
+    </div>
+  </div>
+
+  <div id="select" class="panel hidden">
+    <div class="box wide">
+      <h2 id="selTitle">Pick your brawler!</h2>
+      <div class="selRow">
+        <div class="pinfo p1" id="info0"></div>
+        <div id="grid"></div>
+        <div class="pinfo p2" id="info1"></div>
+      </div>
+      <div class="btns"><button type="button" id="selBack">← Back</button><button type="button" id="selRandom">🎲 Random</button><button type="button" id="selGo" class="big" disabled>FIGHT! ▶</button></div>
+      <p class="hint" id="selHint"></p>
+    </div>
+  </div>
+
+  <div id="pause" class="panel hidden"><div class="box"><h2>Paused</h2><div class="btns col"><button type="button" id="resume" class="big">▶ Keep brawling</button><button type="button" id="restart">↻ Restart match</button><button type="button" id="pSelect">Change brawlers</button><button type="button" id="pMenu">Menu</button></div></div></div>
+
+  <div id="over" class="panel hidden">
+    <div class="box">
+      <canvas id="overPic" width="160" height="160"></canvas>
+      <h2 id="overTitle"></h2>
+      <p class="sub" id="overSub"></p>
+      <div class="btns col"><button type="button" id="again" class="big">↻ Rematch</button><button type="button" id="oSelect" class="big alt">Change brawlers</button><button type="button" id="oMenu">Menu</button></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js?v=702e16ae36"></script>
+</body>
+</html>

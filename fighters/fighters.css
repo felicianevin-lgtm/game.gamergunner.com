@@ -1,0 +1,120 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0612; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: none; }
+canvas#canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+.hidden { display: none !important; }
+button { font: inherit; cursor: pointer; }
+a { color: #ffd23f; }
+kbd { display: inline-block; min-width: 1.6em; padding: 0 0.35em; margin: 0 1px; border-radius: 5px; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.3); font: 700 0.85em Inter, sans-serif; text-align: center; }
+
+/* HUD buttons */
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#hBtns { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(8px, calc(50vh - 28.125vw + 6px)); display: flex; gap: 8px; }
+#hBtns button { pointer-events: auto; width: 40px; height: 40px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 18px; }
+
+/* touch controls */
+#touch { position: fixed; inset: 0; pointer-events: none; }
+#dpad { pointer-events: auto; position: absolute; left: max(14px, env(safe-area-inset-left)); bottom: 18px; width: min(40vw, 190px, 44vh); height: min(40vw, 190px, 44vh); border-radius: 50%; background: rgba(0, 0, 0, 0.3); border: 3px solid rgba(255, 255, 255, 0.35); touch-action: none; }
+#dpad i { position: absolute; font-style: normal; font-size: 26px; color: rgba(255, 255, 255, 0.7); width: 34%; height: 34%; display: grid; place-items: center; border-radius: 14px; }
+#dpad .u { left: 33%; top: 2%; } #dpad .d { left: 33%; bottom: 2%; } #dpad .l { left: 2%; top: 33%; } #dpad .r { right: 2%; top: 33%; }
+#dpad[data-dir*="u"] .u, #dpad[data-dir*="d"] .d, #dpad[data-dir*="l"] .l, #dpad[data-dir*="r"] .r { background: rgba(255, 210, 63, 0.45); color: #fff; }
+#tbtns { pointer-events: auto; position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: 18px; width: min(44vw, 230px, 53vh); height: min(40vw, 190px, 44vh); }
+#tbtns button { position: absolute; width: 46%; height: 46%; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.5); color: #fff; font-family: "Russo One", sans-serif; font-size: clamp(11px, 2.6vw, 15px); touch-action: none; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+#tbtns button.on { transform: scale(0.92); filter: brightness(1.4); }
+#tbtns .tL { left: 0; bottom: 0; background: rgba(255, 183, 3, 0.55); }
+#tbtns .tH { left: 50%; bottom: 0; background: rgba(255, 77, 109, 0.55); }
+#tbtns .tS { left: 25%; top: 0; background: rgba(61, 200, 255, 0.55); }
+#tbtns .tX.ready { background: rgba(255, 210, 63, 0.85); color: #2a1000; animation: glow 0.6s infinite alternate; }
+@keyframes glow { to { box-shadow: 0 0 22px #ffd23f; transform: scale(1.08); } }
+#tbtns .tX { right: -6%; top: -30%; width: 34%; height: 34%; background: rgba(160, 90, 255, 0.6); font-size: clamp(10px, 2.2vw, 13px); }
+
+/* panels */
+.panel { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(26, 11, 46, 0.55), rgba(10, 4, 20, 0.85)); overflow-y: auto; }
+#menu.panel { background: linear-gradient(90deg, rgba(10, 4, 20, 0.88) 0%, rgba(10, 4, 20, 0.6) 55%, rgba(10, 4, 20, 0.1) 100%); justify-content: flex-start; }
+.box { width: min(560px, 100%); margin: auto 0; background: rgba(26, 11, 46, 0.82); border: 2px solid rgba(255, 255, 255, 0.15); border-radius: 22px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); text-align: center; }
+#menu .box { margin-left: max(0px, 4vw); }
+.box.wide { width: min(1100px, 100%); }
+h1 { font-family: "Russo One", sans-serif; font-size: clamp(38px, 7vw, 62px); line-height: 1; margin: 4px 0 10px; color: #7df9ff; -webkit-text-stroke: 2px #1a0b2e; text-shadow: 0 5px 0 #3a1a6e; }
+h1 span { color: #ffd23f; display: block; font-size: 1.15em; transform: rotate(-3deg); }
+h2 { font-family: "Russo One", sans-serif; font-size: clamp(26px, 4.5vw, 40px); margin: 6px 0 10px; color: #ffd23f; text-shadow: 0 4px 0 #3a1a6e; }
+.sub { color: #e5dcff; line-height: 1.45; margin: 0 0 16px; }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 12px 0; }
+.btns.col { flex-direction: column; align-items: stretch; }
+.btns button { border: 0; border-radius: 14px; padding: 12px 18px; background: #3a2a5e; color: #fff; font-weight: 800; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); }
+.btns button:hover:not(:disabled) { filter: brightness(1.2); }
+.btns button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+.btns button.big { font-family: "Russo One", sans-serif; font-size: 22px; padding: 14px 22px; background: linear-gradient(#ffd23f, #ff9f1c); color: #2a1000; }
+.btns button.big.alt { background: linear-gradient(#7df9ff, #3d9bff); color: #071a33; }
+.btns button small { display: block; font-family: Inter, sans-serif; font-size: 13px; font-weight: 600; opacity: 0.8; }
+.btns button:disabled { opacity: 0.4; cursor: default; }
+#diff { display: flex; gap: 6px; justify-content: center; align-items: center; margin: 6px 0 12px; flex-wrap: wrap; }
+#diff span { font-weight: 800; color: #cbbcff; margin-right: 4px; }
+#diff button { border: 2px solid rgba(255, 255, 255, 0.2); background: transparent; color: #fff; border-radius: 999px; padding: 7px 16px; font-weight: 800; }
+#diff button.on { background: #ffd23f; color: #2a1000; border-color: #ffd23f; }
+#controls { font-size: 13px; line-height: 1.8; color: #d8ccff; text-align: left; background: rgba(0, 0, 0, 0.25); border-radius: 12px; padding: 10px 12px; margin: 8px 0; }
+.foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+.link { background: none; border: 0; color: #cbbcff; text-decoration: underline; }
+
+/* character select */
+.selRow { display: grid; grid-template-columns: 1fr minmax(0, 1.5fr) 1fr; gap: 14px; align-items: start; }
+#grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.card { position: relative; border: 3px solid rgba(255, 255, 255, 0.15); border-radius: 16px; padding: 6px 4px 8px; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 45%, #1a0b2e), #1a0b2e); color: #fff; transition: transform 0.1s; }
+.card canvas { width: 100%; max-width: 120px; aspect-ratio: 1; display: block; margin: 0 auto; }
+.card b { display: block; font-family: "Russo One", sans-serif; font-size: clamp(11px, 1.4vw, 15px); margin-top: 2px; }
+.card:hover { transform: translateY(-2px); }
+.card.cur { border-color: #ffd23f; box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.35), 0 0 22px rgba(255, 210, 63, 0.4); transform: scale(1.04); }
+.card.cur.cur2 { border-color: #7df9ff; box-shadow: 0 0 0 3px rgba(125, 249, 255, 0.35), 0 0 22px rgba(125, 249, 255, 0.4); }
+.card i { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; justify-content: space-between; font-style: normal; }
+.card em { font-style: normal; font-family: "Russo One", sans-serif; font-size: 12px; padding: 2px 7px; border-radius: 8px; }
+.card em.p1 { background: #ffd23f; color: #2a1000; }
+.card em.p2 { background: #7df9ff; color: #071a33; margin-left: auto; }
+.pinfo { background: rgba(0, 0, 0, 0.3); border-radius: 16px; padding: 10px; min-height: 280px; cursor: pointer; text-align: left; border: 2px solid transparent; }
+.pinfo.p1 { border-color: rgba(255, 210, 63, 0.4); } .pinfo.p2 { border-color: rgba(125, 249, 255, 0.4); }
+.pinfo .who { font-family: "Russo One", sans-serif; font-size: 18px; text-align: center; }
+.pinfo.p1 .who { color: #ffd23f; } .pinfo.p2 .who { color: #7df9ff; }
+.pinfo canvas { display: block; width: 110px; height: 110px; margin: 4px auto; }
+.pinfo h3 { font-family: "Russo One", sans-serif; margin: 2px 0; text-align: center; font-size: 17px; }
+.pinfo .tag { margin: 0 0 6px; font-size: 12px; color: #cbbcff; text-align: center; }
+.pinfo .wait { font-family: "Russo One", sans-serif; font-size: 80px; text-align: center; margin: 30px 0; opacity: 0.25; }
+.pinfo ul { list-style: none; padding: 0; margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; }
+.pinfo li kbd { font-size: 10px; background: rgba(61, 200, 255, 0.2); }
+.pinfo li.sup kbd { background: rgba(160, 90, 255, 0.35); }
+.pinfo li small { opacity: 0.7; }
+.stats span { display: grid; grid-template-columns: 52px 1fr; align-items: center; font-size: 11px; font-weight: 800; color: #cbbcff; margin: 3px 0; }
+.stats i { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.stats b { display: block; height: 100%; background: linear-gradient(90deg, #ffd23f, #ff7b00); }
+.hint { font-size: 13px; color: #cbbcff; margin: 4px 0 0; }
+#overPic { width: 120px; height: 120px; display: block; margin: 0 auto; }
+
+@media (max-width: 760px) {
+  .selRow { grid-template-columns: 1fr 1fr; }
+  #grid { grid-column: 1 / -1; order: -1; }
+  .pinfo { min-height: 0; }
+  .pinfo canvas { width: 70px; height: 70px; }
+  .stats { display: none; }
+}
+@media (max-height: 520px) {
+  .box { padding: 10px 14px; }
+  h1 { font-size: 34px; }
+  h2 { font-size: 22px; margin: 0 0 6px; }
+  .sub { display: none; }
+  .selRow { grid-template-columns: 1fr 1fr; gap: 8px; }
+  #grid { grid-column: 1 / -1; order: -1; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .card { padding: 2px 2px 4px; }
+  .card canvas { max-width: 64px; }
+  .card b { font-size: 9px; }
+  .pinfo { min-height: 0; padding: 6px 8px; display: grid; grid-template-columns: 56px 1fr; column-gap: 8px; align-items: center; }
+  .pinfo .who, .pinfo .wait { grid-column: 1 / -1; }
+  .pinfo .wait { font-size: 30px; margin: 0; }
+  .pinfo canvas { width: 56px; height: 56px; grid-row: span 2; margin: 0; }
+  .pinfo h3, .pinfo .tag { text-align: left; }
+  .pinfo ul, .stats, .hint { display: none; }
+  .btns { margin: 8px 0 0; }
+  .btns button.big { font-size: 18px; padding: 10px 18px; }
+}
+
+/* phones held tall: ask to turn sideways (only during a fight) */
+#rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  body.fighting #rotate { display: flex; position: fixed; left: 0; right: 0; top: 8vh; z-index: 5; flex-direction: column; align-items: center; gap: 6px; font-family: "Russo One", sans-serif; font-size: 18px; color: #ffd23f; text-shadow: 0 2px 0 #000; pointer-events: none; }
+  #rotate b { font-size: 40px; }
+}
