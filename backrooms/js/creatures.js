@@ -3,7 +3,8 @@
 //   entity    stand-in for the Bacteria if its file can't load: a tall, thin, faceless thing with long dangly strands (original design, made of shapes)
 //   crawler   the Poolrooms: a pale thing that crawls along the bottom of the pool (original design)
 //   partygoer Level Fun: the Partygoer model (models/partygoer.glb, "Partygoer from Backrooms (Updated)" by FilinMinv, CC-BY-4.0)
-//   clark     the final level: Captain Clark (models/captain-clark.glb, Gamer Gunner's model)
+//   clark     the final level: Captain Clark (models/captain-clark.glb, Gamer Gunner's model). 3.7 m tall, hunched, darker,
+//             glowing red eyes and a red glow; he reaches for you while he chases. pose() holds him still for his cutscene.
 // make(kind) -> {g: Object3D (feet at 0, facing +z), animate(dt, speed), height}. Models load once (preload) and are
 // cloned; if a model can't load, a stand-in made of shapes is used so the game still works.
 import * as THREE from "/create/vendor/three.module.js";
@@ -66,7 +67,7 @@ function crawler() {
 // ---------------------------------------------------------------- models made from files (the Partygoer, Captain Clark)
 const loader = new GLTFLoader(), loaded = {};
 export function preload(kind) {
-  const file = { partygoer: "models/partygoer.glb", clark: "models/captain-clark.glb", bacteria: "models/bacteria.glb" }[kind];
+  const file = { partygoer: "/backrooms/models/partygoer.glb", clark: "/backrooms/models/captain-clark.glb", bacteria: "/backrooms/models/bacteria.glb" }[kind]; // (whole-site paths: Backrooms Survival uses them too)
   if (!file) return Promise.resolve(null);
   if (!loaded[kind]) loaded[kind] = new Promise((res) => loader.load(file, (g) => res(g.scene), undefined, () => res(null)));
   return loaded[kind];
@@ -74,8 +75,10 @@ export function preload(kind) {
 // Bones are found by name; legs / arms swing around the model's own "sideways" axis, whatever way each bone points.
 const BONES = {
   partygoer: { legL: /L_Thigh_\d/, legR: /R_Thigh_\d/, calfL: /L_Calf_\d/, calfR: /R_Calf_\d/, armL: /L_Upperarm_\d/ },
-  clark: { legL: /mixamorig:?LeftUpLeg$/, legR: /mixamorig:?RightUpLeg$/, calfL: /mixamorig:?LeftLeg$/, calfR: /mixamorig:?RightLeg$/, armL: /mixamorig:?LeftArm$/, armR: /mixamorig:?RightArm$/, handL: /mixamorig:?LeftHand$/, handR: /mixamorig:?RightHand$/ },
+  clark: { legL: /mixamorig:?LeftUpLeg$/, legR: /mixamorig:?RightUpLeg$/, calfL: /mixamorig:?LeftLeg$/, calfR: /mixamorig:?RightLeg$/, armL: /mixamorig:?LeftArm$/, armR: /mixamorig:?RightArm$/, handL: /mixamorig:?LeftHand$/, handR: /mixamorig:?RightHand$/,
+    footL: /mixamorig:?LeftFoot$/, head: /mixamorig:?Head$/, headTop: /mixamorig:?HeadTop_End$/, spine: /mixamorig:?Spine2$/ },
 };
+const CLARK_H = 3.7; // (he used to be 2.7 m: now he has to duck under the lights)
 function fromModel(kind, scene, height) {
   const raw = cloneSkinned(scene);
   raw.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; if (o.material && o.material.map) o.material.map.colorSpace = THREE.SRGBColorSpace; } });
@@ -108,17 +111,67 @@ function fromModel(kind, scene, height) {
   }
   const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion();
   const turn = (R, swing, drop = 0) => { if (!R) return; q1.setFromAxisAngle(R.side, swing); q2.setFromAxisAngle(R.fwd, drop); R.b.quaternion.copy(q1).multiply(q2).multiply(R.rest); };
-  let t = 0;
-  return { g, height, animate(dt, sp) {
+  // which way is "forward" for a swing: try both, keep the one that moves the hand / foot to the front (+z)
+  const forwardSign = (R, end, drop = 0) => {
+    if (!R || !end) return 1;
+    const zAt = (s) => { turn(R, s * 1.0, drop); g.updateMatrixWorld(true); return end.getWorldPosition(V()).z; };
+    const s = zAt(1) > zAt(-1) ? 1 : -1; R.b.quaternion.copy(R.rest); return s;
+  };
+  const reachL = forwardSign(rig.armL, bones.handL, rig.armL ? rig.armL.drop : 0), reachR = forwardSign(rig.armR, bones.handR, rig.armR ? rig.armR.drop : 0);
+  const kickS = forwardSign(rig.legL, bones.footL);
+  g.updateMatrixWorld(true);
+  // CAPTAIN CLARK is extra scary: darker, a little thinner, hunched over, glowing red eyes and a red glow around him
+  let eyes = null, lean = 0;
+  if (kind === "clark") {
+    lean = 0.13;
+    holder.scale.set(0.9, 1, 0.9);
+    raw.traverse((o) => { if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.color.setHex(0x8a7470); } });
+    eyes = new THREE.Group(); g.add(eyes);
+    const eyeM = new THREE.MeshBasicMaterial({ color: 0xff2a14 }), haloM = new THREE.MeshBasicMaterial({ color: 0xff1a00, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending });
+    for (const s of [-1, 1]) {
+      const e = new THREE.Mesh(new THREE.SphereGeometry(height * 0.011, 10, 8), eyeM); e.position.x = s * height * 0.018; e.scale.y = 0.6; eyes.add(e);
+      const h = new THREE.Mesh(new THREE.SphereGeometry(height * 0.026, 10, 8), haloM); h.position.x = s * height * 0.018; eyes.add(h);
+    }
+    const glow = new THREE.PointLight(0xff2010, 2.2, 6.5, 1.4); glow.position.set(0, height * 0.55, height * 0.35); g.add(glow);
+  }
+  const tmp = V(), tmp2 = V();
+  function placeEyes() {
+    if (!eyes || !bones.head) return;
+    g.updateMatrixWorld(true);
+    bones.head.getWorldPosition(tmp); if (bones.headTop) { bones.headTop.getWorldPosition(tmp2); tmp.lerp(tmp2, 0.42); }
+    g.worldToLocal(tmp); eyes.position.set(tmp.x, tmp.y, tmp.z + height * 0.036);
+  }
+  let t = 0, twitch = 0, tw = 0;
+  return { g, height,
+  face(v) { return eyes ? eyes.getWorldPosition(v) : null; }, // (where his eyes are: the cutscene camera looks there)
+  animate(dt, sp, chasing) {
     if (!(sp >= 0)) sp = 0;
     t += dt * (2 + sp * 1.6);
     const w = Math.min(1, sp / 3), sw = Math.sin(t) * 0.55 * w;
     turn(rig.legL, sw); turn(rig.legR, -sw);
     turn(rig.calfL, Math.max(0, -Math.sin(t)) * 0.7 * w * (rig.calfL && rig.calfL.side.x < 0 ? -1 : 1));
     turn(rig.calfR, Math.max(0, Math.sin(t)) * 0.7 * w * (rig.calfR && rig.calfR.side.x < 0 ? -1 : 1));
-    if (rig.armL) turn(rig.armL, -sw * 0.6, rig.armL.drop);
-    if (rig.armR) turn(rig.armR, sw * 0.6, rig.armR.drop);
+    const reach = eyes && chasing ? 0.9 : 0; // (Clark reaches for you while he chases you)
+    if (rig.armL) turn(rig.armL, -sw * 0.6 * (reach ? 0.3 : 1) + reach * reachL, rig.armL.drop);
+    if (rig.armR) turn(rig.armR, sw * 0.6 * (reach ? 0.3 : 1) + reach * reachR, rig.armR.drop);
     holder.position.y = Math.abs(Math.cos(t)) * 0.04 * w;
+    if (eyes) { // hunched, and his head twitches now and then
+      holder.rotation.x = lean + (chasing ? 0.08 : 0);
+      if ((twitch -= dt) < 0) { twitch = 0.6 + Math.random() * 2.2; tw = (Math.random() - 0.5) * 0.7; }
+      tw *= Math.exp(-dt * 3);
+      turn(rig.head, 0, tw);
+      placeEyes();
+    }
+  },
+  // a held pose for cutscenes: arms 0..1 (reach out and grab), fling 0..1 (throw), kick -1..1 (peg leg back / forward), lean 0..1 (lunge to bite)
+  pose(o) {
+    turn(rig.legR, 0); turn(rig.calfL, 0); turn(rig.calfR, 0); turn(rig.head, 0);
+    turn(rig.legL, (o.kick || 0) * kickS);
+    const r = Math.min(1, o.arms || 0) * 1.0 + (o.fling || 0) * 0.9;
+    if (rig.armL) turn(rig.armL, r * reachL, rig.armL.drop);
+    if (rig.armR) turn(rig.armR, r * reachR, rig.armR.drop);
+    holder.position.y = 0; holder.rotation.x = lean + (o.lean || 0) * 0.4 - Math.max(0, o.kick || 0) * 0.15;
+    placeEyes();
   } };
 }
 // The Bacteria has no bones: the whole thing sways, twitches and leans in when it runs.
@@ -162,5 +215,5 @@ export async function make(kind) {
   const scene = await preload(kind);
   if (kind === "bacteria") return scene ? bacteria(scene) : entity();
   if (!scene) return standIn(kind);
-  return fromModel(kind, scene, kind === "clark" ? 2.7 : 2.9);
+  return fromModel(kind, scene, kind === "clark" ? CLARK_H : 2.9);
 }

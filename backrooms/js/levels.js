@@ -126,7 +126,7 @@ export function distances(g, i0, j0) {
   return d;
 }
 
-// Builds a maze level (the Lobby, the Party rooms, the final level). style = {wall, floor, ceiling, cell, h}
+// Builds a maze level (the Lobby, the Party rooms, the final level). style = {wall, floor, ceiling, cell, h, flicker}
 function mazeLevel(seed, W, H, style, open) {
   const r = rng(seed), g = maze(W, H, r, open), C = style.cell, Hh = style.h, T = 0.3;
   const group = new THREE.Group(), B = builder();
@@ -143,7 +143,7 @@ function mazeLevel(seed, W, H, style, open) {
   const flicker = [], lightGeo = [];
   for (let i = 0; i < W; i++) for (let j = 0; j < H; j++) if ((i + j) % 2 === 0 || r() < 0.3) {
     const cx = x0 + (i + 0.5) * C, cz = z0 + (j + 0.5) * C;
-    if (r() < 0.12) { const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 2.4), new THREE.MeshBasicMaterial({ color: 0xfffbe6 })); m.position.set(cx, Hh - 0.03, cz); group.add(m); flicker.push(m); }
+    if (r() < (style.flicker || 0.12)) { const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 2.4), new THREE.MeshBasicMaterial({ color: 0xfffbe6 })); m.position.set(cx, Hh - 0.03, cz); group.add(m); flicker.push(m); }
     else lightGeo.push(boxGeo(cx - 0.6, Hh - 0.05, cz - 1.2, cx + 0.6, Hh, cz + 1.2, 1));
   }
   if (lightGeo.length) group.add(new THREE.Mesh(mergeGeometries(lightGeo), new THREE.MeshBasicMaterial({ color: style.lightColor || 0xfffbe6 })));
@@ -181,96 +181,117 @@ function farCells(L, min, n) {
   return out.slice(0, n);
 }
 
-// ---------------------------------------------------------------- the levels
+
+// ---------------------------------------------------------------- level builders (Backrooms Survival builds its levels with these too)
+// Monsters in a maze: mons = {clark: 1, bacteria: 2, partygoer: 1}. Each starts in a room at least `min` steps from where you start
+// (closer if the maze is too small for that many).
+function spawn(L, mons, min) {
+  const list = [];
+  for (const k of ["clark", "bacteria", "partygoer"]) for (let i = 0; i < (mons[k] || 0); i++) list.push(k);
+  let cells = [];
+  for (let m = min; m >= 2 && cells.length < list.length; m--) cells = farCells(L, m, list.length);
+  return list.map((kind, i) => ({ kind, ...L.cellPos(...(cells[i % Math.max(1, cells.length)] || L.exitCell)) }));
+}
+const THEMES = {
+  lobby: { style: { wall: "wall", floor: "carpet", ceiling: "ceiling" }, fog: [0xb8a75a, 3, 34], bg: 0xb8a75a, hemi: [0xfff3c0, 0x6a5a28, 1.6] },
+  deep: { style: { wall: "wall", floor: "carpet", ceiling: "ceiling" }, fog: [0x8f7f3a, 3, 30], bg: 0x8f7f3a, hemi: [0xfff0b0, 0x4a3a18, 1.3] },
+  dark: { style: { wall: "wall", floor: "carpet", ceiling: "ceiling", lightColor: 0xcfc28a, flicker: 0.4 }, fog: [0x2e2912, 2, 20], bg: 0x2e2912, hemi: [0xd8c890, 0x2a2210, 0.85] },
+  red: { style: { wall: "wall", floor: "carpet", ceiling: "ceiling", lightColor: 0xff6a50, flicker: 0.25 }, fog: [0x4a0e0a, 2, 24], bg: 0x4a0e0a, hemi: [0xff9a80, 0x300808, 1.1] },
+  party: { style: { wall: "party", floor: "partyfloor", ceiling: "ceiling", lightColor: 0xffe0f0 }, fog: [0x2a1030, 4, 40], bg: 0x2a1030, hemi: [0xffd8f0, 0x40204a, 1.5], party: true },
+};
+// A maze level. o = {W, H, theme: lobby | deep | dark | red | party, mons, min, open, final}
+// Captain Clark is very tall, so a maze with him in it gets a higher ceiling.
+export function mazeBuild(seed, o) {
+  const T = THEMES[o.theme || "lobby"], mons = o.mons || {};
+  const L = mazeLevel(seed, o.W, o.H, { ...T.style, cell: o.cell || (T.party ? 9 : 6), h: o.h || (mons.clark ? 4.6 : T.party ? 4 : 3.4) }, o.open ?? (T.party ? 0.42 : 0.25));
+  const exit = exitDoor(L, ...L.exitCell, o.final ? "escape" : "exit");
+  if (T.party) partyDecor(L);
+  return { group: L.group, boxes: L.boxes, floorY: 0, water: [], grid: L.grid, flicker: L.flicker, start: { ...L.cellPos(0, 0), yaw: -Math.PI * 0.75 }, exit, final: !!o.final,
+    monsters: spawn(L, mons, o.min ?? Math.floor((o.W + o.H) / 3)), rocks: [], fog: T.fog, bg: T.bg, hemi: T.hemi, ceilingH: L.Hh, party: !!T.party };
+}
+// Balloons, cakes and banners (Level Fun)
+function partyDecor(L) {
+  const cols = [0xff4fa3, 0xffd531, 0x3fe0b0, 0x4fb0ff, 0xff7a1a, 0xd94fff];
+  const bg = new THREE.SphereGeometry(0.35, 14, 10);
+  for (let i = 0; i < L.g.W; i++) for (let j = 0; j < L.g.H; j++) {
+    const p = L.cellPos(i, j);
+    if (L.r() < 0.55) for (let k = 0; k < 3 + Math.floor(L.r() * 4); k++) {
+      const b = new THREE.Mesh(bg, new THREE.MeshLambertMaterial({ color: cols[Math.floor(L.r() * cols.length)] }));
+      b.scale.y = 1.2; b.position.set(p.x + (L.r() - 0.5) * 7, 2.4 + L.r() * 1.2, p.z + (L.r() - 0.5) * 7); L.group.add(b);
+      const s = new THREE.Mesh(new THREE.BoxGeometry(0.02, b.position.y - 0.4, 0.02), new THREE.MeshBasicMaterial({ color: 0xffffff })); s.position.set(b.position.x, (b.position.y - 0.4) / 2, b.position.z); L.group.add(s);
+    }
+    if (L.r() < 0.18 && (i || j)) { // a party table with a cake
+      const t = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 1.0), new THREE.MeshLambertMaterial({ color: 0xffffff })); t.position.set(p.x + 2, 0.4, p.z + 2); L.group.add(t);
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16), new THREE.MeshLambertMaterial({ color: 0xff9ecb })); c.position.set(p.x + 2, 0.95, p.z + 2); L.group.add(c);
+      L.boxes.push({ x0: p.x + 1.2, x1: p.x + 2.8, y0: 0, y1: 0.8, z0: p.z + 1.5, z1: p.z + 2.5 });
+    }
+    if (L.r() < 0.15) { const ban = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({ map: tex("birthday"), side: THREE.DoubleSide })); ban.position.set(p.x, 3.4, p.z); ban.rotation.y = L.r() * 3; L.group.add(ban); }
+  }
+}
+// The Poolrooms. o = {len (meters of pool), crawlers (how many water monsters)}. More crawlers = a few more rocks to throw.
+export function poolBuild(seed, o = {}) {
+  const r = rng(seed), group = new THREE.Group(), B = builder();
+  const W = 13, LEN = o.len || 150, FLOOR = -0.9, WTOP = -0.25, CEIL = 7, NC = o.crawlers || 1;
+  // the pool floor, walls and ceiling: white tiles everywhere
+  B.add("tile", -W - 1, FLOOR - 0.5, -10, W + 1, FLOOR, LEN + 10, 2, false);
+  B.add("tile", -W - 1, CEIL, -10, W + 1, CEIL + 0.3, LEN + 10, 2, false);
+  B.add("tile", -W - 1, FLOOR, -10, -W, CEIL, LEN + 10, 2); B.add("tile", W, FLOOR, -10, W + 1, CEIL, LEN + 10, 2);
+  B.add("tile", -W, FLOOR, -11, W, CEIL, -10, 2); B.add("tile", -W, FLOOR, LEN + 10, W, CEIL, LEN + 11, 2);
+  // dry floors at the start and the end
+  B.add("tile", -W, FLOOR, -10, W, 0, 4, 2); B.add("tile", -W, FLOOR, LEN, W, 0, LEN + 10, 2);
+  // the platforms: mostly jumpable, but some gaps are too far, so you have to step in
+  const rocks = [];
+  let z = 4, x = 0, n = 0;
+  const plats = [];
+  while (z < LEN - 6) {
+    n++;
+    const big = n % 4 === 0, gap = big ? 5.5 + r() * 2 : 1.4 + r() * 1.6;
+    z += gap;
+    const sx = 2.6 + r() * 2, sz = 2.6 + r() * 2;
+    x = Math.max(-W + 3, Math.min(W - 3, x + (r() - 0.5) * 6));
+    if (z + sz > LEN - 1) break;
+    B.add("tile", x - sx / 2, FLOOR, z, x + sx / 2, 0, z + sz, 2);
+    plats.push({ x, z: z + sz / 2 });
+    if (n % 4 === 3 || r() < 0.15 + 0.06 * (NC - 1)) rocks.push({ x: x + (r() - 0.5) * (sx - 1), y: 0.15, z: z + sz / 2 + (r() - 0.5) * (sz - 1) });
+    z += sz;
+  }
+  // pillars standing in the water (not on the path) and arches overhead
+  for (let i = 0; i < 26 * LEN / 150; i++) {
+    const px = (r() < 0.5 ? -1 : 1) * (6 + r() * (W - 7)), pz = 8 + r() * (LEN - 16);
+    if (plats.some((p) => Math.abs(p.x - px) < 4 && Math.abs(p.z - pz) < 4)) continue;
+    B.add("tile", px - 0.8, FLOOR, pz - 0.8, px + 0.8, CEIL, pz + 0.8, 2);
+  }
+  for (let zz = 10; zz < LEN; zz += 20) B.add("tile", -W, CEIL - 1.2, zz, W, CEIL, zz + 1.2, 2, false);
+  // lights: long panels in the ceiling
+  const lg = [];
+  for (let zz = -6; zz < LEN + 8; zz += 8) for (const xx of [-6, 0, 6]) lg.push(boxGeo(xx - 0.8, CEIL - 0.05, zz - 1.6, xx + 0.8, CEIL, zz + 1.6, 1));
+  group.add(new THREE.Mesh(mergeGeometries(lg), new THREE.MeshBasicMaterial({ color: 0xffffff })));
+  B.done(group);
+  // the water (see-through, the pattern drifts)
+  const wt = tex("water").clone(); wt.needsUpdate = true; wt.repeat.set(6, 40 * LEN / 150);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, LEN - 4), new THREE.MeshLambertMaterial({ map: wt, transparent: true, opacity: 0.72, color: 0x9fe6f5 }));
+  water.rotation.x = -Math.PI / 2; water.position.set(0, WTOP, 4 + (LEN - 4) / 2); group.add(water);
+  // exit door at the far end
+  const door = new THREE.Group();
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.5, 0.2), new THREE.MeshLambertMaterial({ color: 0xe8eef0 })); frame.position.y = 1.25; door.add(frame);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.2), new THREE.MeshBasicMaterial({ color: 0xe8fff0 })); glow.position.set(0, 1.12, -0.11); glow.rotation.y = Math.PI; door.add(glow);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.34), new THREE.MeshBasicMaterial({ map: tex("exit") })); sign.position.set(0, 2.75, -0.11); sign.rotation.y = Math.PI; door.add(sign);
+  door.position.set(0, 0, LEN + 9.8); group.add(door);
+  const monsters = [];
+  for (let k = 0; k < NC; k++) monsters.push({ kind: "crawler", x: (k % 2 ? 1 : -1) * (k ? 5 : 0), z: LEN * (NC === 1 ? 0.45 : 0.25 + 0.6 * k / (NC - 1)) });
+  return { group, boxes: B.boxes, floorY: FLOOR, water: [{ x0: -W, x1: W, z0: 4, z1: LEN, top: WTOP }], grid: null, flicker: [],
+    start: { x: 0, z: -4, yaw: Math.PI }, exit: { x: 0, z: LEN + 8.5, r: 1.6 }, monsters, rocks, waterMesh: water,
+    fog: [0xcfeef3, 8, 70], bg: 0xcfeef3, hemi: [0xffffff, 0x7fc6d6, 2.1], ceilingH: CEIL, pool: { W, LEN, FLOOR, WTOP } };
+}
+
+// ---------------------------------------------------------------- the four levels of The Backrooms
 export const LEVELS = [
-  { name: "Level 0", sub: "The Lobby", goal: "Find the EXIT. Something lives in these halls.", build(seed) {
-    const L = mazeLevel(seed, 11, 11, { wall: "wall", floor: "carpet", ceiling: "ceiling", cell: 6, h: 3.4 }, 0.25);
-    const exit = exitDoor(L, ...L.exitCell);
-    const [mc] = farCells(L, 9, 1), m = L.cellPos(...(mc || L.exitCell));
-    return { group: L.group, boxes: L.boxes, floorY: 0, water: [], grid: L.grid, flicker: L.flicker, start: { ...L.cellPos(0, 0), yaw: -Math.PI * 0.75 }, exit,
-      monsters: [{ kind: "bacteria", ...m }], rocks: [], fog: [0xb8a75a, 3, 34], bg: 0xb8a75a, hemi: [0xfff3c0, 0x6a5a28, 1.6], ceilingH: L.Hh };
-  } },
-  { name: "Level 37", sub: "The Poolrooms", goal: "Cross on the platforms. DON'T touch the water unless you have to. Throw rocks to distract it.", build(seed) {
-    const r = rng(seed), group = new THREE.Group(), B = builder();
-    const W = 13, LEN = 150, FLOOR = -0.9, WTOP = -0.25, CEIL = 7;
-    // the pool floor, walls and ceiling: white tiles everywhere
-    B.add("tile", -W - 1, FLOOR - 0.5, -10, W + 1, FLOOR, LEN + 10, 2, false);
-    B.add("tile", -W - 1, CEIL, -10, W + 1, CEIL + 0.3, LEN + 10, 2, false);
-    B.add("tile", -W - 1, FLOOR, -10, -W, CEIL, LEN + 10, 2); B.add("tile", W, FLOOR, -10, W + 1, CEIL, LEN + 10, 2);
-    B.add("tile", -W, FLOOR, -11, W, CEIL, -10, 2); B.add("tile", -W, FLOOR, LEN + 10, W, CEIL, LEN + 11, 2);
-    // dry floors at the start and the end
-    B.add("tile", -W, FLOOR, -10, W, 0, 4, 2); B.add("tile", -W, FLOOR, LEN, W, 0, LEN + 10, 2);
-    // the platforms: mostly jumpable, but some gaps are too far, so you have to step in
-    const rocks = [];
-    let z = 4, x = 0, n = 0;
-    const plats = [];
-    while (z < LEN - 6) {
-      n++;
-      const big = n % 4 === 0, gap = big ? 5.5 + r() * 2 : 1.4 + r() * 1.6;
-      z += gap;
-      const sx = 2.6 + r() * 2, sz = 2.6 + r() * 2;
-      x = Math.max(-W + 3, Math.min(W - 3, x + (r() - 0.5) * 6));
-      if (z + sz > LEN - 1) break;
-      B.add("tile", x - sx / 2, FLOOR, z, x + sx / 2, 0, z + sz, 2);
-      plats.push({ x, z: z + sz / 2 });
-      if (n % 4 === 3 || r() < 0.15) rocks.push({ x: x + (r() - 0.5) * (sx - 1), y: 0.15, z: z + sz / 2 + (r() - 0.5) * (sz - 1) });
-      z += sz;
-    }
-    // pillars standing in the water (not on the path) and arches overhead
-    for (let i = 0; i < 26; i++) {
-      const px = (r() < 0.5 ? -1 : 1) * (6 + r() * (W - 7)), pz = 8 + r() * (LEN - 16);
-      if (plats.some((p) => Math.abs(p.x - px) < 4 && Math.abs(p.z - pz) < 4)) continue;
-      B.add("tile", px - 0.8, FLOOR, pz - 0.8, px + 0.8, CEIL, pz + 0.8, 2);
-    }
-    for (let zz = 10; zz < LEN; zz += 20) B.add("tile", -W, CEIL - 1.2, zz, W, CEIL, zz + 1.2, 2, false);
-    // lights: long panels in the ceiling
-    const lg = [];
-    for (let zz = -6; zz < LEN + 8; zz += 8) for (const xx of [-6, 0, 6]) lg.push(boxGeo(xx - 0.8, CEIL - 0.05, zz - 1.6, xx + 0.8, CEIL, zz + 1.6, 1));
-    group.add(new THREE.Mesh(mergeGeometries(lg), new THREE.MeshBasicMaterial({ color: 0xffffff })));
-    B.done(group);
-    // the water (see-through, the pattern drifts)
-    const wt = tex("water").clone(); wt.needsUpdate = true; wt.repeat.set(6, 40);
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, LEN - 4), new THREE.MeshLambertMaterial({ map: wt, transparent: true, opacity: 0.72, color: 0x9fe6f5 }));
-    water.rotation.x = -Math.PI / 2; water.position.set(0, WTOP, 4 + (LEN - 4) / 2); group.add(water);
-    // exit door at the far end
-    const door = new THREE.Group();
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.5, 0.2), new THREE.MeshLambertMaterial({ color: 0xe8eef0 })); frame.position.y = 1.25; door.add(frame);
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.2), new THREE.MeshBasicMaterial({ color: 0xe8fff0 })); glow.position.set(0, 1.12, -0.11); glow.rotation.y = Math.PI; door.add(glow);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.34), new THREE.MeshBasicMaterial({ map: tex("exit") })); sign.position.set(0, 2.75, -0.11); sign.rotation.y = Math.PI; door.add(sign);
-    door.position.set(0, 0, LEN + 9.8); group.add(door);
-    return { group, boxes: B.boxes, floorY: FLOOR, water: [{ x0: -W, x1: W, z0: 4, z1: LEN, top: WTOP }], grid: null, flicker: [],
-      start: { x: 0, z: -4, yaw: Math.PI }, exit: { x: 0, z: LEN + 8.5, r: 1.6 }, monsters: [{ kind: "crawler", x: 0, z: LEN * 0.45 }], rocks, waterMesh: water,
-      fog: [0xcfeef3, 8, 70], bg: 0xcfeef3, hemi: [0xffffff, 0x7fc6d6, 2.1], ceilingH: CEIL, pool: { W, LEN, FLOOR, WTOP } };
-  } },
-  { name: "Level Fun", sub: "The Party Rooms  =)", goal: "Find the EXIT. If a Partygoer sees you... RUN.", build(seed) {
-    const L = mazeLevel(seed, 9, 9, { wall: "party", floor: "partyfloor", ceiling: "ceiling", cell: 9, h: 4, lightColor: 0xffe0f0 }, 0.42);
-    const exit = exitDoor(L, ...L.exitCell);
-    // balloons, cakes and banners
-    const cols = [0xff4fa3, 0xffd531, 0x3fe0b0, 0x4fb0ff, 0xff7a1a, 0xd94fff];
-    const bg = new THREE.SphereGeometry(0.35, 14, 10);
-    for (let i = 0; i < L.g.W; i++) for (let j = 0; j < L.g.H; j++) {
-      const p = L.cellPos(i, j);
-      if (L.r() < 0.55) for (let k = 0; k < 3 + Math.floor(L.r() * 4); k++) {
-        const b = new THREE.Mesh(bg, new THREE.MeshLambertMaterial({ color: cols[Math.floor(L.r() * cols.length)] }));
-        b.scale.y = 1.2; b.position.set(p.x + (L.r() - 0.5) * 7, 2.4 + L.r() * 1.2, p.z + (L.r() - 0.5) * 7); L.group.add(b);
-        const s = new THREE.Mesh(new THREE.BoxGeometry(0.02, b.position.y - 0.4, 0.02), new THREE.MeshBasicMaterial({ color: 0xffffff })); s.position.set(b.position.x, (b.position.y - 0.4) / 2, b.position.z); L.group.add(s);
-      }
-      if (L.r() < 0.18 && (i || j)) { // a party table with a cake
-        const t = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 1.0), new THREE.MeshLambertMaterial({ color: 0xffffff })); t.position.set(p.x + 2, 0.4, p.z + 2); L.group.add(t);
-        const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.3, 16), new THREE.MeshLambertMaterial({ color: 0xff9ecb })); c.position.set(p.x + 2, 0.95, p.z + 2); L.group.add(c);
-        L.boxes.push({ x0: p.x + 1.2, x1: p.x + 2.8, y0: 0, y1: 0.8, z0: p.z + 1.5, z1: p.z + 2.5 });
-      }
-      if (L.r() < 0.15) { const ban = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({ map: tex("birthday"), side: THREE.DoubleSide })); ban.position.set(p.x, 3.4, p.z); ban.rotation.y = L.r() * 3; L.group.add(ban); }
-    }
-    const spots = farCells(L, 5, 2); // (just two of them)
-    return { group: L.group, boxes: L.boxes, floorY: 0, water: [], grid: L.grid, flicker: L.flicker, start: { ...L.cellPos(0, 0), yaw: -Math.PI * 0.75 }, exit,
-      monsters: spots.map(([i, j]) => ({ kind: "partygoer", ...L.cellPos(i, j) })), rocks: [], fog: [0x2a1030, 4, 40], bg: 0x2a1030, hemi: [0xffd8f0, 0x40204a, 1.5], ceilingH: L.Hh };
-  } },
-  { name: "Level 0", sub: "The Deep Lobby", goal: "The biggest maze yet. Captain Clark is hunting you. Find the way OUT.", build(seed) {
-    const L = mazeLevel(seed, 17, 17, { wall: "wall", floor: "carpet", ceiling: "ceiling", cell: 6, h: 3.4 }, 0.22);
-    const exit = exitDoor(L, ...L.exitCell, "escape");
-    const [mc] = farCells(L, 12, 1), m = L.cellPos(...(mc || L.exitCell));
-    return { group: L.group, boxes: L.boxes, floorY: 0, water: [], grid: L.grid, flicker: L.flicker, start: { ...L.cellPos(0, 0), yaw: -Math.PI * 0.75 }, exit, final: true,
-      monsters: [{ kind: "clark", ...m }], rocks: [], fog: [0x8f7f3a, 3, 30], bg: 0x8f7f3a, hemi: [0xfff0b0, 0x4a3a18, 1.3], ceilingH: L.Hh };
-  } },
+  { name: "Level 0", sub: "The Lobby", goal: "Find the EXIT. Something lives in these halls.",
+    build: (seed) => mazeBuild(seed, { W: 11, H: 11, theme: "lobby", mons: { bacteria: 1 }, min: 9 }) },
+  { name: "Level 37", sub: "The Poolrooms", goal: "Cross on the platforms. DON'T touch the water unless you have to. Throw rocks to distract it.",
+    build: (seed) => poolBuild(seed, { len: 150, crawlers: 1 }) },
+  { name: "Level Fun", sub: "The Party Rooms  =)", goal: "Find the EXIT. If a Partygoer sees you... RUN.",
+    build: (seed) => mazeBuild(seed, { W: 9, H: 9, theme: "party", mons: { partygoer: 2 }, min: 5 }) },
+  { name: "Level 0", sub: "The Deep Lobby", goal: "The biggest maze yet. Captain Clark is hunting you. Find the way OUT.",
+    build: (seed) => mazeBuild(seed, { W: 17, H: 17, theme: "deep", mons: { clark: 1 }, min: 12, open: 0.22, final: true }) },
 ];
