@@ -1,5 +1,5 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
-import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES } from "./vehicles.js";
+import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf } from "./vehicles.js";
 import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
@@ -51,7 +51,7 @@ function wire() {
 }
 
 // ---------------------------------------------------------------- dealership
-let dSel = "atv", dTab = "rides", tColor = 0x1a1a1e;
+let dSel = "atv", dTab = "rides", tColor = 0x1a1a1e, rColor = null;
 const swatches = (cur, act) => `<div class="swatches" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${ENCLOSED_COLORS.map((c) => `<button type="button" data-a="${act}" data-v="${c}" title="color" style="width:30px;height:30px;border-radius:50%;background:${hex(c)};border:3px solid ${c === cur ? "#ffd23a" : "rgba(255,255,255,0.5)"};cursor:pointer"></button>`).join("")}</div>`;
 function dealer() {
   if (!VEHICLES.some((v) => v.id === dSel) && !trailerById(dSel)) dSel = "atv";
@@ -65,16 +65,17 @@ function dealer() {
   side(`<h2>VALLEY MOTORS</h2><div class="bank">${money(S.money)}</div> <span class="note">Garage: ${S.cars.length} / ${slots()} rides</span>
     <div class="tabs"><button type="button" data-a="tab" data-v="rides" class="${dTab === "rides" ? "on" : ""}">🚗 Rides</button><button type="button" data-a="tab" data-v="trailers" class="${dTab === "trailers" ? "on" : ""}">🚛 Trailers</button></div>
     <h3>${ICON[it.id] || "🚗"} ${esc(it.name)}</h3><p class="sub">${esc(it.desc)}</p>
-    ${st ? bars(st) + `<p class="note">Top speed: <b>${mph(tune({ id: v.id, tires: "street", engine: 0, limit: 1, lift: 0 }).top)} mph</b> on the road. ${v.tow >= 2 ? "Can pull any trailer." : v.tow === 1 ? "Can pull the small trailer." : "Can't pull trailers."} ${v.size <= 2 ? "Fits on a trailer." : ""}</p>` : `<p class="note">Room for <b>${T.cap}</b> small rides${T.maxSize > 1 ? " (a car takes 2)" : ""}.</p>${T.enclosed ? `<p class="note"><b>Pick your color:</b></p>${swatches(tColor, "tcol")}<p class="note">Walk or drive up to the back and press E to open the door. T closes it.</p>` : ""}`}
+    ${st ? bars(st) + `<p class="note">Top speed: <b>${mph(tune({ id: v.id, tires: "street", engine: 0, limit: 1, lift: 0 }).top)} mph</b> on the road. ${v.tow >= 2 ? "Can pull any trailer." : v.tow === 1 ? "Can pull the small trailer." : "Can't pull trailers."} ${v.size <= 2 ? "Fits on a trailer." : ""}</p><p class="note"><b>Pick your color:</b></p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === (rColor ?? v.color) ? "on" : ""}" style="background:${hex(p)}" data-a="rcol" data-v="${p}"></button>`).join("")}</div>` : `<p class="note">Room for <b>${T.cap}</b> small rides${T.maxSize > 1 ? " (a car takes 2)" : ""}.</p>${T.enclosed ? `<p class="note"><b>Pick your color:</b></p>${swatches(tColor, "tcol")}<p class="note">Walk or drive up to the back and press E to open the door. T closes it.</p>` : ""}`}
     <div class="btns"><button type="button" class="big" data-a="buy" ${canBuy ? "" : "disabled"}>${it.price ? "BUY " + money(it.price) : "FREE"}</button>
     ${full ? `<span class="note">Garage full! Buy a bigger house.</span>` : S.money < it.price ? `<span class="note">You need ${money(it.price - S.money)} more. Do jobs!</span>` : ""}</div>
     <div class="list">${list.map((x) => `<button type="button" class="item ${x.id === dSel ? "sel" : ""}" data-a="sel" data-v="${x.id}"><span class="ico">${ICON[x.id] || "🚗"}</span><span class="nm"><b>${esc(x.name)}${!T && own(x.id) ? `<span class="tag">OWNED${own(x.id) > 1 ? " x" + own(x.id) : ""}</span>` : ""}</b><small>${esc(x.desc).slice(0, 70)}...</small></span><span class="pr">${x.price ? money(x.price) : "FREE"}</span></button>`).join("")}</div>`, "dealer");
-  GM.showroom(it.id, T && T.enclosed ? tColor : undefined);
+  GM.showroom(it.id, T ? (T.enclosed ? tColor : undefined) : rColor ?? undefined);
   onAct = (a, val) => {
     if (a === "tab") { dTab = val; dSel = val === "rides" ? "atv" : "utility"; SFX.click(); dealer(); }
-    if (a === "sel") { dSel = val; SFX.click(); dealer(); }
+    if (a === "sel") { dSel = val; rColor = null; SFX.click(); dealer(); }
+    if (a === "rcol") { rColor = +val; SFX.click(); dealer(); }
     if (a === "tcol") { tColor = +val; SFX.click(); dealer(); }
-    if (a === "buy") { if (T ? GM.buyTrailer(T.id, tColor) : GM.buyCar(v.id)) { if (T) dealer(); else close(); } }
+    if (a === "buy") { if (T ? GM.buyTrailer(T.id, tColor) : GM.buyCar(v.id, rColor ?? undefined)) { if (T) dealer(); else close(); } }
   };
 }
 
@@ -82,9 +83,11 @@ function dealer() {
 let cTab = "paint";
 function customs() {
   const c = GM.mine(); if (!c) return;
-  if (GM.G.panel !== "customs") { const b = c.b; b.x = 36; b.z = -20; b.yaw = 0; b.vx = b.vz = 0; b.flipped = false; b.y = 1.2; }
+  if (GM.G.panel !== "customs") { const b = c.b; b.x = 36; b.z = -40; b.yaw = 0; b.vx = b.vz = 0; b.flipped = false; } // (onto the turntable in the bay)
   const s = c.s, v = vehicleById(s.id), t = tune(s);
-  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ["lift", "⬆️ Lift"], ["neon", "💡 Neon"]];
+  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ["lift", "⬆️ Lift"], ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
+  const maxLift = v.bike ? 1 : LIFT_COST.length - 1; // (bikes only get the first lift: any more looks silly)
+  if (s.lift > maxLift) s.lift = maxLift;
   let body = "";
   if (cTab === "paint") body = `<p class="note">Paint job: <b>${money(PRICES.paint)}</b> each</p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === s.paint ? "on" : ""}" style="background:${hex(p)}" data-a="paint" data-v="${p}"></button>`).join("")}</div>`;
   if (cTab === "wheels") body = `<h3>Tires</h3><div class="opts">${TIRES.map((x) => `<button type="button" class="opt ${s.tires === x.id ? "on" : ""}" data-a="tires" data-v="${x.id}"><span>${x.name}<small>${x.desc}</small></span><em>${s.tires === x.id ? "✓" : x.price ? money(x.price) : "FREE"}</em></button>`).join("")}</div>
@@ -92,7 +95,10 @@ function customs() {
   if (cTab === "engine") body = `<p class="note">Faster engines = more top speed and quicker starts. Want it slower? Pick a lower level any time for free!</p><div class="opts">${ENGINE_COST.map((cost, i) => `<button type="button" class="opt ${s.engine === i ? "on" : ""}" data-a="engine" data-v="${i}"><span>${["Stock engine", "Stage 1 Turbo", "Stage 2 Turbo", "Stage 3 Super", "Stage 4 MONSTER (flames!)"][i]}<small>${i ? "+" + i * 6 + "% top speed, +" + i * 10 + "% acceleration" : "The engine it came with"}${i >= 2 ? " · hood scoop" : ""}${i >= 3 ? " · big exhausts" : ""}</small></span><em>${s.engine === i ? "✓" : i <= (s.maxEngine || s.engine) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
   if (cTab === "speed") body = `<p class="note">The speed limiter makes your ride slower. Great for tricky trails, towing, or learning to drive. Free!</p>
     <h3>Top speed: <span id="limLbl">${mph(t.top)} mph</span> (${Math.round(s.limit * 100)}%)</h3><input type="range" min="30" max="100" step="5" value="${Math.round(s.limit * 100)}" data-a="limit">`;
-  if (cTab === "lift") body = `<p class="note">A lift kit raises your ride: better off-road, a bit wobblier on the road.</p><div class="opts">${LIFT_COST.map((cost, i) => `<button type="button" class="opt ${s.lift === i ? "on" : ""}" data-a="lift" data-v="${i}"><span>${["Stock height", "Lift 1 (+15 cm)", "Lift 2 (+30 cm)", "Lift 3 (+45 cm)"][i]}</span><em>${s.lift === i ? "✓" : i <= (s.maxLift || s.lift) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
+  if (cTab === "lift") body = `<p class="note">A lift kit raises your ride: better off-road, a bit wobblier on the road.</p><div class="opts">${LIFT_COST.slice(0, maxLift + 1).map((cost, i) => `<button type="button" class="opt ${s.lift === i ? "on" : ""}" data-a="lift" data-v="${i}"><span>${["Stock height", "Lift 1 (+15 cm)", "Lift 2 (+30 cm)", "Lift 3 (+45 cm)"][i]}</span><em>${s.lift === i ? "✓" : i <= (s.maxLift || s.lift) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
+  if (cTab === "rust") { const r = rustOf(s), pct = Math.round((1 - r) * 100), bar = "█".repeat(Math.round(pct / 10)) + "░".repeat(10 - Math.round(pct / 10));
+    body = r <= 0.02 ? `<p class="note">✨ No rust! Your ${esc(v.name)} is shiny clean.</p>` : !S.scrubber ? `<p class="note">Rust spots! Grab a scrubber and scrub them off yourself.</p><div class="btns"><button type="button" class="mid" data-a="buyScrub">🧽 Buy a scrubber ${money(25)}</button></div>`
+      : `<p class="note">Keep scrubbing! Watch the rust fade away.</p><p style="font:700 18px monospace;letter-spacing:1px">[${bar}] ${pct}%</p><div class="btns"><button type="button" class="big" data-a="scrub">🧽 SCRUB!</button></div>`; }
   if (cTab === "neon") body = `<p class="note">Underglow lights! ${money(PRICES.neon)} for a new color.</p><div class="swatches">${NEONS.map((n, i) => `<button type="button" class="sw ${s.neon === i ? "on" : ""}" style="background:${n === null ? "repeating-linear-gradient(45deg,#333 0 6px,#555 6px 12px)" : hex(n)}" data-a="neon" data-v="${i}" title="${n === null ? "No neon" : ""}"></button>`).join("")}</div>`;
   side(`<h2>MUD & CHROME</h2><div class="bank">${money(S.money)}</div><h3>${ICON[s.id] || "🚗"} ${esc(v.name)}</h3>${bars(statBars(s.id, s))}
     <div class="tabs">${tabs.map(([k, n]) => `<button type="button" data-a="tab" data-v="${k}" class="${cTab === k ? "on" : ""}">${n}</button>`).join("")}</div>${body}
@@ -104,6 +110,8 @@ function customs() {
     if (a === "tires") { const x = TIRES.find((q) => q.id === val); if (val !== s.tires) GM.custom("tires", val, (s.ownTires || []).includes(val) ? 0 : x.price) && (s.ownTires = [...new Set([...(s.ownTires || ["street"]), val])]); }
     if (a === "engine") { const i = +val, free = i <= (s.maxEngine || s.engine); if (i !== s.engine && GM.custom("engine", i, free ? 0 : ENGINE_COST[i])) s.maxEngine = Math.max(s.maxEngine || 0, i); }
     if (a === "lift") { const i = +val, free = i <= (s.maxLift || s.lift); if (i !== s.lift && GM.custom("lift", i, free ? 0 : LIFT_COST[i])) s.maxLift = Math.max(s.maxLift || 0, i); }
+    if (a === "buyScrub") GM.buyScrubber();
+    if (a === "scrub") { const r = Math.max(0, rustOf(s) - 0.1); GM.custom("rust", r < 0.02 ? 0 : r, 0); GM.scrubFx(r < 0.02); }
     if (a === "neon") { const i = +val, owned = (s.ownNeon || [0]).includes(i); if (i !== s.neon && GM.custom("neon", i, owned ? 0 : PRICES.neon)) s.ownNeon = [...new Set([...(s.ownNeon || [0]), i])]; }
     if (a === "limit") { GM.custom("limit", +val / 100, 0); const l = $("limLbl"); if (l) l.textContent = mph(tune(s).top) + " mph"; if (live) return; }
     save(); customs();
@@ -120,7 +128,7 @@ function house(h) {
       <h3>All houses</h3><div class="list">${HOUSES.filter((x) => x.price).map((x) => `<div class="item ${x.id === h.id ? "sel" : ""}"><span class="ico">🏠</span><span class="nm"><b>${esc(x.name)}${S.houses.includes(x.id) ? '<span class="tag">YOURS</span>' : ""}</b><small>${x.slots} rides</small></span><span class="pr">${money(x.price)}</span></div>`).join("")}</div>`;
   } else {
     html += `<p class="note">${S.home === h.id ? "⭐ This is your home." : ""} Garage room: <b>${S.cars.length} / ${slots()}</b></p>
-      ${S.home !== h.id ? `<div class="btns"><button type="button" class="small" data-a="home">⭐ Make this my home</button></div>` : ""}
+      <div class="btns">${S.home !== h.id ? `<button type="button" class="small" data-a="home">⭐ Make this my home</button>` : ""}${h.price ? `<button type="button" class="small" data-a="sellHouse">💲 Sell this house for ${money(Math.round(h.price * 0.6))}</button>` : ""}</div>
       <h3>Your rides</h3><div class="list">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid), d = C ? Math.round(Math.hypot(C.b.x - h.garage.x, C.b.z - h.garage.z)) : 0, onTr = C && C.on; return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${onTr ? "On a trailer" : d < 25 ? "Parked here" : d + " m away"}${C === GM.mine() ? " · you're driving it" : ""}</small></span>
         <span class="btns" style="margin:0"><button type="button" class="small" data-a="drive" data-v="${c.uid}">Drive</button>${d >= 25 || onTr ? `<button type="button" class="small" data-a="bring" data-v="${c.uid}">Bring here${d > 60 ? " $25" : ""}</button>` : ""}${S.cars.length > 1 && vehicleById(c.id).price ? `<button type="button" class="small" data-a="sell" data-v="${c.uid}">Sell ${money(vehicleById(c.id).price / 2)}</button>` : ""}</span></div>`; }).join("")}</div>
       ${S.trailers.length ? `<h3>Your trailers</h3><div class="list">${S.trailers.map((t) => { const T = GM.G.TRS.get(t.uid), d = Math.round(Math.hypot(T.x - h.garage.x, T.z - h.garage.z)); return `<div class="item"><span class="ico">${ICON[t.type]}</span><span class="nm"><b>${esc(trailerById(t.type).name)}</b><small>${T.hitched ? "Hitched to a truck" : d < 25 ? "Parked here" : d + " m away"} · ${T.loaded.length ? T.loaded.length + " ride(s) on it" : "empty"}</small></span>${d >= 25 ? `<button type="button" class="small" data-a="bringT" data-v="${t.uid}">Bring here</button>` : ""}</div>${t.type === "enclosed" ? `<p class="note">Repaint it ($150):</p>` + swatches(t.color, "tpaint").replace(/data-v="(\d+)"/g, 'data-v="${t.uid}:$1"') : ""}`; }).join("")}</div>` : ""}`;
@@ -129,6 +137,7 @@ function house(h) {
   onAct = (a, val) => {
     if (a === "buyHouse") { GM.buyHouse(h); house(h); }
     if (a === "home") { GM.setHome(h.id); SFX.click(); house(h); }
+    if (a === "sellHouse") { if (confirm("Sell " + h.name + " for " + money(Math.round(h.price * 0.6)) + "?")) { GM.sellHouse(h); house(h); } }
     if (a === "drive") { GM.bringCar(+val, h, true); }
     if (a === "bring") { GM.bringCar(+val, h, false); house(h); }
     if (a === "bringT") { GM.bringTrailer(+val, h); house(h); }

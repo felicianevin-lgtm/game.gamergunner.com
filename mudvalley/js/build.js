@@ -158,17 +158,31 @@ export function dealership(scene, b) {
 // where the 4 show rides sit on the lot (local spots, in front of the showroom)
 export const DEALER_PADS = [[-15, 19], [15, 19], [-22, 28], [22, 28]];
 export function customs(scene, b) {
-  b.box(46, 8, 22, 0, 0, 0, 0x8a96a3).solid(0, 0, 23, 11);
+  // two side wings + a drive-in bay in the middle (you drive in, your ride spins on the turntable while you pick upgrades)
+  for (const s of [-1, 1]) b.box(17, 8, 22, s * 14.5, 0, 0, 0x8a96a3).solid(s * 14.5, 0, 8.5, 11);
+  b.box(12, 8, 0.4, 0, 0, -10.8, 0x6a7480).solid(0, -10.8, 6, 0.2); // back wall of the bay
+  b.box(12, 0.9, 0.4, 0, 6.2, 10.9, 0x8a96a3); // over the big door
+  b.box(11.9, 0.1, 21.4, 0, 6.9, 0, 0x2a2d33); // bay ceiling
+  b.box(11.9, 0.05, 21.4, 0, 0.01, 0, 0x3a3e46); // shiny shop floor
+  for (let z = -8; z <= 8; z += 4) b.box(8, 0.08, 0.5, 0, 6.8, z, 0xffffff, "glow"); // shop lights
+  b.cyl(3.3, 0.14, 0, 0, 1, 0xffd23a, 28); b.cyl(3.1, 0.16, 0, 0, 1, 0x22262c, 28); b.add(new THREE.TorusGeometry(3.12, 0.06, 4, 40), 0xff8a1a, 0, 0.17, 1, Math.PI / 2, 0, 0, "glow"); // the turntable
+  // the shop inside: tool walls, tire racks, a paint booth sign, an air compressor
+  for (const s of [-1, 1]) {
+    b.box(0.1, 2.4, 6, s * 5.9, 1.2, -4, 0xc8a878);
+    for (let i = 0; i < 8; i++) b.box(0.06, 0.6, 0.1, s * 5.84, 2.2 + (i % 2) * 0.6, -6.6 + i * 0.75, [0xd04030, 0x3a7ad0, 0x8a8a8a, 0xf0c030][i % 4]);
+    for (let i = 0; i < 3; i++) b.add(new THREE.TorusGeometry(0.42, 0.18, 6, 12), 0x1e1f22, s * 5.3, 0.6 + i * 0.95, 5, 0, Math.PI / 2, 0);
+    b.box(0.8, 3.4, 1.4, s * 5.4, 0, 5, 0x5a5f6a);
+  }
+  b.box(1.4, 1, 0.8, -4.6, 0, -9.8, 0xd0302a); b.cyl(0.35, 1.1, -3.4, 0, -9.9, 0x3a7ad0, 10);
+  bsign(scene, b, "PAINT · WHEELS · LIFTS · NEON", 9, 0.8, 0, 5.2, -10.55, { bg: "#22262c", fg: "#ff8a1a" });
   for (let x = -22; x <= 22; x += 2.2) b.box(0.3, 7, 0.2, x, 0, -11.05, 0x7a8693);
   b.box(46.4, 1.1, 22.4, 0, 7, 0, 0xff8a1a); b.box(47, 0.5, 23, 0, 8, 0, 0x55606a);
   for (const x of [-14, 0, 14]) {
-    if (x === 0) { b.box(10, 6.2, 0.3, x, 0, 10.9, 0x22262c); b.box(0.6, 3, 3, x - 3, 0, 8, 0xffd23a); b.box(0.6, 3, 3, x + 3, 0, 8, 0xffd23a); }
-    else { b.box(10, 6.2, 0.3, x, 0, 11.05, 0xc8ccd2); for (let y = 0.5; y < 6; y += 0.6) b.box(10, 0.08, 0.36, x, y, 11.05, 0xa8adb5); }
+    if (x !== 0) { b.box(10, 6.2, 0.3, x, 0, 11.05, 0xc8ccd2); for (let y = 0.5; y < 6; y += 0.6) b.box(10, 0.08, 0.36, x, y, 11.05, 0xa8adb5); }
     b.box(10.8, 0.5, 0.5, x, 6.2, 11.1, 0xff8a1a);
   }
-  // the lift pad where cars get customized
-  b.box(8, 0.06, 10, 0, 0.01, 21, 0xffd23a); b.box(7, 0.08, 9, 0, 0.02, 21, 0x2c2f36);
-  for (let i = 0; i < 6; i++) b.box(0.5, 0.1, 9.6, -3.75, 0.02, 21, i % 2 ? 0xffd23a : 0x111111);
+  // the driveway into the bay
+  b.box(12, 0.04, 8, 0, 0.01, 15, 0x2c2f36); for (let i = 0; i < 5; i++) b.box(0.6, 0.05, 2, 0, 0.02, 12 + i * 2.2, 0xffd23a);
   tires(b, 25, 6); tires(b, 25, 8, 3); tires(b, 26.5, 7, 5); drum(b, -25, 6); drum(b, -25, 7.2, 0x2a7ad0); drum(b, -26.2, 6.6);
   b.box(2.2, 1.6, 1, -25, 0, 2, 0xd0302a); b.post(25.5, 7, 1.5, 2); b.post(-25.5, 6.6, 1.4, 1.3);
   bsign(scene, b, "MUD & CHROME\nCUSTOMS", 26, 5, 0, 10.7, 11.5, { bg: "#22262c", fg: "#ff8a1a", stroke: "#000000" });
@@ -277,6 +291,39 @@ export function park(scene, b) {
   bench(b, -6, 4); bench(b, 6, -4, Math.PI);
 }
 
+// ---------------------------------------------------------------- a garage you can drive into
+// hollow walls, a ceiling light, a workbench, and roll-up doors (one per bay) that open when it's YOUR house and you
+// come close. Local spot cx/cz = the middle, w = side to side, d = front to back; the doors face +z.
+export const GARAGE_DOORS = [];
+const doorMat = {};
+function garage(scene, b, house, cx, cz, w, h, d, color, bays, doorColor = 0xffffff) {
+  const t = 0.3, fz = cz + d / 2, bw = (w - t * 2) / bays, dh = Math.min(3.1, h - 0.6);
+  b.box(w, h, t, cx, 0, cz - d / 2 + t / 2, color).solid(cx, cz - d / 2 + t / 2, w / 2, t / 2);
+  for (const s of [-1, 1]) b.box(t, h, d, cx + s * (w / 2 - t / 2), 0, cz, color).solid(cx + s * (w / 2 - t / 2), cz, t / 2, d / 2);
+  b.box(w, h - dh, t, cx, dh, fz - t / 2, color); // over the doors
+  for (let i = 1; i < bays; i++) { const x = cx - w / 2 + t + i * bw; b.box(0.3, dh, t, x, 0, fz - t / 2, color).solid(x, fz - t / 2, 0.15, t / 2); }
+  b.box(w - 0.1, 0.15, d - 0.1, cx, h - 0.15, cz, 0x9a9c98, "glow"); // ceiling (lit, so it doesn't look green)
+  b.box(w - t * 2, 0.04, d - t * 2, cx, 0.02, cz, 0x9a9ca0); // concrete floor
+  b.box(w * 0.6, 0.06, 0.4, cx, h - 0.21, cz, 0xfff6d8, "glow"); // ceiling light
+  // workbench + tool board on the back wall
+  const bz = cz - d / 2 + t + 0.45;
+  b.box(Math.min(3, w * 0.4), 0.9, 0.8, cx, 0, bz, 0x7a5a3a); b.box(Math.min(3, w * 0.4), 0.08, 0.85, cx, 0.9, bz, 0x5a3a20);
+  b.box(Math.min(2.6, w * 0.35), 1.2, 0.06, cx, 1.4, cz - d / 2 + t + 0.03, 0xc8a878);
+  for (let i = 0; i < 5; i++) b.box(0.08, 0.5, 0.05, cx - 0.9 + i * 0.45, 1.7, cz - d / 2 + t + 0.07, [0xd04030, 0x3a7ad0, 0x8a8a8a, 0xf0c030, 0x40a050][i]);
+  b.cyl(0.32, 0.9, cx + w / 2 - t - 0.6, 0, bz, 0xd03a2a, 10); // a red tool chest... well, a barrel
+  // the roll-up doors (real meshes so they can move) + their bump boxes
+  const key = doorColor; if (!doorMat[key]) doorMat[key] = new THREE.MeshLambertMaterial({ color: doorColor });
+  for (let i = 0; i < bays; i++) {
+    const x = cx - w / 2 + t + bw * (i + 0.5), dw = bw - (bays > 1 ? 0.3 : 0.1);
+    const g = new THREE.Group(), door = new THREE.Mesh(new THREE.BoxGeometry(dw, dh, 0.12), doorMat[key]); door.position.y = dh / 2; g.add(door);
+    for (let y = 0.35; y < dh; y += 0.4) { const r = new THREE.Mesh(new THREE.BoxGeometry(dw, 0.04, 0.16), doorMat[0x9a9a9a] || (doorMat[0x9a9a9a] = new THREE.MeshLambertMaterial({ color: 0x9a9a9a }))); r.position.y = y; g.add(r); }
+    const p = b.world(x, fz - 0.15); g.position.set(p.x, b.fy, p.z); g.rotation.y = b.fyaw; g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); scene.add(g);
+    const col = addBox(p.x, p.z, dw / 2, 0.15, b.fyaw, b.fy + 99);
+    const inside = b.world(x, cz);
+    GARAGE_DOORS.push({ house, g, col, y0: b.fy, h: dh, open: 0, x: p.x, z: p.z, ix: inside.x, iz: inside.z });
+  }
+}
+
 // ---------------------------------------------------------------- houses you can buy
 export function camper(scene, b) {
   // a rusty old camper, a lawn chair and a campfire. Not fancy!
@@ -296,7 +343,7 @@ export function camper(scene, b) {
   b.box(1.4, 0.8, 0.9, -6, 0, 3, 0x6a7a5a); tires(b, -6, 4.8, 2);
   tree(b, -8, -4, 1.2); tree(b, 5, -5, 1.1); tree(b, -2, -6, 1.3);
 }
-export function cabin(scene, b) {
+export function cabin(scene, b, h) {
   for (let y = 0; y < 4.2; y += 0.42) { b.add(new THREE.CylinderGeometry(0.24, 0.24, 13, 7), y % 0.84 < 0.4 ? 0x9a6a3a : 0x8a5a30, 0, y + 0.22, 4.3, 0, 0, Math.PI / 2); b.add(new THREE.CylinderGeometry(0.24, 0.24, 13, 7), 0x8a5a30, 0, y + 0.22, -4.3, 0, 0, Math.PI / 2); b.add(new THREE.CylinderGeometry(0.24, 0.24, 9, 7), 0x9a6a3a, 6.3, y + 0.22, 0, Math.PI / 2); b.add(new THREE.CylinderGeometry(0.24, 0.24, 9, 7), 0x9a6a3a, -6.3, y + 0.22, 0, Math.PI / 2); }
   b.box(12.4, 4.2, 8.4, 0, 0, 0, 0x7a4e28).solid(0, 0, 6.5, 4.5);
   b.roof(14, 3.4, 10.4, 0, 4.2, 0, 0x2f6a3a); b.box(1.2, 5, 1.2, 4, 4, -1, 0x8a8a8a); b.box(1.5, 0.4, 1.5, 4, 9, -1, 0x6a6a6a);
@@ -304,11 +351,11 @@ export function cabin(scene, b) {
   b.box(12, 0.3, 3, 0, 0, 6, 0xa07040); for (const x of [-5.8, -2, 2, 5.8]) b.cyl(0.18, 3, x, 0, 7.3, 0x8a5a30, 6);
   b.add(prismGeo(13, 1.2, 3.4), 0x2f6a3a, 0, 3, 6, 0, 0, 0, "solid", 1, 1, 1);
   // a little garage shed
-  b.box(5, 3.6, 6, 10.5, 0, -1, 0x9a6a3a).solid(10.5, -1, 2.5, 3); b.roof(5.8, 1.6, 6.8, 10.5, 3.6, -1, 0x2f6a3a); b.box(4, 3, 0.15, 10.5, 0, 2.05, 0xc8b090);
+  garage(scene, b, h && h.id, 10.5, -1, 5, 3.6, 6.4, 0x9a6a3a, 1, 0xc8b090); b.roof(5.8, 1.6, 7.2, 10.5, 3.6, -1, 0x2f6a3a);
   bench(b, -3, 6.5); b.box(1.8, 0.6, 1, -8.5, 0, 3, 0x7a5a3a); for (let i = 0; i < 4; i++) b.add(new THREE.CylinderGeometry(0.2, 0.2, 1.4, 6), 0xb08050, -8.5, 0.8 + i * 0.05, 3 + (i - 1.5) * 0.25, 0, 0, Math.PI / 2);
   tree(b, -9, -4, 1.3); tree(b, -6, -8, 1.2); tree(b, 3, -9, 1.4); tree(b, 14, -7, 1.2);
 }
-export function familyHouse(scene, b) {
+export function familyHouse(scene, b, h) {
   b.box(14, 7, 10, 0, 0, 0, 0xa8d4ec).solid(0, 0, 7, 5);
   for (let y = 0.4; y < 7; y += 0.5) b.box(14.1, 0.06, 10.1, 0, y, 0, 0x98c4dc);
   b.roof(15, 3.6, 11, 0, 7, 0, 0x5a6270); b.box(14.3, 0.4, 10.3, 0, 3.4, 0, 0xffffff);
@@ -316,8 +363,7 @@ export function familyHouse(scene, b) {
   b.box(1.8, 2.8, 0.2, -1.5, 0, 5.1, 0xd0402a); b.box(6, 0.3, 2.4, -2, 0, 6.2, 0xe8e4dc);
   b.add(prismGeo(6.6, 1.2, 2.6), 0x5a6270, -2, 3, 6.3); for (const x of [-4.8, 0.8]) b.cyl(0.15, 3, x, 0, 7.2, 0xffffff, 6);
   // 2-car garage on the side
-  b.box(8, 4, 9, 11, 0, 0.5, 0xa8d4ec).solid(11, 0.5, 4, 4.5); b.roof(8.8, 2.2, 9.8, 11, 4, 0.5, 0x5a6270);
-  for (const x of [9, 13]) { b.box(3.4, 3, 0.15, x, 0, 5.05, 0xffffff); for (let y = 0.5; y < 3; y += 0.5) b.box(3.4, 0.05, 0.2, x, y, 5.05, 0xdddddd); }
+  garage(scene, b, h && h.id, 11, 0.5, 8, 4, 9, 0xa8d4ec, 2); b.roof(8.8, 2.2, 9.8, 11, 4, 0.5, 0x5a6270);
   b.box(8, 0.06, 7, 11, 0.01, 9, 0x8a8a8a);
   // backyard pool and fence
   b.box(8, 0.3, 5, -2, 0, -10, 0xf0f0f0); b.box(7, 0.32, 4, -2, 0, -10, 0x3ac0f0, "glass"); b.post(-2, -10, 3.5, 0.4);
@@ -343,7 +389,7 @@ export function barn(scene, b) {
   for (let i = 0; i < 6; i++) hay(b, -11 + (i % 3) * 1.4, 4 + Math.floor(i / 3) * 1.8);
   b.solid(-9.6, 5, 2.4, 2, 1.6);
 }
-export function mansion(scene, b) {
+export function mansion(scene, b, h) {
   // the best house in Mud Valley: white boxes, huge glass walls, wood panels, a glowing pool and a 4-car garage
   const W = 0xf6f6f4, D = 0x2a2c32, WOOD = 0xa8703a, G = 0x8fd0f0;
   b.box(30, 0.6, 22, 0, 0, -2, 0xd8d4cc); // stone base
@@ -358,8 +404,8 @@ export function mansion(scene, b) {
   // front door
   b.box(3, 3.8, 0.4, -4, 0.6, 6.2, WOOD); b.box(6, 0.2, 3, -4, 0.6, 7.6, 0xd8d4cc); b.box(6.4, 0.3, 3.4, -4, 4.4, 7.4, D);
   // 4-car garage
-  b.box(18, 4.4, 10, -24, 0, -1, W).solid(-24, -1, 9, 5); b.box(19, 0.5, 11, -24, 4.4, -1, D);
-  for (let i = 0; i < 4; i++) { b.box(3.6, 3.2, 0.15, -30.6 + i * 4.4, 0.1, 4.05, 0x50545c); for (let y = 0.4; y < 3.2; y += 0.4) b.box(3.6, 0.04, 0.2, -30.6 + i * 4.4, y, 4.05, 0x40444a); b.box(3.6, 0.12, 0.2, -30.6 + i * 4.4, 3.4, 4.1, 0xffe9b0, "glow"); }
+  garage(scene, b, h && h.id, -24, -1, 18, 4.4, 10, W, 4, 0x50545c); b.box(19, 0.5, 11, -24, 4.4, -1, D);
+  for (let i = 0; i < 4; i++) b.box(3.6, 0.12, 0.2, -30.6 + i * 4.4 + 0.15, 3.5, 4.2, 0xffe9b0, "glow");
   b.box(18, 0.06, 12, -24, 0.01, 10, 0xc8c4bc);
   // infinity pool with lights, loungers and palms
   b.box(16, 0.6, 7, 8, 0, 12, 0xf0f0ee); b.box(15, 0.62, 6, 8, 0, 12, 0x2ad0ff, "glass"); b.box(15.2, 0.06, 6.2, 8, 0.3, 12, 0x6af0ff, "glow"); b.post(8, 12, 4.5, 0.6);

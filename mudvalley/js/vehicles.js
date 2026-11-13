@@ -43,8 +43,12 @@ export const TIRES = [
 export const ENGINE_COST = [0, 600, 1500, 3500, 7000];
 export const LIFT_COST = [0, 400, 800, 1200];
 export const NEONS = [null, 0x3ad0ff, 0xff3ad8, 0x6aff3a, 0xffd23a, 0xff3a3a, 0xffffff];
+// trucks with a bed a dirt bike or quad can ride in (bed floor height + the middle of the bed, in the truck's own space)
+export const BEDS = { pickup: { y: 0.91, z: -1.4 }, minitruck: { y: 0.79, z: -0.75 }, ranch: { y: 1.04, z: -1.95 }, trailboss: { y: 1.46, z: -1.65 } };
 export const PRICES = { paint: 150, rims: 200, neon: 500 };
 
+// how rusty it is (0 = shiny, 1 = crusty). The Rusty Pickup comes rusty.
+export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
@@ -84,12 +88,54 @@ function mats() {
   M.wood = new THREE.MeshLambertMaterial({ color: 0x9a6a3a });
   M.white = new THREE.MeshLambertMaterial({ color: 0xf4f4f4 });
   M.glow = new THREE.MeshBasicMaterial({ color: 0x6af0ff });
+  M.frame = new THREE.MeshPhongMaterial({ color: 0xa8adb2, shininess: 80, specular: 0x888888 });
+  M.fork = new THREE.MeshPhongMaterial({ color: 0xc9a64a, shininess: 90, specular: 0xbbbbbb });
+  M.engine = new THREE.MeshPhongMaterial({ color: 0x8a8d92, shininess: 60, specular: 0x666666 });
   M.flame = new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.85, depthWrite: false });
 }
 function bx(p, w, h, d, x, y, z, mat, rx = 0, ry = 0, rz = 0) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); p.add(m); return m; }
 function cy(p, r, h, x, y, z, mat, seg = 10, rx = 0, rz = 0, rTop = r) { const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, r, h, seg), mat); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); p.add(m); return m; }
 const tube = (p, a, b, r, mat) => { const d = new THREE.Vector3().subVectors(b, a), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), 6), mat); m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); p.add(m); return m; };
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------------------------------------------------------------- the real dirt bike model (models/dirtbike.bin)
+// a packed, slimmed-down model: the body + the two wheels (each centered on its axle so it can spin).
+let BIKE = null;
+export async function loadBikeModel() {
+  if (BIKE) return BIKE;
+  try {
+    const buf = await (await fetch(new URL("../models/dirtbike.bin", import.meta.url))).arrayBuffer();
+    const n = new DataView(buf).getUint32(0, true), hdr = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, n))), base = 4 + n;
+    const out = { wheels: hdr.wheels, body: [], front: [], back: [] };
+    for (const p of hdr.parts) {
+      const pos = new Int16Array(buf, base + p.off, p.v * 3), idx = new Uint16Array(buf, base + p.off + p.v * 6, p.i);
+      const f = new Float32Array(p.v * 3); for (let i = 0; i < f.length; i++) f[i] = pos[i] / 1000;
+      let g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(f, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1));
+      g = g.toNonIndexed(); g.computeVertexNormals(); // (flat shading: crisp edges)
+      out[p.group].push({ mat: p.mat, geo: g });
+    }
+    BIKE = out;
+  } catch (e) { console.warn("dirt bike model didn't load, using the simple bike", e); }
+  return BIKE;
+}
+// which color of the model is which part
+const BIKE_MAT = {
+  color_4634441: (C) => C.paint, // the plastics (your paint color)
+  color_2829873: () => M.seat, color_2828838: () => M.tire, color_0: (C) => C.rimMat, color_15277357: () => M.chrome,
+  color_10988977: () => M.frame, color_12561038: () => M.fork, color_14077624: () => M.engine, color_6383466: () => M.trim, color_16448250: () => M.white,
+};
+function bikeModel(C) {
+  const b = C.body;
+  for (const p of BIKE.body) b.add(new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)));
+  for (const k of ["front", "back"]) {
+    const w = BIKE.wheels[k], pivot = new THREE.Group(); pivot.position.set(w.x, w.r, w.z);
+    const spin = new THREE.Group(); pivot.add(spin);
+    for (const p of BIKE[k]) { const m = new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)); m.castShadow = true; spin.add(m); }
+    const knobs = new THREE.Group(); spin.add(knobs);
+    C.root.add(pivot);
+    C.wheels.push({ pivot, spin, knobs, x: w.x, z: w.z, r0: w.r, r: w.r, front: k === "front", side: 1, bike: true, model: true });
+  }
+}
 
 // a wheel: steer pivot -> spinning part -> tire + rim
 function wheel(car, x, z, r, w, front, opts = {}) {
@@ -139,7 +185,8 @@ export function buildCar(car, opts = {}) {
   const paint = new THREE.MeshPhongMaterial({ color: car.paint, shininess: 70, specular: 0x666666 });
   const paint2 = new THREE.MeshPhongMaterial({ color: new THREE.Color(car.paint).multiplyScalar(0.7), shininess: 50, specular: 0x444444 });
   const rimMat = new THREE.MeshPhongMaterial({ color: 0xd8dde3, shininess: 100, specular: 0xffffff });
-  const C = { root, lift, body, paint, paint2, rimMat, wheels: [], seat: V3(0.42, 0.9, 0.2), hitch: V3(0, 0.6, -2.5), len: 4.6, wid: 2.1, hood: null, pipes: [], rider: null, id: car.id, extras: {} };
+  const rustMat = new THREE.MeshLambertMaterial({ color: 0x8a4a22, transparent: true }); // (scrub it off at Mud & Chrome)
+  const C = { root, lift, body, paint, paint2, rimMat, rustMat, wheels: [], seat: V3(0.42, 0.9, 0.2), hitch: V3(0, 0.6, -2.5), len: 4.6, wid: 2.1, hood: null, pipes: [], rider: null, id: car.id, extras: {} };
   BUILD[car.id](C, v);
   C.rearZ = Math.min(...C.wheels.map((w) => w.z)); // (wheelies tip back around the back wheel)
   // engine upgrade parts, neon glow, rider
@@ -177,15 +224,18 @@ export function applyLook(C, car) {
   C.paint2.color.set(car.paint).multiplyScalar(0.7).lerp(MUD, Math.min(0.75, car.dirt || 0));
   C.rimMat.color.set((RIMS.find((r) => r.id === car.rims) || RIMS[0]).c);
   const tk = car.tires === "mud" ? 1.12 : car.tires === "allterrain" ? 1.05 : 1;
+  const real = C.wheels[0] && C.wheels[0].model; // (the real bike already has knobby tires)
   for (const w of C.wheels) {
+    if (w.model) continue;
     w.r = w.r0 * tk; w.spin.scale.set(car.tires === "mud" ? 1.15 : 1, tk, tk); w.knobs.visible = car.tires !== "street";
   }
-  C.lift.position.y = (C.wheels[0] ? C.wheels[0].r0 * (tk - 1) : 0) + car.lift * 0.17;
+  C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? Math.min(1, car.lift) : car.lift) * 0.17; // (bikes: one lift level max)
   C.liftY = C.lift.position.y;
   C.scoop.visible = car.engine >= 2; const bl = C.scoop.getObjectByName("blower"); if (bl) bl.visible = car.engine >= 4;
   C.body.traverse((o) => { if (o.name === "pipe") o.visible = car.engine >= 3; });
   C.neon.visible = !!NEONS[car.neon]; if (NEONS[car.neon]) C.neon.material.color.set(NEONS[car.neon]);
   C.engineLv = car.engine;
+  const rust = rustOf(car); C.rustMat.opacity = rust; C.rustMat.visible = rust > 0.02;
 }
 // spin wheels, steer, bounce the wheels onto the ground and lean the bike
 export function animateCar(C, st, dt) {
@@ -218,7 +268,8 @@ const BUILD = {
     // bumpers, grille, lights
     bx(b, 2.1, 0.26, 0.24, 0, 0.72, 2.6, M.chrome); bx(b, 2.1, 0.22, 0.2, 0, 0.72, -2.58, M.chrome);
     bx(b, 1.3, 0.42, 0.06, 0, 1.06, 2.53, M.dark); for (const s of [-1, 1]) { bx(b, 0.32, 0.22, 0.06, s * 0.78, 1.14, 2.54, M.light); bx(b, 0.2, 0.3, 0.06, s * 0.88, 1.12, -2.54, M.tail); }
-    for (const [x, y, z, w] of [[0.6, 1.2, 2.2, 0.4], [-1.01, 1.0, 0.5, 0.3], [0.7, 1.32, -2.1, 0.5], [-0.4, 1.38, 1.4, 0.35]]) bx(b, w, w * 0.6, 0.04, x, y, z, M.rust, x < -1 ? 0 : -Math.PI / 2 * (y > 1.3 ? 1 : 0), x < -1 ? Math.PI / 2 : 0);
+    C.hasRust = true;
+    for (const [x, y, z, w] of [[0.6, 1.2, 2.2, 0.4], [-1.01, 1.0, 0.5, 0.3], [0.7, 1.32, -2.1, 0.5], [-0.4, 1.38, 1.4, 0.35]]) bx(b, w, w * 0.6, 0.04, x, y, z, C.rustMat, x < -1 ? 0 : -Math.PI / 2 * (y > 1.3 ? 1 : 0), x < -1 ? Math.PI / 2 : 0);
     bx(b, 0.16, 0.16, 0.3, 0, 0.6, -2.72, M.chrome);
     C.pipes.push(V3(-0.7, 0.55, -2.55));
     for (const [x, z, f] of [[0.95, 1.6, 1], [-0.95, 1.6, 1], [0.95, -1.55, 0], [-0.95, -1.55, 0]]) wheel(C, x, z, 0.46, 0.34, f);
@@ -226,6 +277,7 @@ const BUILD = {
   bike(C) {
     const b = C.body, P = C.paint;
     C.len = 2.1; C.wid = 0.8; C.seat.set(0, 0.92, -0.2); C.hitch = null; C.hood = null;
+    if (BIKE) { C.len = 2.5; C.seat.set(0, 0.9, -0.2); C.pipes.push(V3(0.18, 0.82, -0.82)); bikeModel(C); C.realBike = true; return; }
     // the fork + handlebars turn with the front wheel (a group pivoting on the steering head)
     const fork = new THREE.Group(); fork.position.set(0, 0, 0.62); b.add(fork); C.forks = [fork];
     tube(fork, V3(0, 0.45, 0.13), V3(0, 1.15, -0.12), 0.05, M.chrome);
@@ -319,6 +371,7 @@ const BUILD = {
   bigquad(C) { quad(C, 1.18, 0.44, { racks: true }); },
   bike450(C) {
     BUILD.bike(C);
+    if (C.realBike) return;
     const b = C.body; // race number plates + a longer seat
     for (const s of [-1, 1]) bx(b, 0.04, 0.3, 0.42, s * 0.17, 0.98, -0.45, M.white);
     bx(b, 0.34, 0.05, 0.9, 0, 1.08, -0.3, M.dark);

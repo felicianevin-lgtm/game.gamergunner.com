@@ -9,7 +9,7 @@ import * as THREE from "/create/vendor/three.module.js";
 import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./world.js";
 import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
-import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS } from "./vehicles.js";
+import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf } from "./physics.js";
 import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
@@ -24,7 +24,7 @@ import { SFX, audio, setMuted, engine } from "./sfx.js";
 import { S, save, uid, slots, pay, spend, money, wipe } from "./save.js";
 import { Jobs } from "./jobs.js";
 import { Race, raceById } from "./races.js";
-import { signTex } from "./build.js";
+import { signTex, GARAGE_DOORS } from "./build.js";
 import { pushOut } from "./colliders.js";
 import * as H from "./hud.js";
 import * as IN from "./input.js";
@@ -359,13 +359,29 @@ function actions() {
   }
   // T on a dirt bike or a quad (when there's no trailer to hitch): wheelie!
   if (c && !out.T && c.b.t.wheelie && !G.race) out.T = { text: c.b.wheelie ? "Stop the wheelie" : "Wheelie! (keep holding W)", fn: () => { G.wheelieTap = true; } };
+  // E: ride a dirt bike / quad into a truck bed, or take it back out
+  const v0 = c && vehicleById(c.s.id);
+  if (c && (v0.bike || v0.quad)) {
+    for (const t of G.CARS.values()) {
+      if (t === c || t.on || !BEDS[t.s.id]) continue;
+      const bp = bedPoint(t); if (Math.hypot(bp.x - me.x, bp.z - me.z) > 4.5) continue;
+      const h = bedHost(t);
+      out.E = h.loaded.length ? { text: "This truck bed is full", warn: true, fn: () => SFX.nope() } : { text: "Ride into the " + vehicleById(t.s.id).name + "'s bed", fn: () => loadBed(c, t) };
+      break;
+    }
+  }
+  if (!c && !out.E) for (const t of G.CARS.values()) {
+    if (!t.bedHost || !t.bedHost.loaded.length || t.on) continue;
+    const bp = bedPoint(t); if (Math.hypot(bp.x - me.x, bp.z - me.z) > 4) continue;
+    const u = t.bedHost.loaded[0].uid; out.E = { text: "Take the " + vehicleById(G.CARS.get(u).s.id).name + " out of the bed", fn: () => unloadBed(t.bedHost) }; break;
+  }
   // E: load / unload trailers
-  if (c && sizeOf(c) <= 2) {
+  if (c && sizeOf(c) <= 2 && !out.E) {
     for (const tr of G.TRS.values()) {
       if (tr.hitched === c.b || !near(tr, me, tr.T.enclosed ? 10.5 : 6.5)) continue;
       if (tr.T.enclosed && !tr.s.open) { out.E = { text: "Open the trailer door", fn: () => trailerDoor(tr, true) }; break; }
       const sl = freeSlots(tr, sizeOf(c));
-      out.E = sl ? { text: "Load onto the " + tr.T.name, fn: () => loadCar(c, tr, sl) } : { text: sizeOf(c) > tr.T.maxSize ? "Too big for this trailer" : "Trailer is full", warn: true, fn: () => SFX.nope() };
+      out.E = sl ? { text: "Drive up the ramp into the " + tr.T.name + " to load it", warn: true, fn: () => SFX.nope() } : { text: sizeOf(c) > tr.T.maxSize ? "Too big for this trailer" : "Trailer is full", warn: true, fn: () => SFX.nope() };
       break;
     }
   }
@@ -403,6 +419,38 @@ function actions() {
   }
   return out;
 }
+// trailers: you DRIVE your ride up the ramp to load it (the big box trailer's door has to be open). Lined up behind the
+// trailer, it lets you through; once you're past the back edge, the ride parks on the deck and you hop out.
+const deckBack = (t) => ({ utility: -1.7, flatbed: -4.8, enclosed: -3.6 })[t.T.id] ?? -2;
+function trailerLocal(t, x, z) { const dx = x - t.x, dz = z - t.z, c = Math.cos(t.yaw), s = Math.sin(t.yaw); return { lx: dx * c - dz * s, lz: dx * s + dz * c }; }
+function canDriveIn(t, c) {
+  if (!c || t.hitched === c.b) return false;
+  if (t.T.enclosed && !(t.s.open && t.doorA > 1.2)) return false;
+  if (!freeSlots(t, sizeOf(c))) return false;
+  const p = trailerLocal(t, c.b.x, c.b.z), dy = Math.abs(Math.atan2(Math.sin(c.b.yaw - t.yaw), Math.cos(c.b.yaw - t.yaw)));
+  return Math.abs(p.lx) < 1.5 && p.lz < deckBack(t) + 2.5 && (dy < 0.7 || dy > Math.PI - 0.7);
+}
+function driveInTrailers() {
+  const c = mine(); if (!c || sizeOf(c) > 2) return;
+  for (const t of G.TRS.values()) {
+    if (!canDriveIn(t, c)) continue;
+    const p = trailerLocal(t, c.b.x, c.b.z);
+    if (p.lz > deckBack(t) + 1.0) { const sl = freeSlots(t, sizeOf(c)); if (sl) { loadCar(c, t, sl); return; } }
+  }
+}
+// house garage doors roll up when it's your house and you come close
+function stepGarageDoors(dt) {
+  const me = mapPos();
+  for (const d of GARAGE_DOORS) {
+    const dist = Math.abs(me.x - d.x) + Math.abs(me.z - d.z);
+    if (dist > 60 && d.open === 0) continue;
+    const tgt = d.house && S.houses.includes(d.house) && !inside() && Math.hypot(me.x - d.x, me.z - d.z) < 16 ? 1 : 0;
+    if (tgt !== d.tgt) { d.tgt = tgt; if (dist < 30) SFX.door(); }
+    d.open += Math.sign(tgt - d.open) * Math.min(Math.abs(tgt - d.open), dt * 0.9);
+    d.g.position.y = d.y0 + d.open * (d.h - 0.25); d.g.scale.y = 1 - d.open * 0.9;
+    d.col.top = d.open > 0.8 ? -1e9 : d.y0 + 99;
+  }
+}
 function trailerDoor(tr, open) { tr.s.open = open; SFX.hitch(); save(); }
 function loadCar(c, tr, sl) {
   exitCar();
@@ -410,7 +458,7 @@ function loadCar(c, tr, sl) {
   w.x = tr.x + sx * 2.8; w.z = tr.z + sz * 2.8;
   c.on = tr; c.s.on = tr.s.uid; c.b.vx = c.b.vz = 0;
   loadOnto(tr, { uid: c.s.uid }, c.m, sl);
-  SFX.load(); H.toast("Loaded!", "Now hop in your truck (F) and tow it away.", "good"); save();
+  SFX.load(); H.toast("Loaded!", tr.T.enclosed ? "Press T to close the door, then hook it to your truck." : "Now hop in your truck (F) and tow it away.", "good"); save();
 }
 function unloadCar(tr) {
   const e = tr.loaded.pop(); const c = G.CARS.get(e.uid);
@@ -420,6 +468,31 @@ function unloadCar(tr) {
   const f = freeSpot(b.x, b.z, b.yaw, c.m.len); b.x = f.x; b.z = f.z;
   c.on = null; c.s.on = null; settle(b);
   SFX.load(); save();
+}
+// ---- truck beds: a dirt bike or quad rides along in the back of a pickup
+function bedPoint(t) { const B = BEDS[t.s.id], fx = Math.sin(t.b.yaw), fz = Math.cos(t.b.yaw), back = -t.m.len / 2 - 1.2; return { x: t.b.x + fx * back, z: t.b.z + fz * back, mid: B }; }
+function bedHost(t) {
+  if (!t.bedHost) t.bedHost = { bed: true, truck: t, loaded: [], model: { deck: t.m.body }, s: { uid: "bed" + t.s.uid }, get x() { return t.b.x; }, get z() { return t.b.z; }, get yaw() { return t.b.yaw; } };
+  return t.bedHost;
+}
+function putInBed(c, t) {
+  const B = BEDS[t.s.id], h = bedHost(t), v = vehicleById(c.s.id);
+  scene.remove(c.m.root); t.m.body.add(c.m.root);
+  c.m.root.position.set(0, B.y, B.z + (v.bike ? -0.15 : 0)); c.m.root.rotation.set(0, 0, 0);
+  h.loaded.push({ uid: c.s.uid, slots: [0], model: c.m }); c.on = h; c.s.on = null; c.s.bed = t.s.uid; c.b.vx = c.b.vz = 0;
+}
+function loadBed(c, t) {
+  exitCar(); putInBed(c, t);
+  const w = G.me.w, sx = Math.cos(t.b.yaw), sz = -Math.sin(t.b.yaw); w.x = t.b.x + sx * 2.2; w.z = t.b.z + sz * 2.2;
+  SFX.load(); H.toast("In the bed!", "Hop in the " + vehicleById(t.s.id).name + " (F) and drive. Press E at the back to take it out.", "good", 3200); save();
+}
+function unloadBed(h) {
+  const e = h.loaded.pop(); if (!e) return; const c = G.CARS.get(e.uid), t = h.truck;
+  t.m.body.remove(c.m.root); scene.add(c.m.root);
+  const b = c.b, back = t.m.len / 2 + c.m.len / 2 + 0.8; b.yaw = t.b.yaw + Math.PI;
+  b.x = t.b.x - Math.sin(t.b.yaw) * back; b.z = t.b.z - Math.cos(t.b.yaw) * back;
+  const f = freeSpot(b.x, b.z, b.yaw, c.m.len); b.x = f.x; b.z = f.z;
+  c.on = null; c.s.bed = null; settle(b); SFX.load(); save();
 }
 function washCar() {
   const c = mine(); c.s.dirt = 0; applyLook(c.m, c.s); SFX.wash();
@@ -431,11 +504,11 @@ function washCar() {
 export const GAME = {
   get S() { return S; }, G, mine, myTrailer, freeSpot, scene, camera,
   slotsLeft: () => slots() - S.cars.length,
-  buyCar(id) {
+  buyCar(id, color) {
     const v = vehicleById(id);
     if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Buy a bigger house to own more rides (or sell one).", "warn"); SFX.nope(); return false; }
     if (!spend(v.price)) { SFX.nope(); H.toast("Not enough money", "Do some jobs to earn " + money(v.price - S.money) + " more.", "warn"); return false; }
-    const s = newCar(id, uid()); s.yaw = Math.PI;
+    const s = newCar(id, uid()); s.yaw = Math.PI; if (color != null) s.paint = color;
     const f = freeSpot(-36, 12, Math.PI, 5); s.x = f.x; s.z = f.z;
     S.cars.push(s); const c = spawnCar(s);
     if (mine()) exitCar();
@@ -456,6 +529,7 @@ export const GAME = {
     const c = G.CARS.get(u); if (!c || S.cars.length <= 1) return false;
     if (c === mine()) exitCar();
     if (c.on) { const tr = c.on; const i = tr.loaded.findIndex((e) => e.uid === u); tr.loaded.splice(i, 1); tr.model.deck.remove(c.m.root); }
+    if (c.bedHost && c.bedHost.loaded.length) unloadBed(c.bedHost); // (selling a truck: the bike in the back stays yours)
     for (const t of G.TRS.values()) if (t.hitched === c.b) { t.hitched = null; t.s.hitched = null; }
     scene.remove(c.m.root); G.CARS.delete(u); S.cars = S.cars.filter((s) => s.uid !== u);
     pay(Math.round(vehicleById(c.s.id).price * 0.5)); SFX.cash(); save(); return true;
@@ -484,7 +558,21 @@ export const GAME = {
     H.banner("NEW HOME!", h.name + " · garage room: " + slots() + " rides"); save(); return true;
   },
   setHome(id) { S.home = id; houseSigns(); save(); },
+  // sell a house back for 60% of what it cost (you need room left for all your rides)
+  sellHouse(h) {
+    if (!S.houses.includes(h.id) || !h.price) return false;
+    const rest = S.houses.filter((x) => x !== h.id), room = Math.max(...rest.map((id) => (HOUSES.find((q) => q.id === id) || HOUSES[0]).slots));
+    if (S.cars.length > room) { SFX.nope(); H.toast("Too many rides!", "Your other houses only fit " + room + " rides. Sell " + (S.cars.length - room) + " first.", "warn", 3500); return false; }
+    S.houses = rest;
+    if (S.home === h.id) S.home = rest.reduce((a, id) => ((HOUSES.find((q) => q.id === id) || HOUSES[0]).slots > (HOUSES.find((q) => q.id === a) || HOUSES[0]).slots ? id : a), "lot");
+    const cash = Math.round(h.price * 0.6); pay(cash); houseSigns(); SFX.cash(); H.bumpMoney(); H.toast("🏠 Sold " + h.name, "+" + money(cash), "cash", 3000); save(); return true;
+  },
   // customizing the vehicle you're in
+  buyScrubber() { if (!spend(25)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.scrubber = true; SFX.cash(); H.bumpMoney(); save(); return true; },
+  scrubFx(done) {
+    const c = mine(); if (!c) return; SFX.wash(); for (let i = 0; i < 3; i++) fx.splash(c.b.x + (Math.random() - 0.5) * 2.5, c.b.y + 1.4, c.b.z + (Math.random() - 0.5) * 3, 6);
+    if (done) { fx.confetti(c.b.x, c.b.y + 2.5, c.b.z, 40); H.toast("✨ Rust gone!", "Your " + vehicleById(c.s.id).name + " is shiny now.", "good"); }
+  },
   custom(kind, val, cost) {
     const c = mine(); if (!c) return false;
     if (cost && !spend(cost)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
@@ -511,7 +599,7 @@ export const GAME = {
     if (G.preview) { scene.remove(G.preview.root); G.preview = null; }
     if (!id) { if (inside() && interiors.cur.featured) interiors.cur.featured.visible = true; return; }
     const isT = !!trailerById(id);
-    const m = isT ? { root: (() => { const g = new THREE.Group(); g.add(trailerModel(id, color)); return g; })() } : buildCar(newCar(id, 0));
+    const m = isT ? { root: (() => { const g = new THREE.Group(); g.add(trailerModel(id, color)); return g; })() } : buildCar(Object.assign(newCar(id, 0), color != null ? { paint: color } : {}));
     const R = inside() && interiors.cur.stage ? interiors.cur : null; // (inside the showroom: it shows up on the big middle turntable)
     if (R && R.featured) R.featured.visible = false;
     G.previewAt = R ? { x: POCKET.x + R.stage.x, y: R.stage.y, z: POCKET.z + R.stage.z, inside: true } : { x: -36, y: 1.45, z: 18 };
@@ -542,7 +630,7 @@ export const GAME = {
   muted(m) { S.muted = m; setMuted(m); $("bMute").textContent = m ? "🔇" : "🔊"; save(); },
 };
 function trailerModel(id, color) { const tm = makeTrailer({ type: id, x: 0, z: 0, yaw: 0, color }, new THREE.Group()); tm.model.root.position.set(0, 0, 0); tm.model.root.rotation.set(0, 0, 0); return tm.model.root; }
-function unloadCarByUid(u) { const c = G.CARS.get(u), tr = c.on; const i = tr.loaded.findIndex((e) => e.uid === u); const [e] = tr.loaded.splice(i, 1); tr.loaded.push(e); unloadCar(tr); }
+function unloadCarByUid(u) { const c = G.CARS.get(u), tr = c.on; if (tr.bed) { unloadBed(tr); return; } const i = tr.loaded.findIndex((e) => e.uid === u); const [e] = tr.loaded.splice(i, 1); tr.loaded.push(e); unloadCar(tr); }
 function endRace() {
   if (!G.race) return;
   G.race.dispose(); G.race = null; G.mode = "play";
@@ -591,7 +679,7 @@ function tick(dt) {
   if (c) {
     const inp = blocked || raceLock ? { thr: 0, steer: 0, hand: true } : IN.drive();
     inp.wheelie = G.wheelieTap; G.wheelieTap = false;
-    if (G.mode === "side" && G.panel === "customs") { c.b.vx = c.b.vz = 0; }
+    if (G.mode === "side" && G.panel === "customs") { c.b.vx = c.b.vz = 0; c.b.x += (36 - c.b.x) * 0.2; c.b.z += (-40 - c.b.z) * 0.2; c.b.yaw += dt * 0.35; } // (spinning on the turntable)
     const b = stepCar(c.b, inp, dt);
     carEffects(c, b, inp, dt);
   } else {
@@ -609,6 +697,8 @@ function tick(dt) {
   if (c) carVsStuff(c.b);
   else for (const o of G.CARS.values()) if (!o.on) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true);
   for (const t of G.TRS.values()) { stepTrailer(t, dt); stepDoor(t, dt); }
+  stepGarageDoors(dt);
+  driveInTrailers();
   if (G.tow) stepTrailer(G.tow, dt);
   if (G.race) raceTick(dt);
   jobs.update(dt);
@@ -653,8 +743,10 @@ function carVsStuff(b) {
       const vn = b.vx * nx + b.vz * nz; if (vn < 0) { b.vx -= nx * vn * 1.3; b.vz -= nz * vn * 1.3; b.hit = Math.max(b.hit, -vn); }
     }
   }
+  const me = mine();
   for (const t of G.TRS.values()) {
     if (t.hitched === b) continue;
+    if (me && me.b === b && canDriveIn(t, me)) continue; // (lined up behind it: let the ride drive up the ramp)
     const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : t.T.enclosed ? 3.2 : 1.8;
     for (const a of carCircles(b)) for (const s of [-half, 0, half]) {
       const kx = t.x + fx * s, kz = t.z + fz * s, dx = a.x - kx, dz = a.z - kz, d = Math.hypot(dx, dz), m = a.r + 1.3;
@@ -754,7 +846,7 @@ function updateCamera(dt) {
     const P = G.previewAt || { x: -36, y: 1.45, z: 18 }, ins = !!P.inside && inside();
     tx = P.x; ty = P.y + 1.15; tz = P.z; px = P.x + Math.sin(G.time * 0.25) * (ins ? 1.2 : 2) + (ins ? 4.8 : 8.5); py = ins ? 3.2 : 5.2; pz = P.z + (ins ? 6.2 : -9.5);
   }
-  if (G.mode === "side" && G.panel === "customs" && c) { const a = G.time * 0.3; tx = c.b.x; ty = c.b.y + 1.2; tz = c.b.z; px = tx + Math.sin(a) * (4 + c.m.len); pz = tz + Math.cos(a) * (4 + c.m.len); py = ty + 2.2; }
+  if (G.mode === "side" && G.panel === "customs" && c) { tx = c.b.x; ty = c.b.y + 0.9; tz = c.b.z; px = tx + 4.2; pz = tz + Math.min(9.5, 3 + c.m.len); py = c.b.y + 2.8; } // (inside the bay, near the door)
   if (G.mode === "side" && G.panel === "house" && G.houseView) {
     // look at the front of the house from a little to the side
     const h = G.houseView, fx = Math.sin(h.yaw), fz = Math.cos(h.yaw), sx = Math.cos(h.yaw), sz = -Math.sin(h.yaw);
@@ -862,12 +954,14 @@ async function boot() {
   fx = new FX(scene);
   jobBeacon = beacon(0xffd23a); gpsBeacon = beacon(0xc86aff);
   H.setMapBase(mapCanvas(512));
+  await loadBikeModel();
   makeMe();
   for (const s of S.trailers) spawnTrailer(s);
   for (const s of S.cars) {
     const c = spawnCar(s);
     if (s.on && G.TRS.has(s.on)) { const tr = G.TRS.get(s.on); const sl = freeSlots(tr, sizeOf(c)); if (sl) { c.on = tr; loadOnto(tr, { uid: s.uid }, c.m, sl); } else s.on = null; }
   }
+  for (const c of G.CARS.values()) if (c.s.bed && G.CARS.has(c.s.bed) && !c.on && BEDS[G.CARS.get(c.s.bed).s.id]) putInBed(c, G.CARS.get(c.s.bed)); else c.s.bed = null;
   for (const t of G.TRS.values()) if (t.s.hitched && G.CARS.has(t.s.hitched) && !G.CARS.get(t.s.hitched).on) t.hitched = G.CARS.get(t.s.hitched).b;
   jobs = new Jobs(jobApi);
   crime = new Crime({

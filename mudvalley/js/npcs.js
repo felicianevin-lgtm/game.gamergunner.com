@@ -158,12 +158,19 @@ export class NPCs {
       if (d > 170 || (hidden && d > 60)) { this.remove(c); continue; }
       if (c.state === "ko") { c.koT -= dt; if (c.koT <= 0) { c.state = "flee"; c.fleeT = 10; c.fx = me.x; c.fz = me.z; } continue; }
       // a fast car coming right at them: jump out of the way (or get bonked)
-      if (me.inCar && me.speed > 6 && d < 12) {
-        const tx = c.x - me.x, tz = c.z - me.z, along = (tx * me.vx + tz * me.vz) / (me.speed || 1);
-        if (along > 0 && Math.abs(tx * me.vz - tz * me.vx) / (me.speed || 1) < 2.4) {
-          if (d < 1.6) { c.state = "ko"; c.koT = 4; SFX.bonk(); this.api.toast("Bonk!", "Watch out for people!", "warn", 1400); continue; }
-          const px = -me.vz / me.speed, pz = me.vx / me.speed, s = tx * px + tz * pz >= 0 ? 1 : -1;
-          c.x += px * s * 7 * dt; c.z += pz * s * 7 * dt; c.dodge = 0.4;
+      // (the whole car counts, not just its middle, and only some people are quick enough to hop away)
+      if (me.inCar && me.speed > 3 && d < 14) {
+        const tx = c.x - me.x, tz = c.z - me.z, fx = Math.sin(me.yaw), fz = Math.cos(me.yaw);
+        const along = tx * fx + tz * fz, side = tx * fz - tz * fx, half = (me.len || 4) / 2, hw = ((me.car && me.car.m.wid) || 2) / 2;
+        if (Math.abs(along) < half + 0.5 && Math.abs(side) < hw + 0.5) {
+          c.state = "ko"; c.koT = 4; const k = Math.min(3, me.speed * 0.12); c.x += fx * k; c.z += fz * k; // (bonked a little way along)
+          SFX.bonk(); this.api.toast("Bonk!", "Watch out for people!", "warn", 1400); continue;
+        }
+        if (c.quick === undefined) c.quick = Math.random() < 0.4;
+        const vel = (tx * me.vx + tz * me.vz) / (me.speed || 1), lat = Math.abs(tx * me.vz - tz * me.vx) / (me.speed || 1);
+        if (c.quick && me.speed > 8 && vel > half + 1 && vel < 8 && lat < hw + 1.2) {
+          const px = -me.vz / me.speed, pz = me.vx / me.speed, sg = tx * px + tz * pz >= 0 ? 1 : -1;
+          c.x += px * sg * 3.2 * dt; c.z += pz * sg * 3.2 * dt; c.dodge = 0.4;
         }
       }
       let mx = 0, mz = 0, sp = c.speed;

@@ -154,7 +154,7 @@ export function stepCar(b, inp, dt) {
     b.y = Math.max(b.y, (hF + hB) / 2 - 0.15);
   } else if (t.bike) b.roll *= 1 - dt * 2;
   // body lean (the body sways a bit on its springs)
-  const tbp = b.air ? 0 : clamp(-thr * 0.03 * (b.vf > 0 ? 1 : -1) + (inp.hand ? 0.04 : 0), -0.06, 0.06);
+  const tbp = b.air || !(t.bike || t.quad) ? 0 : clamp(-thr * 0.03 * (b.vf > 0 ? 1 : -1) + (inp.hand ? 0.04 : 0), -0.06, 0.06); // (trucks + cars stay level)
   const tbr = b.air || t.bike ? 0 : clamp(b.yawRate * b.vf * 0.008, -0.09, 0.09);
   b.bodyPitch += (tbp - b.bodyPitch) * Math.min(1, dt * 5); b.bodyRoll += (tbr - b.bodyRoll) * Math.min(1, dt * 5);
   b.suspV += (-b.susp * 140 - b.suspV * 11) * dt; b.susp = clamp(b.susp + b.suspV * dt, -0.32, 0.25);

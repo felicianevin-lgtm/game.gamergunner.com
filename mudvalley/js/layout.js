@@ -142,7 +142,7 @@ export const SPEEDWAY = [
 // ---------------------------------------------------------------- places you can go (spots to press E, map icons, job stops)
 export const PLACES = {
   dealer: { name: "Valley Motors", x: -36, z: 29, icon: "🚗", color: "#3aa0ff" },
-  customs: { name: "Mud & Chrome Customs", x: 36, z: -14, icon: "🔧", color: "#ff8a1a", r: 6 },
+  customs: { name: "Mud & Chrome Customs", x: 36, z: -40, icon: "🔧", color: "#ff8a1a", r: 4 },
   jobs: { name: "Job Center", x: -36, z: -30, icon: "💼", color: "#ffd23a" },
   post: { name: "Post Office", x: 22, z: 14, icon: "📦", color: "#c08a50" },
   pizza: { name: "Pizza Pete’s", x: 51, z: 14, icon: "🍕", color: "#ff5a3a" },
