@@ -205,7 +205,7 @@ function phone(view = "home") {
       const ta = document.getElementById("ideaTxt"), note = document.getElementById("ideaNote"), text = ((ta && ta.value) || "").trim();
       if (text.length < 3) { SFX.nope(); note.textContent = "Type your idea first!"; return; }
       note.textContent = "Sending...";
-      fetch(RELAY + "/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "💡 IDEA: " + text, where: "💡 Mud Valley idea", ver: "mudvalley" }) })
+      fetch(RELAY + "/idea", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, game: "Mud Valley" }) })
         .then((r) => { if (r.ok) { SFX.cash(); ta.value = ""; note.textContent = "✅ Sent! Thanks for the idea!"; H.toast("💡 Idea sent!", "Thanks! The game maker will read it.", "good", 2600); } else note.textContent = r.status === 429 ? "That's a lot of ideas! Try again in a few minutes." : "Couldn't send it. Try again later."; })
         .catch(() => { note.textContent = "Couldn't send it. Check the internet and try again."; });
       return;

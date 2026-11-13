@@ -649,6 +649,7 @@
       }).join("");
       main.innerHTML = '<h1 class="page-title">🛠 Dev menu</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +
         (rows ? '<div class="people">' + rows + "</div>" : '<p class="empty">No reports. 🎉</p>') +
+        '<h2 class="row-title">💡 Player ideas <small id="ideaCount"></small></h2><div id="ideaList"><p class="empty">Loading…</p></div>' +
         '<h2 class="row-title">Ban a player</h2><form class="add-friend" id="bnForm"><label for="bnUser">Username (blocks just that account from GunnerVerse and the game, not the Wi-Fi it plays on)</label><div class="add-row"><input id="bnUser" maxlength="17" placeholder="@username">' +
         '<button class="btn danger">Ban</button></div><p class="add-msg" id="bnMsg"></p></form>' +
         '<h2 class="row-title">Banned players</h2><div id="banList"><p class="empty">Loading…</p></div>' +
@@ -675,6 +676,24 @@
         }).catch(function () { var box = document.getElementById("banList"); if (box) box.innerHTML = '<p class="err">Couldn\'t load the bans.</p>'; });
       };
       drawBans();
+      // 💡 ideas players sent from a game's Ideas app (Mud Valley phone > Ideas), newest first
+      var drawIdeas = function () {
+        fetch(RELAY + "/ideas", { headers: hdr }).then(function (r) { return r.json(); }).then(function (d) {
+          var box = document.getElementById("ideaList"), cnt = document.getElementById("ideaCount"); if (!box) return;
+          var list = (d && d.reports) || [];
+          if (cnt) cnt.textContent = list.length;
+          box.innerHTML = list.length ? '<div class="people">' + list.map(function (x) {
+            return '<div class="person"><span class="person-main"><span><b>' + esc(x.text) + "</b><small>" + esc(x.game || "a game") + " · " + new Date(x.at).toLocaleString() + "</small></span></span>" +
+              '<div class="person-btns"><button class="btn small ghost" data-idone="' + esc(x.id) + '">Done</button></div></div>';
+          }).join("") + '</div><button class="btn small danger" id="ideaClear" style="margin-top:8px">Delete all ideas</button>' : '<p class="empty">No ideas yet.</p>';
+          Array.prototype.forEach.call(box.querySelectorAll("[data-idone]"), function (b) {
+            b.onclick = function () { b.disabled = true; fetch(RELAY + "/ideas?id=" + encodeURIComponent(b.getAttribute("data-idone")), { method: "DELETE", headers: hdr }).then(drawIdeas, drawIdeas); };
+          });
+          var clr = document.getElementById("ideaClear");
+          if (clr) clr.onclick = function () { if (confirm("Delete ALL player ideas?")) fetch(RELAY + "/ideas?id=all", { method: "DELETE", headers: hdr }).then(drawIdeas, drawIdeas); };
+        }).catch(function () { var box = document.getElementById("ideaList"); if (box) box.innerHTML = '<p class="err">Couldn’t load the ideas.</p>'; });
+      };
+      drawIdeas();
       document.getElementById("bnForm").onsubmit = function (e) {
         e.preventDefault();
         var u = document.getElementById("bnUser").value.trim().replace(/^@/, "");
