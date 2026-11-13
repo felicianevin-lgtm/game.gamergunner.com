@@ -11,7 +11,7 @@ import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
 import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf } from "./physics.js";
-import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable } from "./trailer.js";
+import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
 import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js";
 import { Fishing, rodById } from "./fishing.js";
@@ -362,13 +362,22 @@ function actions() {
   // E: load / unload trailers
   if (c && sizeOf(c) <= 2) {
     for (const tr of G.TRS.values()) {
-      if (tr.hitched === c.b || !near(tr, me, 6.5)) continue;
+      if (tr.hitched === c.b || !near(tr, me, tr.T.enclosed ? 10.5 : 6.5)) continue;
+      if (tr.T.enclosed && !tr.s.open) { out.E = { text: "Open the trailer door", fn: () => trailerDoor(tr, true) }; break; }
       const sl = freeSlots(tr, sizeOf(c));
       out.E = sl ? { text: "Load onto the " + tr.T.name, fn: () => loadCar(c, tr, sl) } : { text: sizeOf(c) > tr.T.maxSize ? "Too big for this trailer" : "Trailer is full", warn: true, fn: () => SFX.nope() };
       break;
     }
   }
-  if (!c) for (const tr of G.TRS.values()) if (tr.loaded.length && near(tr, me, 6.5)) { const last = tr.loaded[tr.loaded.length - 1]; out.E = { text: "Unload " + vehicleById(G.CARS.get(last.uid).s.id).name, fn: () => unloadCar(tr) }; break; }
+  if (!c) for (const tr of G.TRS.values()) {
+    if (!near(tr, me, tr.T.enclosed ? 7.5 : 6.5)) continue;
+    if (tr.T.enclosed) { // (the big box trailer: open the door, then unload; T closes it)
+      if (!tr.s.open) { out.E = { text: "Open the trailer door", fn: () => trailerDoor(tr, true) }; break; }
+      out.T = { text: "Close the trailer door", fn: () => trailerDoor(tr, false) };
+      if (!tr.loaded.length) { out.E = { text: "Close the trailer door", fn: () => trailerDoor(tr, false) }; break; }
+    }
+    if (tr.loaded.length) { const last = tr.loaded[tr.loaded.length - 1]; out.E = { text: "Unload " + vehicleById(G.CARS.get(last.uid).s.id).name, fn: () => unloadCar(tr) }; break; }
+  }
   // E: robbing, cuffing, booking (hold E)
   const cme = { x: me.x, z: me.z, inCar: !!c };
   if (!out.E) out.E = crime.bookAction(cme) || crime.cuffAction(cme) || (c ? null : crime.robAction(cme) || npcs.bagAction(cme));
@@ -394,6 +403,7 @@ function actions() {
   }
   return out;
 }
+function trailerDoor(tr, open) { tr.s.open = open; SFX.hitch(); save(); }
 function loadCar(c, tr, sl) {
   exitCar();
   const w = G.me.w, sx = Math.cos(tr.yaw), sz = -Math.sin(tr.yaw);
@@ -405,7 +415,7 @@ function loadCar(c, tr, sl) {
 function unloadCar(tr) {
   const e = tr.loaded.pop(); const c = G.CARS.get(e.uid);
   tr.model.deck.remove(c.m.root); scene.add(c.m.root);
-  const back = tr.T.id === "flatbed" ? 5.6 : 2.4, b = c.b;
+  const back = trailerBack(tr.T), b = c.b;
   b.yaw = tr.yaw; b.x = tr.x - Math.sin(tr.yaw) * (back + c.m.len / 2 + 1); b.z = tr.z - Math.cos(tr.yaw) * (back + c.m.len / 2 + 1);
   const f = freeSpot(b.x, b.z, b.yaw, c.m.len); b.x = f.x; b.z = f.z;
   c.on = null; c.s.on = null; settle(b);
@@ -432,10 +442,11 @@ export const GAME = {
     enterCar(c); SFX.buy(); H.bumpMoney(); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 60);
     H.banner("NEW RIDE!", v.name); save(); return true;
   },
-  buyTrailer(type) {
+  buyTrailer(type, color) {
     const T = trailerById(type);
     if (!spend(T.price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
     const s = { uid: uid(), type, x: -60, z: -16, yaw: 0, hitched: null };
+    if (T.enclosed) { s.color = color ?? 0x1a1a1e; s.open = false; }
     const f = freeSpot(-60, 14, 0, T.len * 2); s.x = f.x; s.z = f.z;
     S.trailers.push(s); spawnTrailer(s); SFX.buy(); H.bumpMoney();
     H.toast(T.name + " bought!", "It's parked by the dealership. Back your truck up to it and press T.", "good", 5000); save(); return true;
@@ -494,13 +505,14 @@ export const GAME = {
   mePos() { return mapPos(); },
   sellItem(i) { const list = i < 0 ? S.backpack.splice(0) : S.backpack.splice(i, 1); const n = list.reduce((a, it) => a + it.v, 0); if (!n) return; pay(n); S.stats.pawned = (S.stats.pawned || 0) + n; SFX.cash(); H.bumpMoney(); H.toast("+" + money(n), "Sold " + list.length + " thing" + (list.length === 1 ? "" : "s") + " to the pawn shop.", "cash", 2400); save(); },
   setWaypoint(p) { G.waypoint = p; setBeacon(gpsBeacon, p); if (p) H.toast("GPS set", "Follow the purple arrow to " + (p.name || "your spot"), ""); },
-  showroom(id) {
+  showroom(id, color) {
     if (G.preview) { scene.remove(G.preview.root); G.preview = null; }
     if (!id) return;
     const isT = !!trailerById(id);
-    const m = isT ? { root: (() => { const g = new THREE.Group(); g.add(trailerModel(id)); return g; })() } : buildCar(newCar(id, 0));
+    const m = isT ? { root: (() => { const g = new THREE.Group(); g.add(trailerModel(id, color)); return g; })() } : buildCar(newCar(id, 0));
     m.root.position.set(-36, 1.45, 18); scene.add(m.root); G.preview = m;
   },
+  paintTrailer(u, color) { const t = G.TRS.get(u); if (!t || !t.model.body || !spend(150)) { SFX.nope(); return false; } t.s.color = color; t.model.body.color.set(color); SFX.buy(); H.bumpMoney(); save(); return true; },
   wipe() { wipe(); location.reload(); },
   get crime() { return crime; }, get fishing() { return fishing; }, get mp() { return mp; },
   copAtStation() { const why = crime.copAtStation(); if (why) { SFX.nope(); H.toast("Can’t switch right now", why, "warn"); return false; } return true; },
@@ -515,7 +527,7 @@ export const GAME = {
   policeCar,
   muted(m) { S.muted = m; setMuted(m); $("bMute").textContent = m ? "🔇" : "🔊"; save(); },
 };
-function trailerModel(id) { const tm = makeTrailer({ type: id, x: 0, z: 0, yaw: 0 }, new THREE.Group()); tm.model.root.position.set(0, 0, 0); tm.model.root.rotation.set(0, 0, 0); return tm.model.root; }
+function trailerModel(id, color) { const tm = makeTrailer({ type: id, x: 0, z: 0, yaw: 0, color }, new THREE.Group()); tm.model.root.position.set(0, 0, 0); tm.model.root.rotation.set(0, 0, 0); return tm.model.root; }
 function unloadCarByUid(u) { const c = G.CARS.get(u), tr = c.on; const i = tr.loaded.findIndex((e) => e.uid === u); const [e] = tr.loaded.splice(i, 1); tr.loaded.push(e); unloadCar(tr); }
 function endRace() {
   if (!G.race) return;
@@ -582,7 +594,7 @@ function tick(dt) {
   const me = c ? c.b : G.me.w;
   if (c) carVsStuff(c.b);
   else for (const o of G.CARS.values()) if (!o.on) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true);
-  for (const t of G.TRS.values()) stepTrailer(t, dt);
+  for (const t of G.TRS.values()) { stepTrailer(t, dt); stepDoor(t, dt); }
   if (G.tow) stepTrailer(G.tow, dt);
   if (G.race) raceTick(dt);
   jobs.update(dt);
@@ -629,7 +641,7 @@ function carVsStuff(b) {
   }
   for (const t of G.TRS.values()) {
     if (t.hitched === b) continue;
-    const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : 1.8;
+    const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : t.T.enclosed ? 3.2 : 1.8;
     for (const a of carCircles(b)) for (const s of [-half, 0, half]) {
       const kx = t.x + fx * s, kz = t.z + fz * s, dx = a.x - kx, dz = a.z - kz, d = Math.hypot(dx, dz), m = a.r + 1.3;
       if (d >= m || d < 1e-4) continue;

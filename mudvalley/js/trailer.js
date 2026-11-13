@@ -9,7 +9,12 @@ export const TRAILERS = [
     slots: [{ x: 0.68, z: 0.2 }, { x: -0.68, z: 0.2 }], deckY: 0.7 },
   { id: "flatbed", name: "Big Flatbed Trailer", price: 3500, cap: 4, len: 8.6, need: 2, maxSize: 2, desc: "A long car hauler. Carries 2 cars, or a car + 2 small rides. Needs a truck.",
     slots: [{ x: 0, z: 2.9 }, { x: 0, z: 0.55 }, { x: 0, z: -1.8 }, { x: 0, z: -4.15 }], deckY: 1.0 },
+  { id: "enclosed", name: "Big Enclosed Trailer", price: 6500, cap: 2, len: 7.6, need: 2, maxSize: 2, enclosed: true, desc: "A giant closed-up box trailer in YOUR color. Fits one car (or 2 small rides). The back door opens into a ramp.",
+    slots: [{ x: 0, z: 0.9 }, { x: 0, z: -1.5 }], deckY: 0.9 },
 ];
+export const ENCLOSED_COLORS = [0x1a1a1e, 0xf4f4f4, 0xe0203a, 0x2a7ad0, 0x3aa04a, 0xffd23a, 0xff7a1a, 0x6a3ad0, 0xff5ad8, 0x9aa0aa, 0x7a4a2a, 0x2ac0a0];
+// how far behind the axle the back end is, and how high the coupler sits
+export const trailerBack = (T) => (T.id === "flatbed" ? 5.6 : T.id === "enclosed" ? 6.6 : 2.4);
 export const trailerById = (id) => TRAILERS.find((t) => t.id === id);
 
 const mat = {};
@@ -27,9 +32,10 @@ function mats() {
 const bx = (p, w, h, d, x, y, z, m, rx = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.rotation.x = rx; o.castShadow = true; o.receiveShadow = true; p.add(o); return o; };
 
 // the 3D trailer (origin = the middle of its axle, on the ground; the hitch is at +z)
-export function buildTrailer(type) {
+export function buildTrailer(type, color = 0x1a1a1e) {
   mats();
   const T = trailerById(type), root = new THREE.Group(), deck = new THREE.Group(); root.add(deck);
+  let door = null, body = null;
   const wheels = [];
   const wheel = (x, z, r) => { const w = new THREE.Group(); w.position.set(x, r, z); const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.28, 12), mat.tire); t.rotation.z = Math.PI / 2; w.add(t); const h = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.55, 0.3, 8), mat.rim); h.rotation.z = Math.PI / 2; w.add(h); w.children.forEach((c) => (c.castShadow = true)); root.add(w); wheels.push(w); };
   if (type === "utility") {
@@ -40,6 +46,24 @@ export function buildTrailer(type) {
     for (const s of [-1, 1]) { const tg = bx(deck, 0.1, 0.1, 2.6, s * 0.6, 0.55, 3.2, mat.steel); tg.rotation.y = -s * 0.22; bx(deck, 0.12, 0.12, 0.12, s * 1.36, 0.8, -1.55, mat.light); }
     bx(deck, 0.2, 0.15, 0.35, 0, 0.55, T.len - 0.1, mat.steel);
     wheel(1.5, 0, 0.36); wheel(-1.5, 0, 0.36);
+  } else if (type === "enclosed") {
+    // a big box on two axles: walls + roof in your color, a pointy nose, and a back door that drops down into a ramp
+    body = new THREE.MeshLambertMaterial({ color });
+    const H = 3.1, y0 = 0.9, zb = -3.5, zf = 3.1;
+    bx(deck, 2.7, 0.2, zf - zb, 0, y0 - 0.1, (zf + zb) / 2, mat.steel); bx(deck, 2.5, 0.04, zf - zb - 0.1, 0, y0 + 0.02, (zf + zb) / 2, mat.deck);
+    for (const s of [-1, 1]) { bx(deck, 0.08, H, zf - zb, s * 1.32, y0 + H / 2, (zf + zb) / 2, body); bx(deck, 0.1, 0.12, zf - zb, s * 1.36, y0 + 0.3, (zf + zb) / 2, mat.steel); }
+    bx(deck, 2.72, 0.1, zf - zb + 0.1, 0, y0 + H + 0.05, (zf + zb) / 2, body);
+    for (const s of [-1, 1]) { const n = bx(deck, 0.08, H, 1.0, s * 0.95, y0 + H / 2, zf + 0.35, body); n.rotation.y = s * 0.75; } // the V nose
+    bx(deck, 1.3, H, 0.08, 0, y0 + H / 2, zf + 0.7, body); bx(deck, 2.72, 0.1, 1.0, 0, y0 + H + 0.05, zf + 0.35, body);
+    for (const s of [-1, 1]) { bx(deck, 0.14, 0.14, 0.14, s * 1.36, y0 + H - 0.1, zb + 0.1, mat.light); bx(deck, 0.14, 0.14, 0.14, s * 1.36, y0 + H - 0.1, zf - 0.1, mat.yellow); bx(deck, 0.2, H + 0.1, 0.12, s * 1.3, y0 + H / 2, zb, mat.steel); }
+    bx(deck, 2.72, 0.16, 0.12, 0, y0 + H, zb, mat.steel);
+    for (const s of [-1, 1]) bx(deck, 0.7, 0.5, 2.6, s * 1.55, 0.95, 0, mat.steel); // fenders
+    const tongue = bx(deck, 0.24, 0.24, 3.4, 0, 0.82, zf + 2.4, mat.steel); tongue.rotation.x = 0.02;
+    bx(deck, 0.3, 0.2, 0.4, 0, 0.82, T.len - 0.05, mat.steel);
+    // the back door (hinged at the bottom)
+    door = new THREE.Group(); door.position.set(0, y0, zb - 0.06); deck.add(door);
+    bx(door, 2.5, H - 0.05, 0.08, 0, (H - 0.05) / 2, 0, body); for (let y = 0.4; y < H; y += 0.6) bx(door, 2.3, 0.05, 0.1, 0, y, -0.02, mat.grate);
+    for (const z of [-0.6, 0.6]) { wheel(1.55, z, 0.42); wheel(-1.55, z, 0.42); }
   } else {
     bx(deck, 2.7, 0.18, 9.4, 0, 0.92, 0, mat.steel); for (let z = -4.4; z <= 4.4; z += 0.6) bx(deck, 2.66, 0.04, 0.4, 0, 1.02, z, mat.grate);
     for (const s of [-1, 1]) { bx(deck, 0.14, 0.26, 9.4, s * 1.36, 0.92, 0, mat.yellow); for (const z of [-4.4, -1.5, 1.5, 4.4]) bx(deck, 0.14, 0.1, 0.1, s * 1.42, 0.92, z, mat.light); }
@@ -51,14 +75,14 @@ export function buildTrailer(type) {
     for (const s of [-1, 1]) bx(deck, 0.5, 0.12, 2.4, s * 1.45, 0.98, 0, mat.steel);
   }
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return { root, deck, wheels, T };
+  return { root, deck, wheels, T, door, body };
 }
 
 // a trailer in the world
 export function makeTrailer(save, scene) {
-  const m = buildTrailer(save.type);
+  const m = buildTrailer(save.type, save.color);
   scene.add(m.root);
-  const tr = { s: save, model: m, T: m.T, x: save.x, z: save.z, yaw: save.yaw, y: groundAt(save.x, save.z), pitch: 0, hitched: null, loaded: [], cargo: null, spin: 0 };
+  const tr = { s: save, model: m, T: m.T, x: save.x, z: save.z, yaw: save.yaw, y: groundAt(save.x, save.z), pitch: 0, hitched: null, loaded: [], cargo: null, spin: 0, doorA: save.open ? DOOR_OPEN : 0 };
   place(tr);
   return tr;
 }
@@ -85,10 +109,18 @@ export function stepTrailer(tr, dt) {
   tr.yaw = yaw;
   tr.y = groundAt(tr.x, tr.z);
   const hy = b.y + (b.model.hitch ? b.model.hitch.y : 0.6);
-  const coupY = tr.y + (tr.T ? (tr.T.id === "flatbed" ? 0.82 : 0.55) : tr.hitchY || 0.6);
+  const coupY = tr.y + (tr.T ? (tr.T.id === "utility" ? 0.55 : 0.82) : tr.hitchY || 0.6);
   tr.pitch = Math.atan2(hy - coupY, L);
   tr.spin += Math.hypot(tr.x - ox, tr.z - oz) / 0.4 * (((tr.x - ox) * Math.sin(yaw) + (tr.z - oz) * Math.cos(yaw)) > 0 ? 1 : -1);
   place(tr);
+}
+// the back door: closed = straight up, open = flat down on the ground like a ramp
+const DOOR_OPEN = Math.PI / 2 + Math.asin(0.9 / 3.05);
+export function stepDoor(tr, dt) {
+  const D = tr.model.door; if (!D) return;
+  const want = tr.s && tr.s.open ? DOOR_OPEN : 0;
+  tr.doorA += Math.sign(want - tr.doorA) * Math.min(Math.abs(want - tr.doorA), dt * 1.8);
+  D.rotation.x = -tr.doorA;
 }
 function place(tr) {
   const r = tr.model.root;

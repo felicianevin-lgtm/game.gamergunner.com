@@ -1,6 +1,6 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
 import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES } from "./vehicles.js";
-import { TRAILERS, trailerById } from "./trailer.js";
+import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
 import { RACES } from "./races.js";
@@ -15,7 +15,7 @@ import { itemById, packCap } from "./npcs.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛" };
+const ICON = { pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵";
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -51,7 +51,8 @@ function wire() {
 }
 
 // ---------------------------------------------------------------- dealership
-let dSel = "atv", dTab = "rides";
+let dSel = "atv", dTab = "rides", tColor = 0x1a1a1e;
+const swatches = (cur, act) => `<div class="swatches" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${ENCLOSED_COLORS.map((c) => `<button type="button" data-a="${act}" data-v="${c}" title="color" style="width:30px;height:30px;border-radius:50%;background:${hex(c)};border:3px solid ${c === cur ? "#ffd23a" : "rgba(255,255,255,0.5)"};cursor:pointer"></button>`).join("")}</div>`;
 function dealer() {
   if (!VEHICLES.some((v) => v.id === dSel) && !trailerById(dSel)) dSel = "atv";
   const own = (id) => S.cars.filter((c) => c.id === id).length;
@@ -64,15 +65,16 @@ function dealer() {
   side(`<h2>VALLEY MOTORS</h2><div class="bank">${money(S.money)}</div> <span class="note">Garage: ${S.cars.length} / ${slots()} rides</span>
     <div class="tabs"><button type="button" data-a="tab" data-v="rides" class="${dTab === "rides" ? "on" : ""}">🚗 Rides</button><button type="button" data-a="tab" data-v="trailers" class="${dTab === "trailers" ? "on" : ""}">🚛 Trailers</button></div>
     <h3>${ICON[it.id] || "🚗"} ${esc(it.name)}</h3><p class="sub">${esc(it.desc)}</p>
-    ${st ? bars(st) + `<p class="note">Top speed: <b>${mph(tune({ id: v.id, tires: "street", engine: 0, limit: 1, lift: 0 }).top)} mph</b> on the road. ${v.tow >= 2 ? "Can pull any trailer." : v.tow === 1 ? "Can pull the small trailer." : "Can't pull trailers."} ${v.size <= 2 ? "Fits on a trailer." : ""}</p>` : `<p class="note">Room for <b>${T.cap}</b> small rides${T.maxSize > 1 ? " (a car takes 2)" : ""}.</p>`}
+    ${st ? bars(st) + `<p class="note">Top speed: <b>${mph(tune({ id: v.id, tires: "street", engine: 0, limit: 1, lift: 0 }).top)} mph</b> on the road. ${v.tow >= 2 ? "Can pull any trailer." : v.tow === 1 ? "Can pull the small trailer." : "Can't pull trailers."} ${v.size <= 2 ? "Fits on a trailer." : ""}</p>` : `<p class="note">Room for <b>${T.cap}</b> small rides${T.maxSize > 1 ? " (a car takes 2)" : ""}.</p>${T.enclosed ? `<p class="note"><b>Pick your color:</b></p>${swatches(tColor, "tcol")}<p class="note">Walk or drive up to the back and press E to open the door. T closes it.</p>` : ""}`}
     <div class="btns"><button type="button" class="big" data-a="buy" ${canBuy ? "" : "disabled"}>${it.price ? "BUY " + money(it.price) : "FREE"}</button>
     ${full ? `<span class="note">Garage full! Buy a bigger house.</span>` : S.money < it.price ? `<span class="note">You need ${money(it.price - S.money)} more. Do jobs!</span>` : ""}</div>
     <div class="list">${list.map((x) => `<button type="button" class="item ${x.id === dSel ? "sel" : ""}" data-a="sel" data-v="${x.id}"><span class="ico">${ICON[x.id] || "🚗"}</span><span class="nm"><b>${esc(x.name)}${!T && own(x.id) ? `<span class="tag">OWNED${own(x.id) > 1 ? " x" + own(x.id) : ""}</span>` : ""}</b><small>${esc(x.desc).slice(0, 70)}...</small></span><span class="pr">${x.price ? money(x.price) : "FREE"}</span></button>`).join("")}</div>`, "dealer");
-  GM.showroom(it.id);
+  GM.showroom(it.id, T && T.enclosed ? tColor : undefined);
   onAct = (a, val) => {
     if (a === "tab") { dTab = val; dSel = val === "rides" ? "atv" : "utility"; SFX.click(); dealer(); }
     if (a === "sel") { dSel = val; SFX.click(); dealer(); }
-    if (a === "buy") { if (T ? GM.buyTrailer(T.id) : GM.buyCar(v.id)) { if (T) dealer(); else close(); } }
+    if (a === "tcol") { tColor = +val; SFX.click(); dealer(); }
+    if (a === "buy") { if (T ? GM.buyTrailer(T.id, tColor) : GM.buyCar(v.id)) { if (T) dealer(); else close(); } }
   };
 }
 
@@ -121,7 +123,7 @@ function house(h) {
       ${S.home !== h.id ? `<div class="btns"><button type="button" class="small" data-a="home">⭐ Make this my home</button></div>` : ""}
       <h3>Your rides</h3><div class="list">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid), d = C ? Math.round(Math.hypot(C.b.x - h.garage.x, C.b.z - h.garage.z)) : 0, onTr = C && C.on; return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${onTr ? "On a trailer" : d < 25 ? "Parked here" : d + " m away"}${C === GM.mine() ? " · you're driving it" : ""}</small></span>
         <span class="btns" style="margin:0"><button type="button" class="small" data-a="drive" data-v="${c.uid}">Drive</button>${d >= 25 || onTr ? `<button type="button" class="small" data-a="bring" data-v="${c.uid}">Bring here${d > 60 ? " $25" : ""}</button>` : ""}${S.cars.length > 1 && vehicleById(c.id).price ? `<button type="button" class="small" data-a="sell" data-v="${c.uid}">Sell ${money(vehicleById(c.id).price / 2)}</button>` : ""}</span></div>`; }).join("")}</div>
-      ${S.trailers.length ? `<h3>Your trailers</h3><div class="list">${S.trailers.map((t) => { const T = GM.G.TRS.get(t.uid), d = Math.round(Math.hypot(T.x - h.garage.x, T.z - h.garage.z)); return `<div class="item"><span class="ico">${ICON[t.type]}</span><span class="nm"><b>${esc(trailerById(t.type).name)}</b><small>${T.hitched ? "Hitched to a truck" : d < 25 ? "Parked here" : d + " m away"} · ${T.loaded.length ? T.loaded.length + " ride(s) on it" : "empty"}</small></span>${d >= 25 ? `<button type="button" class="small" data-a="bringT" data-v="${t.uid}">Bring here</button>` : ""}</div>`; }).join("")}</div>` : ""}`;
+      ${S.trailers.length ? `<h3>Your trailers</h3><div class="list">${S.trailers.map((t) => { const T = GM.G.TRS.get(t.uid), d = Math.round(Math.hypot(T.x - h.garage.x, T.z - h.garage.z)); return `<div class="item"><span class="ico">${ICON[t.type]}</span><span class="nm"><b>${esc(trailerById(t.type).name)}</b><small>${T.hitched ? "Hitched to a truck" : d < 25 ? "Parked here" : d + " m away"} · ${T.loaded.length ? T.loaded.length + " ride(s) on it" : "empty"}</small></span>${d >= 25 ? `<button type="button" class="small" data-a="bringT" data-v="${t.uid}">Bring here</button>` : ""}</div>${t.type === "enclosed" ? `<p class="note">Repaint it ($150):</p>` + swatches(t.color, "tpaint").replace(/data-v="(\d+)"/g, 'data-v="${t.uid}:$1"') : ""}`; }).join("")}</div>` : ""}`;
   }
   side(html, "house");
   onAct = (a, val) => {
@@ -130,6 +132,7 @@ function house(h) {
     if (a === "drive") { GM.bringCar(+val, h, true); }
     if (a === "bring") { GM.bringCar(+val, h, false); house(h); }
     if (a === "bringT") { GM.bringTrailer(+val, h); house(h); }
+    if (a === "tpaint") { const [u, c] = String(val).split(":").map(Number); GM.paintTrailer(u, c); house(h); }
     if (a === "sell") { const C = S.cars.find((c) => c.uid === +val); if (C && confirm("Sell your " + vehicleById(C.id).name + " for " + money(vehicleById(C.id).price / 2) + "?")) { GM.sellCar(+val); house(h); } }
   };
 }
