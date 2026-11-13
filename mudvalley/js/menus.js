@@ -7,6 +7,7 @@ import { RACES } from "./races.js";
 import { S, money, slots, save } from "./save.js";
 import { SFX } from "./sfx.js";
 import * as H from "./hud.js";
+import { RELAY } from "/create/js/net.js";
 import { GEAR, BLASTERS, RANKS, rankOf, nextRank, lootCap, BOOK_PAY } from "./crime.js";
 import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } from "./fishing.js";
 import { QUICK } from "./mp.js";
@@ -179,7 +180,7 @@ function phone(view = "home") {
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? H.fmtTime(S.best[r.id]) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
@@ -195,8 +196,20 @@ function phone(view = "home") {
   phoneView = view;
   if (view === "fishlog") html = fishLogHtml(back);
   if (view === "backpack") html = `<h2>🎒 BACKPACK</h2>${back}<p class="sub">${S.backpack.length} / ${packCap()} things · worth about ${money(packValue())} at a Pawn Shop${S.gear.duffel ? "" : " (a Big Duffel Bag from the Tool Barn makes it bigger)"}</p>${packList(false)}<div class="btns"><button type="button" class="small" data-a="gpsPawn">📍 Nearest Pawn Shop</button></div>`;
+  if (view === "ideas") html = `<h2>💡 IDEAS</h2>${back}<p class="sub">What should we add to Mud Valley? New cars, places, jobs, anything! Your idea goes straight to the game maker.</p>
+    <textarea id="ideaTxt" maxlength="480" rows="5" placeholder="I think you should add..." style="width:100%;box-sizing:border-box;font:inherit;padding:8px;border-radius:8px"></textarea>
+    <div class="btns"><button type="button" class="big" data-a="sendIdea">SEND IDEA 💡</button></div><p class="note" id="ideaNote">Please don't put your real name, address or phone number in it.</p>`;
   modal(html, "phone");
   onAct = (a, val) => {
+    if (a === "sendIdea") {
+      const ta = document.getElementById("ideaTxt"), note = document.getElementById("ideaNote"), text = ((ta && ta.value) || "").trim();
+      if (text.length < 3) { SFX.nope(); note.textContent = "Type your idea first!"; return; }
+      note.textContent = "Sending...";
+      fetch(RELAY + "/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "💡 IDEA: " + text, where: "💡 Mud Valley idea", ver: "mudvalley" }) })
+        .then((r) => { if (r.ok) { SFX.cash(); ta.value = ""; note.textContent = "✅ Sent! Thanks for the idea!"; H.toast("💡 Idea sent!", "Thanks! The game maker will read it.", "good", 2600); } else note.textContent = r.status === 429 ? "That's a lot of ideas! Try again in a few minutes." : "Couldn't send it. Try again later."; })
+        .catch(() => { note.textContent = "Couldn't send it. Check the internet and try again."; });
+      return;
+    }
     if (a === "view") { if (val === "jobs") return jobsPanel(true); if (val === "map") { close(); return map(); } if (val === "home") { goHome(); return; } phone(val); }
     if (a === "gpsPawn") { const me = GM.mePos(); let best = null; for (const [id, p] of Object.entries(PLACES)) if (id.startsWith("pawn") && (!best || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(best.x - me.x, best.z - me.z))) best = p; GM.setWaypoint({ x: best.x, z: best.z, name: best.name }); close(); }
     if (a === "gpsCar") { const C = GM.G.CARS.get(+val); const p = C.on ? C.on : C.b; GM.setWaypoint({ x: p.x, z: p.z, name: "your " + vehicleById(C.s.id).name }); close(); }

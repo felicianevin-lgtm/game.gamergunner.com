@@ -123,6 +123,8 @@ export function makePerson(look = LOOKS.you, scale = 1) {
       hip.position.y = 0.9 + Math.sin(t * 2) * 0.01;
       if (P.item) arms[1].rotation.x = -0.5;
     }
+    // guns + tasers always point straight ahead (level with the ground), whatever the arm is doing
+    if (P.item && P.item.userData.level) P.item.rotation.x = -(Math.PI / 2 + arms[1].rotation.x) * Math.cos(arms[1].rotation.z);
   };
   P.pose("stand");
   return P;
@@ -174,7 +176,7 @@ export function makeBlaster(tier = 0) {
     add(0.06, 0.06, 0.16, wood, 0, 0.05, 0.42); tipZ = 0.82; tipY = 0.095;
   }
   const tip = new THREE.Object3D(); tip.position.set(0, tipY, tipZ); g.add(tip);
-  g.userData = { tip, color: 0x2a2c30 };
+  g.userData = { tip, color: 0x2a2c30, level: true };
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
@@ -186,7 +188,7 @@ export function makeTaser() {
   const front = box(0.12, 0.12, 0.06, k); front.position.set(0, 0.07, 0.29); g.add(front);
   for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.05), glow); p.position.set(s * 0.035, 0.07, 0.33); g.add(p); }
   const tip = new THREE.Object3D(); tip.position.set(0, 0.07, 0.35); g.add(tip);
-  g.userData = { tip };
+  g.userData = { tip, level: true };
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
