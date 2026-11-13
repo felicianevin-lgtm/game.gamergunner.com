@@ -131,22 +131,26 @@ const PAINTS = [[0xf4e3b5, 0x8a4a2a], [0xb8e0f0, 0x3a4a6a], [0xf2c4c4, 0x5a3a3a]
 
 // ---------------------------------------------------------------- town buildings (they all face +z before turning)
 export function dealership(scene, b) {
-  b.box(46, 9, 22, 0, 0, 0, 0xf2f4f7).solid(0, 0, 23, 11);
-  b.box(40, 6.4, 0.3, 0, 0.8, 11.05, 0x7fc8f0, "glass");
-  for (const x of [-20, -10, 0, 10, 20]) b.box(1, 7.4, 0.7, x, 0, 11.3, 0xffffff);
-  b.box(48, 0.7, 25.5, 0, 9, 1.5, 0x2a6fd6); b.box(46.4, 0.8, 22.4, 0, 7.6, 0, 0x2a6fd6);
-  b.box(48.2, 0.18, 0.3, 0, 9.1, 14.3, 0xbfe6ff, "glow");
-  // the car lot in front, with lines, a spinning stage and flags
-  b.box(46, 0.06, 24, 0, 0.01, 23, 0x3c3f46);
-  for (let i = -3; i <= 3; i++) if (i) b.box(0.25, 0.08, 5, i * 6, 0.02, 31, 0xffffff);
+  // a giant glass showroom (56 m wide) with a big car lot out front
+  b.box(56, 11, 26, 0, 0, 0, 0xf2f4f7).solid(0, 0, 28, 13);
+  b.box(50, 8.2, 0.3, 0, 0.8, 13.05, 0x7fc8f0, "glass");
+  for (const x of [-25, -12.5, 0, 12.5, 25]) b.box(1, 9.6, 0.7, x, 0, 13.3, 0xffffff);
+  b.box(58, 0.8, 29.5, 0, 11, 1.5, 0x2a6fd6); b.box(56.4, 0.8, 26.4, 0, 9.6, 0, 0x2a6fd6);
+  b.box(58.2, 0.18, 0.3, 0, 11.2, 16.3, 0xbfe6ff, "glow");
+  // the car lot: lines, a spinning stage in the middle and 4 show pads
+  b.box(56, 0.06, 22, 0, 0.01, 24, 0x3c3f46);
+  for (let i = -4; i <= 4; i++) if (i) b.box(0.25, 0.08, 4, i * 6, 0.02, 33, 0xffffff);
   b.cyl(4.6, 0.3, 0, 0, 23, 0xdde2ea, 28); b.add(new THREE.CylinderGeometry(4.75, 4.75, 0.14, 28, 1, true), 0x5ad0ff, 0, 0.2, 23, 0, 0, 0, "glow");
-  for (const x of [-16, 16]) { b.cyl(3.2, 0.4, x, 0, 19, 0xf0f0f0, 20); b.add(new THREE.CylinderGeometry(3.3, 3.3, 0.12, 20, 1, true), 0xffd23a, x, 0.3, 19, 0, 0, 0, "glow"); }
-  for (const [x, z] of [[-22.5, 34.5], [22.5, 34.5], [-22.5, 12], [22.5, 12]]) { b.cyl(0.12, 8, x, 0, z, 0xcccccc, 6); b.post(x, z, 0.3, 8); }
-  bunting(b, -22.5, 7.8, 12, -22.5, 7.8, 34.5); bunting(b, 22.5, 7.8, 12, 22.5, 7.8, 34.5);
-  for (const [x, c] of [[-9, 0xff3a3a], [9, 0x3aa0ff]]) { b.cyl(0.14, 10, x, 0, -14, 0xdddddd, 6); b.add(new THREE.BoxGeometry(0.05, 2, 3), c, x, 8.8, -12.4); }
-  bsign(scene, b, "VALLEY MOTORS", 30, 4.2, 0, 11.6, 14.4, { bg: "#2a6fd6", fg: "#ffffff", stroke: "#123a7a" });
-  bsign(scene, b, "NEW & USED RIDES", 14, 1.8, 0, 6.2, -11.1, { bg: "#ffd23a", fg: "#2a2a2a", turn: Math.PI });
+  for (const [x, z] of DEALER_PADS) { b.cyl(3.6, 0.4, x, 0, z, 0xf0f0f0, 20); b.add(new THREE.CylinderGeometry(3.7, 3.7, 0.12, 20, 1, true), 0xffd23a, x, 0.3, z, 0, 0, 0, "glow"); }
+  for (const [x, z] of [[-27.5, 34.5], [27.5, 34.5], [-27.5, 14], [27.5, 14]]) { b.cyl(0.12, 9, x, 0, z, 0xcccccc, 6); b.post(x, z, 0.3, 9); }
+  bunting(b, -27.5, 8.8, 14, -27.5, 8.8, 34.5); bunting(b, 27.5, 8.8, 14, 27.5, 8.8, 34.5); bunting(b, -27.5, 8.8, 34.5, 27.5, 8.8, 34.5);
+  for (const [x, c] of [[-12, 0xff3a3a], [0, 0xffd23a], [12, 0x3aa0ff]]) { b.cyl(0.14, 13, x, 0, -14, 0xdddddd, 6); b.add(new THREE.BoxGeometry(0.05, 2, 3), c, x, 11.8, -12.4); }
+  bsign(scene, b, "VALLEY MOTORS", 38, 5, 0, 14, 16.4, { bg: "#2a6fd6", fg: "#ffffff", stroke: "#123a7a" });
+  bsign(scene, b, "TRUCKS • QUADS • BIKES • CARS", 30, 2.2, 0, 8.6, 13.25, { bg: "#ffd23a", fg: "#2a2a2a" });
+  bsign(scene, b, "NEW & USED RIDES", 16, 2, 0, 7, -13.1, { bg: "#ffd23a", fg: "#2a2a2a", turn: Math.PI });
 }
+// where the 4 show rides sit on the lot (local spots, in front of the showroom)
+export const DEALER_PADS = [[-15, 19], [15, 19], [-22, 28], [22, 28]];
 export function customs(scene, b) {
   b.box(46, 8, 22, 0, 0, 0, 0x8a96a3).solid(0, 0, 23, 11);
   for (let x = -22; x <= 22; x += 2.2) b.box(0.3, 7, 0.2, x, 0, -11.05, 0x7a8693);

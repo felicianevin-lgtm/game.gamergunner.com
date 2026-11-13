@@ -17,9 +17,9 @@ export const ROOM_H = 4.4;
 // w, d = the room size; kind = what's inside; menu = the shop screen the counter opens
 const T = (id, name, kind, x, z, yaw, door, w, d, extra = {}) => ({ id, name, kind, x, z, yaw, door, w, d, ...extra });
 export const BUILDINGS = [
-  T("dealer", "Valley Motors", "shop", -36, -41, 0, [0, 11.6], 20, 14, { menu: "dealer", keeper: "Sales clerk", goods: "cars" }),
+  T("dealer", "Valley Motors", "shop", -36, 41, Math.PI, [0, 13.6], 26, 16, { menu: "dealer", keeper: "Sales clerk", goods: "cars" }),
   T("customs", "Mud & Chrome Customs", "garage", 36, -41, 0, [0, 11.6], 20, 14, { keeper: "Mechanic" }),
-  T("jobs", "Job Center", "shop", -36, 41, Math.PI, [0, 10.6], 18, 12, { menu: "jobs", keeper: "Job counselor", goods: "papers" }),
+  T("jobs", "Job Center", "shop", -36, -41, 0, [0, 10.6], 18, 12, { menu: "jobs", keeper: "Job counselor", goods: "papers" }),
   T("post", "Post Office", "shop", 22, 40, Math.PI, [0, 9.6], 14, 10, { keeper: "Mail clerk", goods: "boxes" }),
   T("pizza", "Pizza Pete’s", "diner", 51, 40, Math.PI, [7.5, 9.6], 14, 10, { keeper: "Pete" }),
   T("gas", "Gas Station Shop", "gas", 91, -30, 0, [9, -15.4], 10, 8, { keeper: "Cashier" }),

@@ -2,10 +2,11 @@
 // and the glowing circles you drive into to do things.
 import * as THREE from "/create/vendor/three.module.js";
 import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, ATMS, PAWNS } from "./layout.js";
-import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform } from "./terrain.js";
+import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform, roadNet, groundAt, LIMIT_TOWN, LIMIT_HWY } from "./terrain.js";
 import * as B from "./build.js";
 import { addCircle } from "./colliders.js";
-import { bakeGroup } from "./vehicles.js";
+import { bakeGroup, buildCar, vehicleById } from "./vehicles.js";
+import { mergeGeometries } from "/create/vendor/BufferGeometryUtils.js";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const TOWN_Y = 1, LAWN = 0.14;
@@ -57,9 +58,11 @@ function town(scene) {
   b.finish(scene);
   // the buildings (each is turned to face its street)
   const place = (fn, x, z, yaw, ...a) => { b.at(x, y, z, yaw); fn(scene, b, ...a); };
-  place(B.dealership, -36, -41, 0);
+  // Valley Motors is right across the street from Town Parking (where you start), facing Main Street
+  place(B.dealership, -36, 41, Math.PI);
+  showRides(scene, b);
   place(B.customs, 36, -41, 0);
-  place(B.jobCenter, -36, 41, Math.PI);
+  place(B.jobCenter, -36, -41, 0);
   place(B.postOffice, 22, 40, Math.PI);
   place(B.pizza, 51, 40, Math.PI);
   place(B.gasAndWash, 91, -30, 0);
@@ -286,6 +289,52 @@ export function makeMarker(scene, x, z, r, color, emoji) {
   return { g, ring, icon, x, z, r };
 }
 
+// four shiny rides parked on the dealership's show pads (no drivers)
+function showRides(scene, b) {
+  const rides = [["trailboss", 0xd02030, 0.5], ["sportquad", 0xffd23a, -0.6], ["prerunner", 0xff7a1a, 0.35], ["swamp", 0x4a5a3a, -0.35]];
+  B.DEALER_PADS.forEach(([x, z], k) => {
+    const [id, paint, turn] = rides[k], v = vehicleById(id);
+    const C = buildCar({ id, paint, rims: "chrome", tires: v.quad ? "mud" : "allterrain", engine: 3, limit: 1, lift: v.quad ? 0 : 1, neon: 0, dirt: 0 });
+    C.body.remove(C.rider.root); C.rider = null;
+    const p = b.world(x, z); C.root.position.set(p.x, b.fy + 0.4, p.z); C.root.rotation.y = b.fyaw + turn;
+    for (const w of C.wheels) w.pivot.position.y = w.r;
+    scene.add(C.root); addCircle(p.x, p.z, Math.max(C.len, C.wid) * 0.42, b.fy + 3);
+  });
+}
+
+// ---------------------------------------------------------------- speed limit signs along every paved road (both directions)
+function limitTex(n) {
+  const c = document.createElement("canvas"); c.width = 160; c.height = 200; const g = c.getContext("2d");
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, 160, 200); g.strokeStyle = "#111"; g.lineWidth = 8; g.strokeRect(10, 10, 140, 180);
+  g.fillStyle = "#111"; g.textAlign = "center"; g.font = 'bold 30px "Russo One", Impact, sans-serif'; g.fillText("SPEED", 80, 52); g.fillText("LIMIT", 80, 86);
+  g.font = 'bold 84px "Russo One", Impact, sans-serif'; g.fillText(String(n), 80, 168);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+function speedSigns(scene) {
+  const { roads, links } = roadNet(), posts = new B.Batch(), plates = { [LIMIT_TOWN]: [], [LIMIT_HWY]: [] }, mtx = new THREE.Matrix4();
+  let count = 0;
+  roads.forEach((p, r) => {
+    const lim = p.town ? LIMIT_TOWN : LIMIT_HWY, every = p.town ? 70 : 150, last = p.cum[p.n - 1];
+    for (const dir of [1, -1]) {
+      let next = dir > 0 ? 14 : last - 14;
+      for (let ii = 1; ii < p.n - 1; ii++) {
+        const i = dir > 0 ? ii : p.n - 1 - ii;
+        if (dir > 0 ? p.cum[i] < next : p.cum[i] > next) continue;
+        if (p.bridge[i] || p.ford[i] || links[r][i].length || links[r][i + dir]?.length || links[r][i - dir]?.length) continue; // (not in a crossing or on a bridge)
+        next = p.cum[i] + dir * every;
+        let dx = p.x[i + dir] - p.x[i], dz = p.z[i + dir] - p.z[i]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+        const off = p.w / 2 + 1.7, x = p.x[i] - dz * off, z = p.z[i] + dx * off, y = groundAt(x, z), yaw = Math.atan2(-dx, -dz);
+        posts.at(x, y, z, yaw); posts.box(0.12, 2.9, 0.12, 0, 0, -0.08, 0x9aa0aa); posts.box(0.96, 1.2, 0.05, 0, 1.8, -0.06, 0x8a9098);
+        const g = new THREE.PlaneGeometry(0.9, 1.12); g.applyMatrix4(mtx.makeRotationY(yaw).setPosition(x, y + 2.4, z)); plates[lim].push(g);
+        count++;
+      }
+    }
+  });
+  posts.finish(scene);
+  for (const n of [LIMIT_TOWN, LIMIT_HWY]) if (plates[n].length) scene.add(new THREE.Mesh(mergeGeometries(plates[n]), new THREE.MeshLambertMaterial({ map: limitTex(n) })));
+  return count;
+}
+
 // ---------------------------------------------------------------- build it all
 export function buildWorld(scene) {
   buildGround();
@@ -293,13 +342,14 @@ export function buildWorld(scene) {
   town(scene);
   const signs = houses(scene);
   outskirts(scene);
+  const limitSigns = speedSigns(scene);
   const counts = forests(scene);
   farMountains(scene);
   const cl = clouds(scene);
   const markers = {};
   for (const [id, p] of Object.entries(PLACES)) if (p.r) markers[id] = makeMarker(scene, p.x, p.z, p.r, p.color, p.icon);
   for (const h of HOUSES) markers["house_" + h.id] = makeMarker(scene, h.garage.x, h.garage.z, 4, h.price ? "#ff5ad8" : "#7a8aa0", h.id === "lot" ? "🅿️" : "🏠");
-  return { ground, signs, markers, clouds: cl, water: ground.userData.water, counts };
+  return { ground, signs, markers, clouds: cl, water: ground.userData.water, counts, limitSigns };
 }
 export function animateWorld(w, t, dt, cam, hide) {
   if (w.water) w.water.offset.y = -t * 0.12;

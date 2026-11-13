@@ -141,6 +141,7 @@ export function buildGround() {
       }
       BRIDGES.push(p);
     }
+    p.minX = Math.min(...p.x); p.maxX = Math.max(...p.x); p.minZ = Math.min(...p.z); p.maxZ = Math.max(...p.z);
     PATHS.push(p);
     return p;
   };
@@ -188,6 +189,35 @@ export function nearestRoad(x, z, roadsOnly = false) {
   return b || { x: 0, z: 0, yaw: 0 };
 }
 export const roadPoints = () => ROAD_PTS;
+
+// speed limits: 35 mph on town streets, 55 mph on the highways (0 = not on a paved road)
+export const LIMIT_TOWN = 35, LIMIT_HWY = 55;
+export function speedLimitAt(x, z) {
+  for (const p of PATHS) {
+    if (p.kind !== "road") continue;
+    const r = p.w / 2 + 3;
+    if (x < p.minX - r || x > p.maxX + r || z < p.minZ - r || z > p.maxZ + r) continue;
+    for (let i = 0; i < p.n; i++) if (Math.abs(p.x[i] - x) < r && Math.abs(p.z[i] - z) < r) return p.town ? LIMIT_TOWN : LIMIT_HWY;
+  }
+  return 0;
+}
+// the paved roads as a network: for every spot on a road, the spots on other roads it touches (junctions)
+let NET = null;
+export function roadNet() {
+  if (NET) return NET;
+  const roads = PATHS.filter((p) => p.kind === "road"), C = 8, grid = new Map(), key = (i, j) => i * 100000 + j;
+  roads.forEach((p, a) => { for (let i = 0; i < p.n; i++) { const k = key(Math.floor(p.x[i] / C), Math.floor(p.z[i] / C)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push([a, i]); } });
+  const links = roads.map((p, a) => Array.from({ length: p.n }, (_, i) => {
+    const best = new Map(), gx = Math.floor(p.x[i] / C), gz = Math.floor(p.z[i] / C);
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (const [b, j] of grid.get(key(gx + dx, gz + dz)) || []) {
+      if (b === a) continue;
+      const d = Math.hypot(roads[b].x[j] - p.x[i], roads[b].z[j] - p.z[i]);
+      if (d < 7 && (!best.has(b) || d < best.get(b)[1])) best.set(b, [j, d]);
+    }
+    return [...best].map(([b, [j]]) => [b, j]);
+  }));
+  return (NET = { roads, links });
+}
 
 // lower the land along every road / trail / track to the road's own smooth height
 function flattenPaths() {

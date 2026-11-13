@@ -16,6 +16,7 @@ export function makeBody(car, model) {
     car, model, t: tune(car), x: car.x, y: groundAt(car.x, car.z), z: car.z, yaw: car.yaw, vx: 0, vy: 0, vz: 0,
     yawRate: 0, steer: 0, air: false, airT: 0, pitch: 0, roll: 0, bodyPitch: 0, bodyRoll: 0, susp: 0, suspV: 0,
     vf: 0, surf: 0, depth: 0, flipped: false, slip: 0, thr: 0, boost: 0, wheelDrop: [0, 0, 0, 0, 0, 0], land: 0, hit: 0, splash: 0,
+    wheelie: false, wa: 0, wheelieT: 0, wheelieDone: 0, offGas: 0, burn: false,
   };
 }
 export const retune = (b) => { b.t = tune(b.car); };
@@ -37,6 +38,19 @@ export function stepCar(b, inp, dt) {
   b.hit = 0; b.land = 0;
   const thr = b.flipped ? 0 : inp.thr, steerIn = b.flipped ? 0 : inp.steer;
   b.thr = thr;
+  // dirt bikes + quads: burnouts (hold W and S together) and wheelies (T, then keep holding W)
+  const tricks = t.wheelie && !b.flipped;
+  b.burn = tricks && !!inp.burn && !b.air;
+  if (tricks && inp.wheelie) { b.wheelie = !b.wheelie; if (b.wheelie) b.offGas = 0; }
+  if (b.wheelie) {
+    b.offGas = thr > 0.1 || b.air ? 0 : b.offGas + dt;
+    if (!tricks || b.burn || b.offGas > 0.3 || thr < -0.1) b.wheelie = false;
+  }
+  const waTarget = b.wheelie ? (t.quad ? 0.5 : 0.66) + Math.sin(performance.now() / 260) * 0.05 : 0;
+  b.wa += (waTarget - b.wa) * Math.min(1, dt * (b.wheelie ? 3.2 : 7));
+  if (b.wa < 0.004) b.wa = 0;
+  if (b.wa > 0.35 && !b.air) b.wheelieT += dt;
+  else if (!b.wheelie && b.wa < 0.15) { if (b.wheelieT > 0) { b.wheelieDone = b.wheelieT; if (b.wheelieT > 0.4) b.suspV -= 2.5; } b.wheelieT = 0; }
   const gy = groundAt(b.x, b.z);
   b.surf = surfaceAt(b.x, b.z); b.depth = Math.max(0, WATER_Y - gy);
   if (b.depth > 0.12) b.surf = SURF.WATER;
@@ -46,13 +60,15 @@ export function stepCar(b, inp, dt) {
     // steering: turns faster at medium speed, slower at very high speed
     const sp = Math.hypot(b.vx, b.vz), fwdSign = b.vf < -0.3 ? -1 : 1;
     const curve = sp < 5 ? sp / 5 : 1 - 0.42 * Math.min(1, (sp - 5) / (t.top * 0.9 + 1));
-    const target = -b.steer * t.turn * curve * fwdSign * (inp.hand ? 1.45 : 1);
+    let target = -b.steer * t.turn * curve * fwdSign * (inp.hand ? 1.45 : 1) * (b.wa > 0.2 ? 0.45 : 1);
+    if (b.burn) target = -b.steer * 2.6; // (a burnout + steering = spin around in a circle)
     b.yawRate += (target - b.yawRate) * Math.min(1, dt * 10);
     b.yaw += b.yawRate * dt;
     const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw), sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);
     let vf = b.vx * fx + b.vz * fz, vs = b.vx * sx + b.vz * sz;
     const top = t.top * kSpd;
-    if (thr > 0.05) {
+    if (b.burn) { vf *= Math.exp(-6 * dt); }
+    else if (thr > 0.05) {
       if (vf < -0.5) vf += 24 * thr * dt;
       else vf += t.acc * kAcc * thr * Math.max(0.06, 1 - (vf / Math.max(1, top)) ** 2) * dt;
     } else if (thr < -0.05) {
@@ -64,7 +80,7 @@ export function stepCar(b, inp, dt) {
     if (b.depth > 0.2) vf -= vf * Math.min(1, b.depth * 1.6 * dt);
     const grip = t.grip * kGrip * (inp.hand ? 0.13 : 1);
     vs *= Math.exp(-grip * dt);
-    b.slip = Math.abs(vs);
+    b.slip = b.burn ? 9 : Math.abs(vs);
     b.vf = vf;
     b.vx = fx * vf + sx * vs; b.vz = fz * vf + sz * vs;
     // hills pull you back (or help you roll down). Off-road rides (good "crawl") grip and crawl up steep hills;
@@ -145,6 +161,7 @@ export function stepCar(b, inp, dt) {
   // each wheel reaches down to the ground
   if (M) M.wheels.forEach((w, i) => {
     if (b.air) { b.wheelDrop[i] = Math.max(b.wheelDrop[i] - dt * 2, -0.25); return; }
+    if (b.wa > 0.03 && w.front) { b.wheelDrop[i] = 0; return; } // (the front wheel is up in the air)
     const wx = b.x + fx * w.z + sx * w.x, wz = b.z + fz * w.z + sz * w.x;
     const plane = b.y + Math.tan(b.pitch) * w.z + Math.tan(b.roll) * w.x;
     b.wheelDrop[i] = clamp(groundAt(wx, wz) - plane, -0.25, 0.25);
@@ -154,8 +171,10 @@ export function stepCar(b, inp, dt) {
 // put the 3D model where the body is
 export function placeModel(b) {
   const M = b.model; if (!M) return;
-  M.root.position.set(b.x, b.y + 0.06, b.z);
-  M.root.rotation.set(-b.pitch, b.yaw, b.roll, "YXZ");
+  // a wheelie tips the whole ride back around its back wheel
+  const wa = b.wa || 0, rz = M.rearZ || 0;
+  M.root.position.set(b.x + Math.sin(b.yaw) * rz * (1 - Math.cos(wa)), b.y + 0.06 - rz * Math.sin(wa), b.z + Math.cos(b.yaw) * rz * (1 - Math.cos(wa)));
+  M.root.rotation.set(-b.pitch - wa, b.yaw, b.roll, "YXZ");
   M.lift.position.y = (M.liftY || 0) + b.susp;
   M.lift.rotation.set(-b.bodyPitch, 0, b.bodyRoll);
 }

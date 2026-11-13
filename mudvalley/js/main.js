@@ -7,7 +7,7 @@
 // crime.js (robber + cop careers, blasters, wanted stars, jail), fishing.js (rods, casting, reeling, fish).
 import * as THREE from "/create/vendor/three.module.js";
 import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./world.js";
-import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth } from "./terrain.js";
+import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
 import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf } from "./physics.js";
@@ -357,6 +357,8 @@ function actions() {
       }
     }
   }
+  // T on a dirt bike or a quad (when there's no trailer to hitch): wheelie!
+  if (c && !out.T && c.b.t.wheelie && !G.race) out.T = { text: c.b.wheelie ? "Stop the wheelie" : "Wheelie! (keep holding W)", fn: () => { G.wheelieTap = true; } };
   // E: load / unload trailers
   if (c && sizeOf(c) <= 2) {
     for (const tr of G.TRS.values()) {
@@ -423,8 +425,8 @@ export const GAME = {
     const v = vehicleById(id);
     if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Buy a bigger house to own more rides (or sell one).", "warn"); SFX.nope(); return false; }
     if (!spend(v.price)) { SFX.nope(); H.toast("Not enough money", "Do some jobs to earn " + money(v.price - S.money) + " more.", "warn"); return false; }
-    const s = newCar(id, uid()); s.yaw = 0;
-    const f = freeSpot(-36, -14, 0, 5); s.x = f.x; s.z = f.z;
+    const s = newCar(id, uid()); s.yaw = Math.PI;
+    const f = freeSpot(-36, 12, Math.PI, 5); s.x = f.x; s.z = f.z;
     S.cars.push(s); const c = spawnCar(s);
     if (mine()) exitCar();
     enterCar(c); SFX.buy(); H.bumpMoney(); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 60);
@@ -434,7 +436,7 @@ export const GAME = {
     const T = trailerById(type);
     if (!spend(T.price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
     const s = { uid: uid(), type, x: -60, z: -16, yaw: 0, hitched: null };
-    const f = freeSpot(-62, -20, 0, T.len * 2); s.x = f.x; s.z = f.z;
+    const f = freeSpot(-60, 14, 0, T.len * 2); s.x = f.x; s.z = f.z;
     S.trailers.push(s); spawnTrailer(s); SFX.buy(); H.bumpMoney();
     H.toast(T.name + " bought!", "It's parked by the dealership. Back your truck up to it and press T.", "good", 5000); save(); return true;
   },
@@ -497,7 +499,7 @@ export const GAME = {
     if (!id) return;
     const isT = !!trailerById(id);
     const m = isT ? { root: (() => { const g = new THREE.Group(); g.add(trailerModel(id)); return g; })() } : buildCar(newCar(id, 0));
-    m.root.position.set(-36, 1.45, -18); scene.add(m.root); G.preview = m;
+    m.root.position.set(-36, 1.45, 18); scene.add(m.root); G.preview = m;
   },
   wipe() { wipe(); location.reload(); },
   get crime() { return crime; }, get fishing() { return fishing; }, get mp() { return mp; },
@@ -522,7 +524,7 @@ function endRace() {
 }
 
 // ---------------------------------------------------------------- the main loop
-let acc = 0, last = performance.now(), saveT = 0, fpsT = 0, frames = 0, slowT = 0, miniT = 0;
+let acc = 0, last = performance.now(), saveT = 0, fpsT = 0, frames = 0, slowT = 0, miniT = 0, limT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   if (G.mode === "thumb") return;
@@ -562,6 +564,7 @@ function tick(dt) {
   // driving
   if (c) {
     const inp = blocked || raceLock ? { thr: 0, steer: 0, hand: true } : IN.drive();
+    inp.wheelie = G.wheelieTap; G.wheelieTap = false;
     if (G.mode === "side" && G.panel === "customs") { c.b.vx = c.b.vz = 0; }
     const b = stepCar(c.b, inp, dt);
     carEffects(c, b, inp, dt);
@@ -656,10 +659,23 @@ function carEffects(c, b, inp, dt) {
     else if ([SURF.DIRT, SURF.TRACK, SURF.SAND, SURF.ROCK].includes(b.surf)) { if (Math.random() < Math.min(0.5, sp / 40)) fx.dust(rx, b.y, rz, 1, 0xc8a878, 0.3 + sp / 90); c.s.dirt = Math.min(1, (c.s.dirt || 0) + dt * 0.01); }
     else if (b.slip > 5 && Math.random() < 0.5) fx.dust(rx, b.y, rz, 1, b.surf === SURF.GRASS ? 0x9ad07a : 0xdddddd, 0.45);
   }
+  // burnout: smoke (or dirt, or mud) pours off the spinning back wheel
+  if (b.burn) {
+    const rx = b.x - fx2 * (c.m.len * 0.5 + 0.6), rz = b.z - fz2 * (c.m.len * 0.5 + 0.6), dirty = [SURF.DIRT, SURF.TRACK, SURF.SAND, SURF.ROCK].includes(b.surf);
+    if (b.surf === SURF.MUD) { if (Math.random() < 0.8) fx.mud(rx, b.y, rz, -fx2, -fz2, 2, 1.1); c.s.dirt = Math.min(1, (c.s.dirt || 0) + dt * 0.12); }
+    else if (Math.random() < 0.3) fx.dust(rx, b.y, rz, 1, dirty ? 0xc8a878 : b.surf === SURF.GRASS ? 0x9ad07a : 0xe6e6e6, 0.5);
+  }
+  // wheelie: a timer while you're up, cash when you come down after a long one
+  if (b.wa > 0.3) { G.hint = "🏍️ WHEELIE! " + b.wheelieT.toFixed(1) + " s"; G.hintT = 0.2; }
+  if (b.wheelieDone) {
+    const t = Math.min(30, b.wheelieDone); b.wheelieDone = 0;
+    if (t > 2 && !G.race) { const cash = Math.round(t * 10); pay(cash); H.bumpMoney(); H.toast(t > 6 ? "MEGA WHEELIE!" : "WHEELIE!", t.toFixed(1) + " seconds on the back wheel! +" + money(cash), "cash", 2200); SFX.air(); }
+  }
   lookT += dt; if (lookT > 0.5) { lookT = 0; applyLook(c.m, c.s); }
   // engine sound: rpm climbs through 5 gears
   const top = Math.max(10, b.t.top), k = clamp(sp / top, 0, 1) * 5, gear = Math.min(4, Math.floor(k));
   const rpm = clamp((k - gear) * 0.75 + 0.25 + Math.abs(inp.thr) * 0.1, 0, 1);
+  if (b.burn) { engine(true, 0.86 + Math.random() * 0.1, 1, b.t.engine, b.surf === SURF.ROAD || b.surf === SURF.TOWN ? 9 : 0, b.surf !== SURF.ROAD && b.surf !== SURF.TOWN ? 0.3 : 0); return; } // (revving like crazy)
   engine(true, sp < 0.5 ? 0.1 + Math.abs(inp.thr) * 0.3 : rpm, Math.abs(inp.thr), b.t.engine, b.surf === SURF.ROAD || b.surf === SURF.TOWN ? b.slip : 0, !b.air && b.surf !== SURF.ROAD && b.surf !== SURF.TOWN ? Math.min(0.35, sp / 60) : 0);
 }
 function resetVehicle() {
@@ -706,7 +722,7 @@ function updateCamera(dt) {
   let px = tx - Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist, pz = tz - Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist, py = ty + Math.sin(cam.pitch) * dist + (inside() ? 0.5 : 1.2);
   if (inside() && G.mode !== "side") { [px, py, pz] = interiors.clampCam(px, py, pz); }
   // shop screens get their own camera
-  if (G.mode === "side" && G.panel === "dealer") { tx = -36; ty = 2.6; tz = -18; px = -36 + Math.sin(G.time * 0.25) * 2 + 8.5; py = 5.2; pz = -8.5; }
+  if (G.mode === "side" && G.panel === "dealer") { tx = -36; ty = 2.6; tz = 18; px = -36 + Math.sin(G.time * 0.25) * 2 + 8.5; py = 5.2; pz = 8.5; }
   if (G.mode === "side" && G.panel === "customs" && c) { const a = G.time * 0.3; tx = c.b.x; ty = c.b.y + 1.2; tz = c.b.z; px = tx + Math.sin(a) * (4 + c.m.len); pz = tz + Math.cos(a) * (4 + c.m.len); py = ty + 2.2; }
   if (G.mode === "side" && G.panel === "house" && G.houseView) {
     // look at the front of the house from a little to the side
@@ -733,7 +749,7 @@ function updateCamera(dt) {
 function draw(dt) {
   const c = mine();
   // models
-  for (const v of G.CARS.values()) if (!v.on) { placeModel(v.b); animateCar(v.m, { speed: v === c ? speedOf(v.b) : 0, reverse: v.b.vf < 0, steer: v.b.steer, wheelDrop: v.b.wheelDrop, boost: v.b.boost, siren: v.police && G.siren && v === c, t: G.time }, dt); }
+  for (const v of G.CARS.values()) if (!v.on) { placeModel(v.b); animateCar(v.m, { speed: v === c ? speedOf(v.b) : 0, burn: v === c && v.b.burn, reverse: v.b.vf < 0, steer: v.b.steer, wheelDrop: v.b.wheelDrop, boost: v.b.boost, siren: v.police && G.siren && v === c, t: G.time }, dt); }
   if (!c) {
     const w = G.me.w, p = G.me.p;
     p.root.position.set(w.x, w.y + (Math.abs(w.x) < 116 && Math.abs(w.z) < 106 ? 0.12 : 0), w.z); p.root.rotation.y = w.yaw;
@@ -770,6 +786,8 @@ function hudTick(dt) {
   const vehicles = [...G.CARS.values()].filter((v) => !v.on && v !== c).map((v) => ({ x: v.b.x, z: v.b.z }));
   const role = S.role === "cop" ? "👮 " + rankOf().name : S.role === "robber" ? "🦹 Robber" : "";
   const g = { friends: mp.dots(), pins: G.pins, crime: CH, reel: fishing.hud(), role, item: !c && S.equip !== "none" ? ITEM_NAME[S.equip] : "", cops: [...crime.cops, ...crime.patrols].map((k) => ({ x: k.b.x, z: k.b.z })), vehLabel: (role ? role + " · " : "") + (c ? vehicleById(c.s.id).name : "On foot"), speed: b ? speedOf(b) : 0, topSpeed: b ? b.t.top : 30, driving: !!c, reverse: b && b.vf < -0.5, job: j, race: G.race, target, px: me.x, pz: me.z, camYaw: cam.yaw, pyaw: me.yaw, vehicles, trailerDots: [...G.TRS.values()].map((t) => ({ x: t.x, z: t.z })) };
+  limT += dt; if (limT > 0.3) { limT = 0; G.limit = c && !inside() ? speedLimitAt(b.x, b.z) : 0; }
+  g.limit = G.limit;
   H.updateHud(g);
   miniT += dt; if (miniT > 0.08) { miniT = 0; H.drawMini(g); }
   if (G.mode === "map") H.drawBigMap(g);

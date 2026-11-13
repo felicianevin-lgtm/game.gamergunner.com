@@ -13,7 +13,7 @@
 import * as THREE from "/create/vendor/three.module.js";
 import { PLACES, ATMS, HOUSES } from "./layout.js";
 import { buildingById, INSIDE_SPOTS } from "./interiors.js";
-import { groundAt, hAt, roadPoints } from "./terrain.js";
+import { groundAt, hAt, roadPoints, roadNet, speedLimitAt } from "./terrain.js";
 import { buildCar, animateCar, vehicleById, tune } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, speedOf, makeWalker, stepWalker } from "./physics.js";
 import { makePerson, LOOKS } from "./character.js";
@@ -49,7 +49,7 @@ export const nextRank = (n = S.cop.arrests) => RANKS.find((k) => k.at > n) || nu
 export const lootCap = () => (S.gear.duffel ? 5000 : 1500);
 export const BOOK_PAY = 400;
 export const TASER = { range: 13, rate: 1.3, stun: 7 };
-export const SPEED_LIMIT = 22.4, TICKET = 150; // (m/s = 50 mph)
+export const TICKET = 150; // (speed limits: the signs on the roads, terrain.js speedLimitAt)
 
 // important spots
 const HEAD_START = 20; // seconds you get to run after a jail break, before the cops come after you
@@ -586,13 +586,17 @@ export class Crime {
       const d = Math.hypot(me.x - b.x, me.z - b.z); nearest = Math.min(nearest, d);
       if (c.leaving) {
         // drive away and disappear
-        this.aiDrive(c, b.x + Math.sin(b.yaw) * 50, b.z + Math.cos(b.yaw) * 50, dt);
+        if (c.r === undefined || !c.leftRoad) { this.attachRoad(c); c.leftRoad = true; }
+        this.patrolDrive(c, dt, 20);
         if (d > 160 || c.life > 40) { this.removeCop(c); continue; }
       } else {
         // can this cop see you?
         const can = !this.hidden && (d < 24 || (d < 150 && sees({ x: b.x, y: b.y, z: b.z }, me)));
         if (me.indoors) { this.aiDrive(c, me.x, me.z, dt, 9); continue; } // (park by the door and wait)
-        c.seen = can; if (can) { seen = true; c.lastX = me.x; c.lastZ = me.z; }
+        c.seen = can; if (can) { seen = true; c.lastX = me.x; c.lastZ = me.z; c.searching = false; }
+        else if (!c.searching && ((c.lastX !== undefined && Math.hypot(c.lastX - b.x, c.lastZ - b.z) < 16) || (c.stuckCount || 0) >= 2)) { c.searching = true; c.stuckCount = 0; this.attachRoad(c); }
+        if (c.searching) { this.patrolDrive(c, dt, 20); continue; } // (lost you: cruise the roads looking for you)
+        else if (c.top0 !== undefined && c.mode !== "pull") b.t.top = c.top0; // (full speed again when they spot you)
         const tx = can ? me.x + (me.vx || 0) * Math.min(1, d / 30) : c.lastX ?? me.x, tz = can ? me.z + (me.vz || 0) * Math.min(1, d / 30) : c.lastZ ?? me.z;
         this.aiDrive(c, tx, tz, dt, me.inCar ? 0 : 8);
         // too far behind (or stuck for good): a new cop car shows up closer
@@ -629,20 +633,57 @@ export class Crime {
   }
   // ------------------------------------------------------------ traffic cops: patrol the roads, pull you over for speeding
   spawnPatrol(me) {
-    const pts = roadPoints().filter((p) => p.road), cand = pts.filter((p) => { const d = Math.hypot(p.x - me.x, p.z - me.z); return d > 140 && d < 260; });
+    const { roads } = roadNet(), cand = [];
+    roads.forEach((R, r) => { for (let i = 2; i < R.n - 2; i += 4) { const d = Math.hypot(R.x[i] - me.x, R.z[i] - me.z); if (d > 140 && d < 260 && !R.bridge[i]) cand.push([r, i]); } });
     if (!cand.length) return;
-    const i = Math.floor(Math.random() * cand.length), p = cand[i], v = vehicleById("cruiser");
+    const [r, i] = cand[Math.floor(Math.random() * cand.length)], R = roads[r], dir = Math.random() < 0.5 ? 1 : -1, v = vehicleById("cruiser");
+    const p = { x: R.x[i], z: R.z[i], yaw: Math.atan2(R.x[i + dir] - R.x[i], R.z[i + dir] - R.z[i]) };
     const car = { id: "cruiser", paint: v.color, rims: "chrome", tires: "allterrain", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: p.x, z: p.z, yaw: p.yaw };
     const m = buildCar(car, { driver: LOOKS.cop }); this.scene.add(m.root);
     const b = makeBody(car, m), t = tune(car); b.t = { ...t, off: { dirt: 0.9, grass: 0.85, mud: 0.7 }, crawl: 0.8 };
     const stars = makeStars(1.4); stars.position.y = 2.6; m.root.add(stars);
-    const c = { m, b, stars, stunT: 0, stuckT: 0, backT: 0, shootT: 2, seen: true, leaving: false, life: 0, mode: "patrol", pi: roadPoints().indexOf(p), dir: Math.random() < 0.5 ? 1 : -1, goal: null };
-    this.nextPatrolGoal(c); this.patrols.push(c);
+    const c = { m, b, stars, stunT: 0, stuckT: 0, backT: 0, shootT: 2, seen: true, leaving: false, life: 0, mode: "patrol", r, i, dir, inJ: true };
+    this.patrols.push(c);
   }
-  nextPatrolGoal(c) {
-    const pts = roadPoints(); let j = c.pi + c.dir * 10;
-    if (j < 0 || j >= pts.length || Math.hypot(pts[j].x - pts[c.pi].x, pts[j].z - pts[c.pi].z) > 60) { c.dir = -c.dir; j = c.pi + c.dir * 10; if (j < 0 || j >= pts.length) j = c.pi; }
-    c.pi = j; c.goal = pts[j];
+  // put a computer car on the nearest paved road, heading the way it's already pointing
+  attachRoad(c) {
+    const { roads } = roadNet(), b = c.b; let best = null, bd = 1e18;
+    roads.forEach((R, r) => { for (let i = 0; i < R.n; i++) { const d = (R.x[i] - b.x) ** 2 + (R.z[i] - b.z) ** 2; if (d < bd) { bd = d; best = [r, i]; } } });
+    const [r, i] = best, R = roads[r], j = Math.min(R.n - 1, i + 1), k = Math.max(0, j - 1);
+    const dot = (R.x[j] - R.x[k]) * Math.sin(b.yaw) + (R.z[j] - R.z[k]) * Math.cos(b.yaw);
+    c.r = r; c.i = i; c.dir = dot >= 0 ? 1 : -1; c.inJ = true;
+  }
+  // drive along the roads like a real driver: stay on your side, slow down for corners, sometimes turn at a crossing
+  patrolDrive(c, dt, hwy = 20) {
+    const { roads, links } = roadNet(), b = c.b, hx = Math.sin(b.yaw), hz = Math.cos(b.yaw);
+    for (let guard = 0; guard < 60; guard++) {
+      const R = roads[c.r], k = c.i;
+      if (Math.hypot(R.x[k] - b.x, R.z[k] - b.z) > 12 && ((R.x[k] - b.x) * hx + (R.z[k] - b.z) * hz > 0 || guard > 0)) break; // (the spot to aim for is far enough ahead)
+      const L = links[c.r][k], end = k + c.dir < 0 || k + c.dir >= R.n;
+      // a crossing: maybe turn (decided once per crossing). At the end of a road you always turn (or U-turn if it's a dead end).
+      if (L.length && (end || !c.inJ)) {
+        c.inJ = true;
+        if (end || Math.random() < 0.45) {
+          const opts = [];
+          for (const [nr, nj] of L) for (const nd of [1, -1]) {
+            const N = roads[nr], a = nj + nd * 3; if (a < 0 || a >= N.n) continue;
+            const dx = N.x[a] - N.x[nj], dz = N.z[a] - N.z[nj], dl = Math.hypot(dx, dz) || 1;
+            if ((dx * hx + dz * hz) / dl > -0.4) opts.push([nr, nj, nd]); // (no turning straight back)
+          }
+          if (opts.length) { const [nr, nj, nd] = opts[Math.floor(Math.random() * opts.length)]; c.r = nr; c.i = nj; c.dir = nd; continue; }
+        }
+      } else if (!L.length) c.inJ = false;
+      if (end) { c.dir = -c.dir; c.inJ = false; } // (a dead end: turn around)
+      else c.i = k + c.dir;
+    }
+    const R = roads[c.r], k = c.i, k2 = Math.max(0, Math.min(R.n - 1, k + c.dir)), k0 = Math.max(0, Math.min(R.n - 1, k - c.dir));
+    let dx = R.x[k2] - R.x[k0], dz = R.z[k2] - R.z[k0]; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+    const lane = R.w * 0.24, tx = R.x[k] - dz * lane, tz = R.z[k] + dx * lane; // (the right-hand lane)
+    // corners: slow down when the road ahead bends
+    const turn = Math.abs(wrap(Math.atan2(tx - b.x, tz - b.z) - b.yaw));
+    if (c.top0 === undefined) c.top0 = b.t.top;
+    b.t.top = Math.min(c.top0, R.town ? 13 : hwy, turn > 0.7 ? 7 : turn > 0.35 ? 10 : 99);
+    this.aiDrive(c, tx, tz, dt);
   }
   removePatrol(c) { this.scene.remove(c.m.root); this.patrols.splice(this.patrols.indexOf(c), 1); if (this.pull && this.pull.c === c) this.pull = null; }
   updatePatrols(dt, me) {
@@ -657,14 +698,13 @@ export class Crime {
       if (d > 420 || (off && d > 80)) { this.removePatrol(c); continue; }
       if (c.stunT > 0) c.stunT -= dt; c.stars.visible = c.stunT > 0; c.stars.rotation.y += dt * 4;
       if (c.mode === "patrol") {
-        b.t.top = Math.min(b.t.top, 17);
-        if (!c.goal || Math.hypot(c.goal.x - b.x, c.goal.z - b.z) < 14) this.nextPatrolGoal(c);
-        this.aiDrive(c, c.goal.x, c.goal.z, dt);
+        this.patrolDrive(c, dt, 21);
         if ((c.stuckCount || 0) > 4) { this.removePatrol(c); continue; }
         // speeding past a cop?
-        if (!off && !this.pull && this.ticketCool <= 0 && me.inCar && this.api.onRoad() && me.speed > SPEED_LIMIT && d < 70 && sees({ x: b.x, y: b.y, z: b.z }, me)) {
+        const lim = !off && !this.pull && this.ticketCool <= 0 && me.inCar && d < 70 ? speedLimitAt(me.x, me.z) : 0;
+        if (lim && this.api.onRoad() && me.speed * 2.237 > lim + 3 && sees({ x: b.x, y: b.y, z: b.z }, me)) {
           c.mode = "pull"; b.t.top = 40; this.pull = { c, t: 0, stopT: 0 }; SFX.radio(); SFX.alarm();
-          this.api.toast("🚨 PULL OVER!", "You were going " + Math.round(me.speed * 2.237) + " mph (limit 50). Stop your car and wait, or you’ll be WANTED!", "warn", 5000);
+          this.api.toast("🚨 PULL OVER!", "You were going " + Math.round(me.speed * 2.237) + " mph in a " + lim + " zone. Stop your car and wait, or you’ll be WANTED!", "warn", 5000);
         }
       } else if (c.mode === "pull") {
         const P = this.pull; P.t += dt;
@@ -673,10 +713,10 @@ export class Crime {
         if (me.speed < 1.5 && d < 18) P.stopT += dt; else P.stopT = Math.max(0, P.stopT - dt);
         if (P.stopT > 1.8) {
           const f = Math.min(S.money, TICKET); S.money -= f; S.stats.tickets = (S.stats.tickets || 0) + 1; this.api.bumpMoney(); SFX.nope();
-          this.api.toast("🎫 Speeding ticket: -" + money(f), "“Slow down out there! Speed limit is 50 on the roads.”", "warn", 4200);
-          c.mode = "patrol"; this.pull = null; this.ticketCool = 30; this.nextPatrolGoal(c); save();
+          this.api.toast("🎫 Speeding ticket: -" + money(f), "“Slow down! Watch the speed limit signs: 35 in town, 55 on the highway.”", "warn", 4200);
+          c.mode = "patrol"; this.pull = null; this.ticketCool = 30; this.attachRoad(c); save();
         } else if (P.t > 20 || d > 150) {
-          this.pull = null; c.mode = "patrol"; this.api.toast("You ran from a traffic stop!", "Now the cops are after you for real!", "warn", 3600); this.setWanted(Math.max(1, S.wanted));
+          this.pull = null; c.mode = "patrol"; this.attachRoad(c); this.api.toast("You ran from a traffic stop!", "Now the cops are after you for real!", "warn", 3600); this.setWanted(Math.max(1, S.wanted));
         }
       }
     }

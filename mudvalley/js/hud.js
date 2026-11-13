@@ -41,6 +41,9 @@ export function updateHud(g) {
   $("spdArc").style.setProperty("--p", Math.min(1, g.speed / Math.max(20, g.topSpeed || 30)).toFixed(3));
   setT("gearN", g.driving ? (g.speed < 0.5 ? "N" : g.reverse ? "R" : "D" + (1 + Math.min(4, Math.floor((g.speed / Math.max(10, g.topSpeed)) * 5)))) : "");
   $("speedo").style.opacity = g.driving ? 1 : 0.35;
+  const L = $("spdLim"), lim = g.driving ? g.limit || 0 : 0;
+  if (L.dataset.v !== String(lim)) { L.dataset.v = String(lim); L.innerHTML = lim ? "SPEED<br>LIMIT<b>" + lim + "</b>" : ""; L.classList.toggle("on", !!lim); }
+  L.classList.toggle("over", !!lim && mph > lim + 3);
   // the job box
   const j = g.job;
   $("jobBox").classList.toggle("hidden", !j);

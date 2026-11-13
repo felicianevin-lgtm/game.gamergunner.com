@@ -75,6 +75,10 @@ b, .rus { font-family: "Russo One", sans-serif; font-weight: 400; }
 #spdIn { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 #spdN { font-size: 38px; line-height: 1; }
 #spdIn small { font-weight: 800; font-size: 11px; letter-spacing: 0.15em; color: #ffd23a; }
+#spdLim { position: absolute; left: -50px; bottom: 4px; width: 42px; height: 54px; display: none; flex-direction: column; align-items: center; justify-content: center; background: #fff; color: #111; border: 2px solid #111; border-radius: 6px; font-style: normal; font-size: 8px; font-weight: 900; line-height: 1.1; text-align: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
+#spdLim b { font-size: 19px; line-height: 1; }
+#spdLim.on { display: flex; }
+#spdLim.over { box-shadow: 0 0 0 3px #ff3a3a, 0 2px 8px rgba(0, 0, 0, 0.35); color: #c01010; }
 #gearN { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 11px; font-weight: 800; color: #cfc; }
 /* "what you can press" prompts: small pills in the bottom-right corner (above the speedometer / the touch buttons), out of your way */
 #hints { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 142px); display: flex; flex-direction: column; gap: 5px; align-items: flex-end; max-width: min(360px, 46vw); }

@@ -66,7 +66,8 @@ export function drive() {
   if (isHeld("KeyW") || isHeld("ArrowUp")) thr += 1;
   if (isHeld("KeyS") || isHeld("ArrowDown")) thr -= 1;
   if (stick.id !== null && !blockKeys()) { steer += stick.x * 1.15; thr += -stick.y * 1.2; }
-  return { steer: Math.max(-1, Math.min(1, steer)), thr: Math.max(-1, Math.min(1, thr)), hand: isHeld("Space") };
+  const burn = (isHeld("KeyW") || isHeld("ArrowUp")) && (isHeld("KeyS") || isHeld("ArrowDown")); // (gas + brake together = burnout)
+  return { steer: Math.max(-1, Math.min(1, steer)), thr: Math.max(-1, Math.min(1, thr)), hand: isHeld("Space"), burn };
 }
 // walking: x = right, y = forward
 export function walk() {
