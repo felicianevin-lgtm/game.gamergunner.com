@@ -53,13 +53,20 @@ export function buildTrailer(type, color = 0x1a1a1e) {
     bx(deck, 2.7, 0.2, zf - zb, 0, y0 - 0.1, (zf + zb) / 2, mat.steel); bx(deck, 2.5, 0.04, zf - zb - 0.1, 0, y0 + 0.02, (zf + zb) / 2, mat.deck);
     for (const s of [-1, 1]) { bx(deck, 0.08, H, zf - zb, s * 1.32, y0 + H / 2, (zf + zb) / 2, body); bx(deck, 0.1, 0.12, zf - zb, s * 1.36, y0 + 0.3, (zf + zb) / 2, mat.steel); }
     bx(deck, 2.72, 0.1, zf - zb + 0.1, 0, y0 + H + 0.05, (zf + zb) / 2, body);
-    for (const s of [-1, 1]) { const n = bx(deck, 0.08, H, 1.0, s * 0.95, y0 + H / 2, zf + 0.35, body); n.rotation.y = s * 0.75; } // the V nose
-    bx(deck, 1.3, H, 0.08, 0, y0 + H / 2, zf + 0.7, body); bx(deck, 2.72, 0.1, 1.0, 0, y0 + H + 0.05, zf + 0.35, body);
+    // the V nose: one solid wedge (closes the whole front wall, no gaps)
+    const ns = new THREE.Shape(); ns.moveTo(-1.36, 0); ns.lineTo(1.36, 0); ns.lineTo(0.65, -0.75); ns.lineTo(-0.65, -0.75); ns.closePath();
+    const nose = new THREE.Mesh(new THREE.ExtrudeGeometry(ns, { depth: H + 0.1, bevelEnabled: false }), body);
+    nose.rotation.x = -Math.PI / 2; nose.position.set(0, y0, zf - 0.02); nose.castShadow = nose.receiveShadow = true; deck.add(nose);
+    bx(deck, 2.7, 0.2, 0.75, 0, y0 - 0.1, zf + 0.3, mat.steel); // the frame under the nose
     for (const s of [-1, 1]) { bx(deck, 0.14, 0.14, 0.14, s * 1.36, y0 + H - 0.1, zb + 0.1, mat.light); bx(deck, 0.14, 0.14, 0.14, s * 1.36, y0 + H - 0.1, zf - 0.1, mat.yellow); bx(deck, 0.2, H + 0.1, 0.12, s * 1.3, y0 + H / 2, zb, mat.steel); }
     bx(deck, 2.72, 0.16, 0.12, 0, y0 + H, zb, mat.steel);
     for (const s of [-1, 1]) bx(deck, 0.7, 0.5, 2.6, s * 1.55, 0.95, 0, mat.steel); // fenders
-    const tongue = bx(deck, 0.24, 0.24, 3.4, 0, 0.82, zf + 2.4, mat.steel); tongue.rotation.x = 0.02;
-    bx(deck, 0.3, 0.2, 0.4, 0, 0.82, T.len - 0.05, mat.steel);
+    // the tongue runs from under the nose all the way to the coupler (an A-frame + a center bar)
+    const tz0 = zf + 0.3, tz1 = T.len - 0.2;
+    bx(deck, 0.24, 0.24, tz1 - tz0, 0, 0.82, (tz0 + tz1) / 2, mat.steel);
+    for (const s of [-1, 1]) { const a = bx(deck, 0.16, 0.16, Math.hypot(tz1 - tz0, 1.1), s * 0.55, 0.8, (tz0 + tz1) / 2, mat.steel); a.rotation.y = -s * Math.atan2(1.1, tz1 - tz0); }
+    bx(deck, 0.32, 0.22, 0.5, 0, 0.82, T.len - 0.1, mat.steel); // coupler
+    bx(deck, 0.1, 0.6, 0.1, 0.3, 0.45, zf + 1.6, mat.steel); // jack stand
     // the back door (hinged at the bottom)
     door = new THREE.Group(); door.position.set(0, y0, zb - 0.06); deck.add(door);
     bx(door, 2.5, H - 0.05, 0.08, 0, (H - 0.05) / 2, 0, body); for (let y = 0.4; y < H; y += 0.6) bx(door, 2.3, 0.05, 0.1, 0, y, -0.02, mat.grate);

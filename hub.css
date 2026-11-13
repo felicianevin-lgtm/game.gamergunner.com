@@ -281,3 +281,12 @@ h2.row-title small { font: 400 14px "Inter", sans-serif; color: var(--dim); }
 
 /* 🛠 Dev menu button (only on @GamerGunner's profile) */
 .btn.dev-btn { background: linear-gradient(180deg, #ffc531, #d18a00); color: #1a1200; box-shadow: none; }
+
+/* a game playing over the whole screen */
+.fullplay { position: fixed; inset: 0; z-index: 1000; background: #000; }
+.fullplay iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+.fullplay .fp-bar { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 2; }
+.fullplay.fs .fp-bar { display: none; }
+.fullplay .fp-bar button { font: 600 14px Inter, sans-serif; color: #fff; background: rgba(10,14,20,.82); border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+.fullplay .fp-bar button:hover { background: rgba(40,50,64,.95); }
+body.playing { overflow: hidden; }

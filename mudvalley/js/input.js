@@ -61,21 +61,23 @@ export function clearTaps() { tapped.clear(); }
 // steering (-1 left .. 1 right) and gas (-1 brake .. 1 gas), from keys or the stick
 export function drive() {
   let steer = 0, thr = 0;
-  if (isHeld("KeyA") || isHeld("ArrowLeft")) steer -= 1;
-  if (isHeld("KeyD") || isHeld("ArrowRight")) steer += 1;
-  if (isHeld("KeyW") || isHeld("ArrowUp")) thr += 1;
-  if (isHeld("KeyS") || isHeld("ArrowDown")) thr -= 1;
+  if (isHeld("KeyA")) steer -= 1;
+  if (isHeld("KeyD")) steer += 1;
+  if (isHeld("KeyW")) thr += 1;
+  if (isHeld("KeyS")) thr -= 1;
   if (stick.id !== null && !blockKeys()) { steer += stick.x * 1.15; thr += -stick.y * 1.2; }
-  const burn = (isHeld("KeyW") || isHeld("ArrowUp")) && (isHeld("KeyS") || isHeld("ArrowDown")); // (gas + brake together = burnout)
+  const burn = isHeld("KeyW") && isHeld("KeyS"); // (gas + brake together = burnout)
   return { steer: Math.max(-1, Math.min(1, steer)), thr: Math.max(-1, Math.min(1, thr)), hand: isHeld("Space"), burn };
 }
+// the arrow keys turn the camera: x = left/right, y = up/down
+export function arrowLook() { return { x: (isHeld("ArrowRight") ? 1 : 0) - (isHeld("ArrowLeft") ? 1 : 0), y: (isHeld("ArrowUp") ? 1 : 0) - (isHeld("ArrowDown") ? 1 : 0) }; }
 // walking: x = right, y = forward
 export function walk() {
   let x = 0, y = 0;
-  if (isHeld("KeyA") || isHeld("ArrowLeft")) x -= 1;
-  if (isHeld("KeyD") || isHeld("ArrowRight")) x += 1;
-  if (isHeld("KeyW") || isHeld("ArrowUp")) y += 1;
-  if (isHeld("KeyS") || isHeld("ArrowDown")) y -= 1;
+  if (isHeld("KeyA")) x -= 1;
+  if (isHeld("KeyD")) x += 1;
+  if (isHeld("KeyW")) y += 1;
+  if (isHeld("KeyS")) y -= 1;
   if (stick.id !== null && !blockKeys()) { x += stick.x; y -= stick.y; }
   return { x, y, run: isHeld("ShiftLeft") || isHeld("ShiftRight") || (stick.id !== null && Math.hypot(stick.x, stick.y) > 0.92) };
 }

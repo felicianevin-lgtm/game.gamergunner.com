@@ -390,7 +390,7 @@ function goHome() {
 }
 function helpHtml() {
   return `<div class="keys" style="margin-top:10px">
-    <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Drive / walk (arrow keys work too). <b>S</b> brakes, then backs up.</span>
+    <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Drive / walk. The <b>arrow keys</b> (or dragging the mouse) turn the camera. <b>S</b> brakes, then backs up.</span>
     <span><kbd>Space</kbd></span><span>Handbrake (drift!) · Jump when walking</span>
     <span><kbd>E</kbd></span><span>Use things: dealership, shops, garage, job board, races, load a trailer</span>
     <span><kbd>F</kbd></span><span>Get in / out of a vehicle</span>

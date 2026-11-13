@@ -489,8 +489,34 @@
 
   function play(g) {
     api("/hub/play", { g: g.id }).catch(function () {});
-    setTimeout(function () { location.href = withRelay(g.url); }, 120); // (give the play count a moment to go out)
+    openFull(withRelay(g.url));
   }
+  // the game opens over the whole screen (full screen), right on top of GunnerVerse. Esc leaves full screen and shows a
+  // little bar to go back or go full screen again. If the game's own "back to GunnerVerse" link is used, it just closes.
+  var fullBox = null;
+  function openFull(url) {
+    closeFull();
+    var box = document.createElement("div"); box.className = "fullplay"; fullBox = box;
+    box.innerHTML = '<iframe allow="fullscreen; autoplay; gamepad; clipboard-write" allowfullscreen title="Game"></iframe>' +
+      '<div class="fp-bar"><button type="button" class="fp-back">✕ Back to GunnerVerse</button><button type="button" class="fp-fs">⛶ Full screen</button></div>';
+    document.body.appendChild(box); document.body.classList.add("playing");
+    var fr = box.querySelector("iframe");
+    fr.addEventListener("load", function () {
+      try { var p = fr.contentWindow.location; if (p.pathname === location.pathname && fr.contentWindow.document.querySelector("header.top")) { closeFull(); var h = p.hash; if (h && h !== location.hash) location.hash = h; return; } } catch (x) {}
+      fr.focus();
+    });
+    fr.src = url;
+    box.querySelector(".fp-back").onclick = closeFull;
+    box.querySelector(".fp-fs").onclick = function () { goFull(box); fr.focus(); };
+    goFull(box);
+  }
+  function goFull(el) { try { var r = el.requestFullscreen ? el.requestFullscreen({ navigationUI: "hide" }) : el.webkitRequestFullscreen && el.webkitRequestFullscreen(); if (r && r.catch) r.catch(function () {}); } catch (x) {} }
+  function closeFull() {
+    if (!fullBox) return;
+    try { if (document.fullscreenElement) document.exitFullscreen().catch(function () {}); } catch (x) {}
+    fullBox.remove(); fullBox = null; document.body.classList.remove("playing");
+  }
+  document.addEventListener("fullscreenchange", function () { if (fullBox) fullBox.classList.toggle("fs", document.fullscreenElement === fullBox); });
   function like(g, btn) {
     if (!me) { openSignup("Make a username so you can like games."); return; }
     if (banned) return;

@@ -735,6 +735,8 @@ function updateCamera(dt) {
   // drag to look around; while driving it swings back behind you after a moment
   cam.yaw -= IN.look.dx * 0.006; cam.pitch = clamp(cam.pitch + IN.look.dy * 0.004, -0.05, 1.25);
   IN.look.dx = IN.look.dy = 0;
+  const ak = IN.arrowLook(); // arrow keys turn the camera too
+  if (ak.x || ak.y) { cam.yaw -= ak.x * dt * 2.4; cam.pitch = clamp(cam.pitch - ak.y * dt * 1.2, -0.05, 1.25); IN.look.lastT = performance.now(); }
   if (IN.look.zoom) { cam.zoom = clamp(cam.zoom * (IN.look.zoom > 0 ? 1.12 : 0.89), 0.55, 2); IN.look.zoom = 0; }
   const dragging = performance.now() - IN.look.lastT < 1300;
   if (c && !dragging && G.mode !== "side") {
