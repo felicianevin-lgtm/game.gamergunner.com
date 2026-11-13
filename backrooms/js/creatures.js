@@ -79,7 +79,9 @@ function crawler() {
   const jm = new THREE.Mesh(new THREE.SphereGeometry(0.38, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), dark); jm.scale.set(1.05, 0.4, 1.2); jm.position.set(0, 0, 0.12); jaw.add(jm);
   for (let k = 0; k < 9; k++) { const tt = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.1, 5), bone); const a = (k - 4) * 0.3; tt.position.set(Math.sin(a) * 0.33, 0.03, 0.12 + Math.cos(a) * 0.3); jaw.add(tt); }
   let t = 0, open = 0, lift = 0;
-  return { g, height: 1.0, animate(dt, sp, chasing) {
+  return { g, height: 1.0,
+  face(v) { return head.localToWorld(v.set(0, 0.1, 0.5)); }, // (for its jump scare)
+  animate(dt, sp, chasing) {
     if (!(sp >= 0)) sp = 0;
     t += dt * (3 + sp * 1.6);
     const w = Math.min(1, sp / 3 + 0.2);
@@ -165,6 +167,7 @@ function fromModel(kind, scene, height) {
     lean = 0.1; tilt = 0.38;
     holder.scale.set(0.85, 1, 0.85);
     raw.traverse((o) => { if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.color.setHex(0xb59e72); } });
+    eyes = new THREE.Group(); g.add(eyes); // (where its face is, for its jump scare)
   }
   const creepy = kind === "clark" || kind === "partygoer";
   const tmp = V(), tmp2 = V();

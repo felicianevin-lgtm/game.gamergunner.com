@@ -118,6 +118,11 @@ const SFX = {
   stretch: () => { tone(85, 0.55, "sawtooth", 170, 0.45); noise(0.5, 700, 0.3, "bandpass"); },
   rip: () => { noise(0.35, 1300, 1.1, "bandpass"); noise(0.25, 300, 0.9); tone(180, 0.3, "sawtooth", 60, 0.5); for (let i = 0; i < 5; i++) noise(0.03, 4000, 0.6, "highpass", 0.05 + i * 0.04); },
   splat: () => { noise(0.25, 650, 1.1); tone(150, 0.2, "sine", 50, 1.1); },
+  // jump scares: a horrible screech, a party horn, the lights going out, a slow deep giggle
+  screech: () => { tone(1800, 0.9, "sawtooth", 600, 0.9); tone(2300, 0.9, "square", 900, 0.6, 0.03); tone(1500, 0.7, "sawtooth", 2600, 0.5, 0.1); noise(1.0, 3500, 1.3, "highpass"); noise(0.6, 900, 0.8, "bandpass"); },
+  horn: () => { tone(330, 0.5, "square", 360, 0.9); tone(332, 0.5, "sawtooth", 362, 0.5); },
+  lightsOut: () => { noise(0.05, 3000, 0.9, "highpass"); tone(120, 0.4, "sawtooth", 40, 0.5, 0.02); },
+  giggleLow: () => [440, 495, 440, 523, 440].forEach((f, i) => tone(f / 2.2, 0.16, "square", f / 2.6, 0.35, i * 0.13)),
   doom: () => { tone(49, 2.5, "sawtooth", 41, 0.9); tone(52, 2.5, "sawtooth", 43, 0.7); noise(2.2, 160, 0.5); },
 };
 function growl(len, vol) {
@@ -454,6 +459,7 @@ function caught(m) {
   if (document.pointerLockElement) document.exitPointerLock();
   if (m.kind === "clark" && m.c.pose) return clarkCutscene(m);
   if (m.kind === "bacteria" && m.c.pose) return bacteriaCutscene(m);
+  if ((m.kind === "crawler" || m.kind === "partygoer") && m.c.face) return jumpScare(m);
   SFX.scream();
   $("jump").classList.remove("on"); void $("jump").offsetWidth; $("jump").classList.add("on");
   // turn to face it
@@ -490,6 +496,7 @@ function clarkCutscene(m) {
 }
 function updateCut(dt) {
   if (cut.kind === "bac") return updateBacCut(dt);
+  if (cut.kind === "jump") return updateJump(dt);
   const c = cut, m = c.m, t = (c.t += dt), H = c.H;
   const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)), seg = (a, b) => ease((t - a) / (b - a));
   const at = (k, when, fn) => { if (t >= when && !c.done[k]) { c.done[k] = 1; fn(); } };
@@ -669,7 +676,7 @@ function flyGore(dt) {
     else if (inside(p)) { p.addScaledVector(b.v, -dt); b.v.x *= -0.2; b.v.z *= -0.2; }
   }
   for (const a of [cut.armL, cut.armR]) {
-    if (!a.free || a.still) continue;
+    if (!a || !a.free || a.still) continue;
     const p = a.g.position, before = p.clone();
     a.v.y -= 12 * dt; p.addScaledVector(a.v, dt);
     a.g.rotation.x += a.spin.x * dt; a.g.rotation.y += a.spin.y * dt; a.g.rotation.z += a.spin.z * dt;
@@ -689,6 +696,78 @@ function flyGore(dt) {
     }
   }
 }
+
+// ---------------------------------------------------------------- JUMP SCARES: the Crawler and the Partygoers
+// The Crawler: the water EXPLODES in front of you and it rears up right into your face, jaw wide open, screeching,
+// then lunges. A Partygoer: the lights go out... a giggle in the dark... the lights flicker back on and it is bent
+// down RIGHT in your face, twitching, with a party horn and a scream, then it lunges. Both end in the CAUGHT screen.
+const CONFETTI = [0xff3b6b, 0xffd531, 0x3bd1ff, 0x7cff5a, 0xc86bff].map((c) => new THREE.MeshBasicMaterial({ color: c }));
+const SPRAY = new THREE.MeshBasicMaterial({ color: 0xd8f6ff, transparent: true, opacity: 0.85 });
+function burst(at, n, push, mats, size = 0.07) {
+  for (let i = 0; i < n; i++) { const s = size * (0.5 + Math.random()), m = cube(s, s, s, mats[i % mats.length], at.x, at.y, at.z, gore); cut.bits.push({ m, v: V((Math.random() - 0.5) * 4, Math.random() * 4, (Math.random() - 0.5) * 4).add(push || V()), rest: false }); }
+}
+function jumpScare(m) {
+  clearGore(); gore = new THREE.Group(); scene.add(gore);
+  const dir = V(P.pos.x - m.pos.x, 0, P.pos.z - m.pos.z); if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1); dir.normalize();
+  const eye = camera.position.clone(), fwd = dir.clone().negate();
+  m.yaw = Math.atan2(dir.x, dir.z); m.c.g.rotation.order = "YXZ";
+  cut = { kind: "jump", who: m.kind, m, t: 0, dir, fwd, eye, done: {}, bits: [], look: eye.clone().addScaledVector(fwd, 2).setY(m.kind === "crawler" ? L.water[0].top : eye.y) };
+  if (m.kind === "crawler") { // the water explodes
+    const at = eye.clone().addScaledVector(fwd, 1.0).setY(L.water[0].top);
+    burst(at, 40, V(0, 3.5, 0).addScaledVector(dir, 1.5), [SPRAY], 0.09);
+    SFX.splash(); SFX.splash(); SFX.screech(); flash(0.25);
+  } else { // lights out
+    overlay("black").classList.add("on"); stopHum(); SFX.lightsOut();
+  }
+}
+function updateJump(dt) {
+  const c = cut, m = c.m, t = (c.t += dt), crawl = c.who === "crawler";
+  const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)), seg = (a, b) => ease((t - a) / (b - a));
+  const at = (k, when, fn) => { if (t >= when && !c.done[k]) { c.done[k] = 1; fn(); } };
+  // where its face goes (in front of your eyes) and how far it leans/rears
+  let dist, rise = 0, tilt, shake = 0.02;
+  const LUNGE = crawl ? 1.15 : 1.75;
+  if (crawl) {
+    rise = -0.9 * (1 - seg(0, 0.28)); // (it comes up out of the water)
+    dist = 1.0 - 0.35 * seg(0.3, 1.1) - 0.75 * seg(LUNGE - 0.08, LUNGE + 0.04);
+    tilt = 0.4 * seg(0, 0.3); // (its head is already lifted: this points its face right at you)
+    shake = t < 0.3 ? 0.07 : 0.035 + 0.03 * Math.sin(t * 30);
+  } else {
+    dist = 0.62 - 0.22 * seg(0.6, 1.6) - 0.6 * seg(LUNGE - 0.08, LUNGE + 0.04);
+    tilt = 0.42; // (bent down to your face)
+    shake = t < 0.55 ? 0.004 : 0.05;
+  }
+  const target = c.eye.clone().addScaledVector(c.fwd, dist).add(V(0, rise + Math.sin(t * 7) * 0.03, 0));
+  // pose it: face you, lean/rear, then slide the whole thing so its face is exactly at the target
+  m.c.animate(dt, crawl ? 7 : 0.5, true);
+  if (!crawl && Math.random() < dt * 9) m.c.animate(0.4, 0, true); // (extra twitchy)
+  m.c.g.rotation.set(tilt, m.yaw, 0);
+  m.c.g.updateMatrixWorld(true);
+  const f = m.c.face(V());
+  if (f) { m.c.g.position.add(target.clone().sub(f)); m.pos.copy(m.c.g.position); }
+  // the camera: it can't look away
+  c.look.lerp(target, Math.min(1, dt * (crawl ? 10 : 30)));
+  const cam = c.eye.clone(); cam.x += (Math.random() - 0.5) * shake; cam.y += (Math.random() - 0.5) * shake; cam.z += (Math.random() - 0.5) * shake;
+  camera.position.copy(cam); camera.up.set(0, 1, 0); camera.lookAt(c.look); camera.rotateZ((Math.random() - 0.5) * shake * 1.5);
+  lamp.position.set(cam.x, cam.y + 0.6, cam.z);
+  if (crawl) {
+    at("roar", 0.3, () => { SFX.screech(); flash(0.4); jumpFlash(); });
+    at("roar2", 0.75, () => SFX.screech());
+  } else {
+    at("giggle", 0.12, () => SFX.giggleLow());
+    at("on", 0.55, () => { overlay("black").classList.remove("on"); SFX.horn(); SFX.screech(); flash(0.5); jumpFlash(); burst(target.clone().addScaledVector(c.fwd, 0.25).add(V(0, 0.35, 0)), 45, V(0, 2.5, 0).addScaledVector(c.dir, 2), CONFETTI, 0.05); });
+    at("flick1", 0.72, () => overlay("black").classList.add("on"));
+    at("flick2", 0.78, () => overlay("black").classList.remove("on"));
+    at("flick3", 1.2, () => overlay("black").classList.add("on"));
+    at("flick4", 1.25, () => overlay("black").classList.remove("on"));
+    at("giggle2", 1.0, () => SFX.giggle());
+  }
+  at("chomp", LUNGE, () => { SFX.bite(); SFX.screech(); flash(1); overlay("black").classList.add("on"); });
+  at("doom", LUNGE + 0.4, () => SFX.doom());
+  at("over", LUNGE + 0.9, () => { $("deadBy").textContent = crawl ? "The Crawler got you!" : "A Partygoer got you!  =)"; $("dead").classList.remove("hidden"); });
+  flyGore(dt);
+}
+function jumpFlash() { const j = $("jump"); j.classList.remove("on"); void j.offsetWidth; j.classList.add("on"); }
 
 // ---------------------------------------------------------------- the map (top right; M or a tap makes it big)
 // The level's layout is drawn once from above (walls, platforms, water, the exit); every frame the part around you
