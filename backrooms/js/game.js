@@ -113,6 +113,11 @@ const SFX = {
   whoosh: () => noise(0.45, 1200, 0.8, "bandpass"),
   slam: () => { tone(55, 0.5, "sine", 28, 2.4); noise(0.4, 400, 1.2); noise(0.12, 2000, 0.6, "bandpass"); },
   kick: () => { noise(0.2, 1500, 0.7, "bandpass"); tone(80, 0.45, "sine", 30, 2.6, 0.12); noise(0.3, 500, 1.3, "lowpass", 0.12); tone(1600, 0.6, "sine", 1500, 0.25, 0.2); },
+  // the Bacteria: a shriek, your arm stretching... RIP, and the wet SPLAT when it lands
+  shriek: () => { tone(700, 0.8, "sawtooth", 1500, 0.45); tone(950, 0.8, "square", 1900, 0.25, 0.05); noise(0.7, 2600, 0.5, "highpass"); },
+  stretch: () => { tone(85, 0.55, "sawtooth", 170, 0.45); noise(0.5, 700, 0.3, "bandpass"); },
+  rip: () => { noise(0.35, 1300, 1.1, "bandpass"); noise(0.25, 300, 0.9); tone(180, 0.3, "sawtooth", 60, 0.5); for (let i = 0; i < 5; i++) noise(0.03, 4000, 0.6, "highpass", 0.05 + i * 0.04); },
+  splat: () => { noise(0.25, 650, 1.1); tone(150, 0.2, "sine", 50, 1.1); },
   doom: () => { tone(49, 2.5, "sawtooth", 41, 0.9); tone(52, 2.5, "sawtooth", 43, 0.7); noise(2.2, 160, 0.5); },
 };
 function growl(len, vol) {
@@ -224,7 +229,7 @@ if (touch) {
 
 // ---------------------------------------------------------------- levels
 async function startLevel(n) {
-  loading = true; playing = false; dying = 0; dyingLook = null; cut = null;
+  loading = true; playing = false; dying = 0; dyingLook = null; cut = null; clearGore();
   $("jump").classList.remove("on"); $("dead").classList.add("hidden"); overlay("black").classList.remove("on"); // (the caught screen goes away)
   stopMusicNow();
   $("loadMsg").textContent = "Loading " + LEVELS[n].name + "…"; $("loadMsg").classList.remove("hidden");
@@ -448,6 +453,7 @@ function caught(m) {
   $("danger").style.opacity = "0";
   if (document.pointerLockElement) document.exitPointerLock();
   if (m.kind === "clark" && m.c.pose) return clarkCutscene(m);
+  if (m.kind === "bacteria" && m.c.pose) return bacteriaCutscene(m);
   SFX.scream();
   $("jump").classList.remove("on"); void $("jump").offsetWidth; $("jump").classList.add("on");
   // turn to face it
@@ -483,6 +489,7 @@ function clarkCutscene(m) {
   SFX.grab(); SFX.growl(1.3); flash(0.35);
 }
 function updateCut(dt) {
+  if (cut.kind === "bac") return updateBacCut(dt);
   const c = cut, m = c.m, t = (c.t += dt), H = c.H;
   const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)), seg = (a, b) => ease((t - a) / (b - a));
   const at = (k, when, fn) => { if (t >= when && !c.done[k]) { c.done[k] = 1; fn(); } };
@@ -530,6 +537,157 @@ function updateCut(dt) {
   cam.x += (Math.random() - 0.5) * shake; cam.y += (Math.random() - 0.5) * shake; cam.z += (Math.random() - 0.5) * shake;
   camera.position.copy(cam); camera.up.set(0, 1, 0); camera.lookAt(look); camera.rotateZ(roll);
   lamp.position.set(cam.x, cam.y + 0.6, cam.z);
+}
+
+// ---------------------------------------------------------------- the Bacteria's catch: a short cartoon-horror cutscene
+// It grabs you by the arms and lifts you up to its face. RIP: it pulls off your LEFT arm, winds up and throws it across
+// the room (you watch it fly and SPLAT). RIP: your RIGHT arm, tossed over its shoulder. Then it grabs your head, opens
+// its huge jaw... CHOMP. Blocky and cartoony: red bits and splats, a quick red flash, then the CAUGHT screen.
+let gore = null;
+function clearGore() { if (gore) { scene.remove(gore); gore.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); gore = null; } }
+const RED = new THREE.MeshLambertMaterial({ color: 0xa00000 });
+const SPLAT = new THREE.MeshBasicMaterial({ color: 0x780000, polygonOffset: true, polygonOffsetFactor: -2, side: THREE.DoubleSide });
+function cube(w, h, d, mat, x, y, z, parent) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); b.position.set(x, y, z); parent.add(b); return b; }
+const ARM = 0.68; // (your arm, shoulder to fingertips)
+function playerArm() { // blocky: sleeve, wrist, hand. The shoulder end is at 0 and it points +z.
+  const g = new THREE.Group(), skinM = new THREE.MeshLambertMaterial({ color: 0xe0b48a });
+  cube(0.13, 0.13, 0.46, new THREE.MeshLambertMaterial({ color: 0x2d5fbf }), 0, 0, 0.23, g);
+  cube(0.1, 0.1, 0.12, skinM, 0, 0, 0.52, g); cube(0.12, 0.06, 0.12, skinM, 0, 0, 0.63, g);
+  const stump = cube(0.14, 0.14, 0.05, RED, 0, 0, 0, g); stump.visible = false;
+  gore.add(g);
+  return { g, stump, torn: false, free: false, still: false, v: V(), spin: V(), d: V(0, -1, 0), prevH: null };
+}
+function bits(at, n, push) {
+  for (let i = 0; i < n; i++) { const s = 0.03 + Math.random() * 0.06, m = cube(s, s, s, RED, at.x, at.y, at.z, gore); cut.bits.push({ m, v: V((Math.random() - 0.5) * 3, Math.random() * 2.5, (Math.random() - 0.5) * 3).add(push || V()), rest: false }); }
+}
+function splat(at, normal, r = 0.35) {
+  const c = new THREE.Mesh(new THREE.CircleGeometry(r * (0.75 + Math.random() * 0.5), 9), SPLAT);
+  c.position.copy(at).addScaledVector(normal, 0.015); c.lookAt(V().copy(c.position).add(normal)); gore.add(c);
+  for (let i = 0; i < 6; i++) { const f = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.09), SPLAT); f.position.copy(c.position); f.quaternion.copy(c.quaternion); f.translateX((Math.random() - 0.5) * r * 3.4); f.translateY((Math.random() - 0.5) * r * 3.4); f.translateZ(0.003); gore.add(f); }
+}
+function roomFrom(p, dir, max) { let s = 0.4; for (; s < max; s += 0.1) if (inside(V(p.x + dir.x * s, p.y + 1.0, p.z + dir.z * s))) break; return s; }
+function bacteriaCutscene(m) {
+  clearGore(); gore = new THREE.Group(); scene.add(gore);
+  const p = V(P.pos.x, L.floorY, P.pos.z);
+  const dir = V(P.pos.x - m.pos.x, 0, P.pos.z - m.pos.z); if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1); dir.normalize();
+  const gap = Math.max(0.45, Math.min(0.8, roomFrom(p, dir.clone().negate(), 2) - 0.35));
+  m.pos.set(p.x - dir.x * gap, m.pos.y, p.z - dir.z * gap); m.yaw = Math.atan2(dir.x, dir.z);
+  m.c.g.position.copy(m.pos); m.c.g.rotation.y = m.yaw; m.c.pose({});
+  const right = V(dir.z, 0, -dir.x), left = right.clone().negate();
+  let best = null; // (your left arm gets thrown the way with the most room: to your left if it can)
+  for (const a of [0, 0.6, -0.6, 1.2, -1.2, 2.2, -2.2]) { const d = left.clone().applyAxisAngle(V(0, 1, 0), a), r = roomFrom(p, d, 9) + (a === 0 ? 1.5 : 0); if (!best || r > best.r) best = { d, r }; }
+  cut = { kind: "bac", m, t: 0, dir, right, left, throwDir: best.d, done: {}, eye: camera.position.clone(), bits: [], h0: [m.c.hand(0, V()), m.c.hand(1, V())], shakeT: 0 };
+  cut.armL = playerArm(); cut.armR = playerArm();
+  overlay("black").classList.remove("on");
+  SFX.shriek(); SFX.grab(); flash(0.3);
+}
+function updateBacCut(dt) {
+  const c = cut, m = c.m, t = (c.t += dt);
+  const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)), seg = (a, b) => ease((t - a) / (b - a));
+  const at = (k, when, fn) => { if (t >= when && !c.done[k]) { c.done[k] = 1; fn(); } };
+  const face = m.c.face(V()), mouth = m.c.mouth(V()), hL = m.c.hand(0, V()), hR = m.c.hand(1, V());
+  if (!c.held) { // (lifted up in front of its face, but never into the wall behind you)
+    let k = 0.3; const q = V();
+    for (; k < 0.85; k += 0.05) if (inside(q.copy(face).addScaledVector(c.dir, k + 0.3).add(V(0, -0.42, 0)))) break;
+    c.held = face.clone().addScaledVector(c.dir, k).add(V(0, -0.42, 0));
+  }
+  // where you are
+  const cam = V(); let look = mouth.clone().add(V(0, -0.3, 0)), roll = 0, shake = 0.015, jaw = 0, lean = 0;
+  if (t < 0.4) { cam.copy(c.eye); shake = 0.03; }
+  else if (t < 1.0) { cam.lerpVectors(c.eye, c.held, seg(0.4, 0.95)); shake = 0.03; roll = Math.sin(t * 9) * 0.05; }
+  else if (t < 3.9) { cam.copy(c.held).add(V(0, Math.sin(t * 2.2) * 0.03, 0)); roll = 0.2 * seg(1.55, 1.8) - 0.2 * seg(3.55, 3.8); }
+  else { // it grabs your head and pulls you to its mouth... CHOMP
+    const k = seg(3.9, 4.55);
+    cam.lerpVectors(c.held, mouth.clone().addScaledVector(c.dir, 0.32).add(V(0, 0.02, 0)), k);
+    jaw = seg(3.95, 4.5) * (1 - seg(4.7, 4.78)); lean = k * 0.5; look = mouth.clone(); shake = 0.02 + k * 0.05;
+    if (t >= 4.7) { cam.addScaledVector(c.dir, -0.3 * seg(4.7, 4.8)); shake = 0.14 * (1 - seg(4.8, 5.3)); }
+  }
+  // what you look at
+  if (t >= 1.0 && t < 1.55) look.lerp(hL, 0.8 * seg(1.0, 1.35));
+  else if (t >= 1.55 && t < 2.12) look.lerp(hL, 0.6);
+  else if (t >= 2.12 && t < 3.0) look.copy(c.armL.g.position);
+  else if (t >= 3.0 && t < 3.6) look.lerp(hR, 0.85 * seg(3.0, 3.35));
+  c.lookS = c.lookS ? c.lookS.lerp(look, Math.min(1, dt * (t >= 2.12 && t < 3.0 ? 14 : 7))) : look.clone();
+  if ((c.shakeT -= dt) > 0) shake = Math.max(shake, 0.1);
+  cam.x += (Math.random() - 0.5) * shake; cam.y += (Math.random() - 0.5) * shake; cam.z += (Math.random() - 0.5) * shake;
+  camera.position.copy(cam); camera.up.set(0, 1, 0); camera.lookAt(c.lookS); camera.rotateZ(roll); camera.updateMatrixWorld(true);
+  lamp.position.set(cam.x, cam.y + 0.6, cam.z);
+  // your shoulders, and where its hands go
+  const R = c.right.clone(), U = V(0, 1, 0), F = c.dir.clone().negate(); // (your body: it doesn't turn when you look around)
+  const shoulder = (s) => cam.clone().addScaledVector(R, s * 0.21).addScaledVector(U, -0.27).addScaledVector(F, 0.02);
+  const shL = shoulder(-1), shR = shoulder(1);
+  const front = (sh, s) => sh.clone().addScaledVector(F, 0.5).addScaledVector(U, -0.04).addScaledVector(R, -s * 0.06);
+  const up = V(0, 1, 0);
+  let gL = null, gR = null;
+  if (t < 0.4) { gL = c.h0[0].clone().lerp(front(shL, -1), seg(0, 0.35)); gR = c.h0[1].clone().lerp(front(shR, 1), seg(0, 0.35)); }
+  else { gL = front(shL, -1); gR = front(shR, 1); }
+  if (t >= 1.0) gL = gL.lerp(shL.clone().addScaledVector(R, -0.75).addScaledVector(F, 0.5).addScaledVector(U, 0.15), seg(1.0, 1.5)); // (pulls your left arm out...)
+  if (t >= 1.55) gL = m.pos.clone().addScaledVector(up, 3.05).addScaledVector(c.left, 0.75).addScaledVector(c.dir, -0.35).lerp(gL, 1 - seg(1.6, 2.0)); // (...winds up...)
+  if (t >= 2.05) gL = gL.lerp(shL.clone().addScaledVector(c.throwDir, 0.9), seg(2.05, 2.2)); // (...and THROWS)
+  if (t >= 2.4) gL = shL.clone().addScaledVector(U, -0.55).addScaledVector(F, 0.25).lerp(gL, 1 - seg(2.4, 2.8)); // (then holds you by the side)
+  if (t >= 3.0) gR = gR.lerp(shR.clone().addScaledVector(R, 0.75).addScaledVector(F, 0.5).addScaledVector(U, 0.15), seg(3.0, 3.5)); // (your right arm...)
+  if (t >= 3.55) gR = m.pos.clone().addScaledVector(up, 3.1).addScaledVector(c.right, 0.5).addScaledVector(c.dir, -0.55).lerp(gR, 1 - seg(3.6, 3.78)); // (...over its shoulder)
+  if (t >= 3.85) { const k = seg(3.85, 4.05); gL.lerp(cam.clone().addScaledVector(R, -0.32).addScaledVector(F, 0.1), k); gR.lerp(cam.clone().addScaledVector(R, 0.32).addScaledVector(F, 0.1), k); } // (your head)
+  m.c.g.position.copy(m.pos); m.c.g.rotation.y = m.yaw;
+  m.c.pose({ hands: [gL, gR], jaw, lean });
+  m.c.hand(0, hL); m.c.hand(1, hR);
+  // your arms: hanging in front of you, then in its hands, then torn off (it keeps holding them by the hand), then thrown
+  const place = (a, sh, H, gripped) => {
+    if (a.free) return;
+    if (!a.torn) {
+      const end = gripped ? H : sh.clone().addScaledVector(F, 0.4).addScaledVector(U, -0.32);
+      a.g.position.copy(sh); a.g.lookAt(end); a.g.scale.set(1, 1, Math.max(0.6, Math.min(1.5, sh.distanceTo(end) / ARM)));
+    } else { // (dangles from its fist, the torn end down)
+      const vel = a.prevH ? H.clone().sub(a.prevH).divideScalar(Math.max(dt, 1e-3)) : V();
+      a.d.lerp(V(0, -1, 0).addScaledVector(vel, -0.06).normalize(), Math.min(1, dt * 8)).normalize();
+      a.g.scale.set(1, 1, 1); a.g.position.copy(H).addScaledVector(a.d, ARM * 0.95); a.g.lookAt(H);
+    }
+    a.prevH = H.clone();
+  };
+  place(c.armL, shL, hL, t >= 0.35); place(c.armR, shR, hR, t >= 0.35);
+  const rip = (a, sh, s) => { a.torn = true; a.stump.visible = true; a.d.copy(sh).sub(a.prevH || sh).normalize(); bits(sh.clone().addScaledVector(F, 0.3).addScaledVector(U, 0.1).addScaledVector(R, s * 0.12), 30, R.clone().multiplyScalar(s * 1.6).addScaledVector(U, 2).addScaledVector(F, 1)); flash(0.75); SFX.rip(); c.shakeT = 0.3; };
+  const toss = (a, v, spin) => { a.free = true; a.v.copy(v); a.spin.copy(spin); };
+  at("stretchL", 1.0, () => SFX.stretch());
+  at("ripL", 1.55, () => rip(c.armL, shL, -1));
+  at("whoosh", 2.08, () => SFX.whoosh());
+  at("throwL", 2.12, () => toss(c.armL, c.throwDir.clone().multiplyScalar(6.5).add(V(0, 2.2, 0)), V(9, 3, 6)));
+  at("stretchR", 3.0, () => SFX.stretch());
+  at("ripR", 3.55, () => rip(c.armR, shR, 1));
+  at("tossR", 3.78, () => toss(c.armR, c.dir.clone().multiplyScalar(-5).add(V(0, 4, 0)).addScaledVector(c.right, 1.2), V(-7, 2, 4)));
+  at("shriek", 3.9, () => SFX.shriek());
+  at("chomp", 4.72, () => { SFX.bite(); SFX.rip(); flash(1); overlay("black").classList.add("on"); });
+  at("doom", 5.2, () => SFX.doom());
+  at("over", 5.8, () => { $("deadBy").textContent = "The Bacteria got you!"; $("dead").classList.remove("hidden"); });
+  flyGore(dt);
+}
+function flyGore(dt) {
+  const fy = L.floorY;
+  for (const b of cut.bits) {
+    if (b.rest) continue;
+    const p = b.m.position; b.v.y -= 12 * dt; p.addScaledVector(b.v, dt); b.m.rotation.x += dt * 9; b.m.rotation.z += dt * 7;
+    if (p.y < fy + 0.02) { p.y = fy + 0.02; b.rest = true; b.m.rotation.set(0, Math.random() * 3, 0); }
+    else if (inside(p)) { p.addScaledVector(b.v, -dt); b.v.x *= -0.2; b.v.z *= -0.2; }
+  }
+  for (const a of [cut.armL, cut.armR]) {
+    if (!a.free || a.still) continue;
+    const p = a.g.position, before = p.clone();
+    a.v.y -= 12 * dt; p.addScaledVector(a.v, dt);
+    a.g.rotation.x += a.spin.x * dt; a.g.rotation.y += a.spin.y * dt; a.g.rotation.z += a.spin.z * dt;
+    const hv = V(a.v.x, 0, a.v.z);
+    if (hv.lengthSq() > 0.01 && inside(V(p.x, Math.max(p.y, fy + 0.2), p.z))) { // SPLAT on the wall
+      hv.normalize(); const q = V(before.x, Math.max(before.y, fy + 0.2), before.z);
+      for (let i = 0; i < 40 && !inside(V(q.x + hv.x * 0.03, q.y, q.z + hv.z * 0.03)); i++) q.addScaledVector(hv, 0.03);
+      p.x = q.x - hv.x * 0.12; p.z = q.z - hv.z * 0.12;
+      splat(q, hv.clone().negate(), 0.55); bits(q, 10, hv.clone().multiplyScalar(-1.5)); SFX.splat();
+      a.v.x *= -0.25; a.v.z *= -0.25; a.spin.multiplyScalar(0.5);
+    }
+    if (p.y < fy + 0.07) { // ...and on the floor
+      p.y = fy + 0.07;
+      if (!a.floor) { a.floor = 1; splat(V(p.x, fy, p.z), V(0, 1, 0), 0.6); bits(V(p.x, fy + 0.1, p.z), 14, V(0, 1.5, 0)); SFX.splat(); }
+      a.v.y = Math.abs(a.v.y) * 0.2; a.v.x *= 0.55; a.v.z *= 0.55; a.spin.multiplyScalar(0.5);
+      if (a.v.length() < 0.5) { a.still = true; a.g.rotation.set(0, a.g.rotation.y, 0); }
+    }
+  }
 }
 
 // ---------------------------------------------------------------- the map (top right; M or a tap makes it big)
@@ -629,7 +787,7 @@ $("controls").innerHTML = touch ? "Left side: walk · Right side: look · 🏃 r
 export function run(cfg) {
   LEVELS = cfg.levels; SAVE_KEY = cfg.saveKey || SAVE_KEY;
   if (save.get() > 0) { $("cont").classList.remove("hidden"); $("cont").textContent = "▶ Continue: " + (LEVELS[save.get()].label || LEVELS[save.get()].sub); }
-  preload("bacteria"); preload("partygoer"); preload("clark");
+  preload("partygoer"); preload("clark");
 }
 
 // ---------------------------------------------------------------- every frame
@@ -657,4 +815,4 @@ function tick(dt) {
 }
 requestAnimationFrame(frame);
 let god = false, frozen = false; // (testing only)
-window.BR = { render() { renderer.render(scene, camera); }, get P() { return P; }, get mons() { return mons; }, get L() { return L; }, get LEVELS() { return LEVELS; }, startLevel, step(n) { for (let i = 0; i < n; i++) tick(1 / 60); }, keys, levelDone, get playing() { return playing; }, set god(v) { god = v; }, set frozen(v) { frozen = v; }, caught, get cut() { return cut; }, get music() { return mus; } }; // (for testing)
+window.BR = { render() { renderer.render(scene, camera); }, get P() { return P; }, get mons() { return mons; }, get L() { return L; }, get LEVELS() { return LEVELS; }, startLevel, step(n) { for (let i = 0; i < n; i++) tick(1 / 60); }, keys, levelDone, get playing() { return playing; }, set god(v) { god = v; }, set frozen(v) { frozen = v; }, caught, get cut() { return cut; }, get music() { return mus; }, get camera() { return camera; } }; // (for testing)
