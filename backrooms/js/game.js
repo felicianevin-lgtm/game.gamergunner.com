@@ -404,8 +404,8 @@ function updateMonsters(dt) {
       m.seeT = 0.2;
       const mEye = V(m.pos.x, m.c.height * 0.85, m.pos.z);
       const canSee = d < 2.2 || (d < m.seeR && sees(mEye, eyeP));
-      if (canSee) { if (m.state !== "chase") { SFX.chase(); if (m.kind === "partygoer") SFX.giggle(); } m.state = "chase"; m.lastSeen = P.pos.clone(); }
-      else if (m.state === "chase") { m.state = "search"; m.searchT = 6; }
+      if (canSee) { if (m.state !== "chase") { SFX.chase(); if (m.kind === "partygoer") SFX.giggle(); } m.state = "chase"; m.lastSeen = P.pos.clone(); m.lostT = 0; }
+      else if (m.state === "chase") { if ((m.lostT = (m.lostT || 0) + 0.2) > 1.2) { m.state = "search"; m.searchT = 6; } } // (it has to lose you for a moment before it gives up: no flickering on and off)
       else if (P.noise > 0 && d < 14 && m.state === "wander") { m.state = "search"; m.lastSeen = P.pos.clone(); m.searchT = 5; }
     }
     if (m.state === "chase") { goal = P.pos; speed = m.chase; }
@@ -429,11 +429,12 @@ function updateMonsters(dt) {
   // chase music while anything is chasing you (the Crawler counts too), heartbeat + red edges
   const chasing = mons.some((m) => m.state === "chase");
   chaseMusic(chasing, danger);
-  $("danger").style.opacity = String(danger * 0.85);
+  dangerV += (danger - dangerV) * Math.min(1, dt * (danger > dangerV ? 4 : 1.2)); // (the red edges fade in and out smoothly)
+  $("danger").style.opacity = String(dangerV * 0.85);
   heartT -= 0.016 + danger * 0.05;
   if (danger > 0.05 && heartT < 0) { heartT = 1; SFX.heart(); }
 }
-let heartT = 0;
+let heartT = 0, dangerV = 0;
 function move(m, to, speed, dt, rad) {
   const dx = to.x - m.pos.x, dz = to.z - m.pos.z, d = Math.hypot(dx, dz);
   let sp = 0;
@@ -455,7 +456,7 @@ function caught(m) {
   if (dying || god) return;
   dying = 0.001; deathBy = m.name; playing = false;
   stopMusicNow(); stopHum();
-  $("danger").style.opacity = "0";
+  $("danger").style.opacity = "0"; dangerV = 0;
   if (document.pointerLockElement) document.exitPointerLock();
   if (m.kind === "clark" && m.c.pose) return clarkCutscene(m);
   if (m.kind === "bacteria" && m.c.pose) return bacteriaCutscene(m);

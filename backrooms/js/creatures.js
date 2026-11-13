@@ -162,12 +162,15 @@ function fromModel(kind, scene, height) {
     eyes = new THREE.Group(); g.add(eyes);
   }
   // THE PARTYGOERS are creepier too: taller and thinner, a grimy yellow, hunched, head tilted to one side
-  let tilt = 0;
+  let tilt = 0, balloon = null;
   if (kind === "partygoer") {
     lean = 0.1; tilt = 0.38;
     holder.scale.set(0.85, 1, 0.85);
     raw.traverse((o) => { if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.color.setHex(0xb59e72); } });
     eyes = new THREE.Group(); g.add(eyes); // (where its face is, for its jump scare)
+    // its balloon isn't tied to anything in the model file: it floats where its left hand is, always upright
+    balloon = raw.getObjectByName("Baloon_red");
+    if (balloon && bones.handL) { g.updateMatrixWorld(true); g.attach(balloon); balloon.userData.rot = balloon.quaternion.clone(); } else balloon = null;
   }
   const creepy = kind === "clark" || kind === "partygoer";
   const tmp = V(), tmp2 = V();
@@ -176,6 +179,13 @@ function fromModel(kind, scene, height) {
     g.updateMatrixWorld(true);
     bones.head.getWorldPosition(tmp); if (bones.headTop) { bones.headTop.getWorldPosition(tmp2); tmp.lerp(tmp2, 0.42); }
     g.worldToLocal(tmp); eyes.position.set(tmp.x, tmp.y, tmp.z + height * 0.036);
+  }
+  const bq = new THREE.Quaternion(), bx = V(1, 0, 0);
+  function holdBalloon() { // (string end in its hand, swaying a little as it walks)
+    if (!balloon) return;
+    g.updateMatrixWorld(true);
+    g.worldToLocal(bones.handL.getWorldPosition(balloon.position)); balloon.position.y -= 0.04;
+    balloon.quaternion.copy(bq.setFromAxisAngle(bx, Math.sin(t * 0.9) * 0.08)).multiply(balloon.userData.rot);
   }
   let t = 0, twitch = 0, tw = 0;
   return { g, height,
@@ -199,6 +209,7 @@ function fromModel(kind, scene, height) {
       turn(rig.head, 0, tilt + tw);
       placeEyes();
     }
+    holdBalloon();
   },
   // a held pose for cutscenes: arms 0..1 (reach out and grab), fling 0..1 (throw), kick -1..1 (peg leg back / forward), lean 0..1 (lunge to bite)
   pose(o) {
@@ -208,7 +219,7 @@ function fromModel(kind, scene, height) {
     if (rig.armL) turn(rig.armL, r * reachL, rig.armL.drop);
     if (rig.armR) turn(rig.armR, r * reachR + (o.raise || 0) * 0.9 * reachR, rig.armR.drop); // (raise: one hand comes up higher)
     holder.position.y = 0; holder.rotation.x = lean + (o.lean || 0) * 0.4 - Math.max(0, o.kick || 0) * 0.15;
-    placeEyes();
+    placeEyes(); holdBalloon();
   } };
 }
 // THE BACTERIA (original design, made of shapes): a tall, thick, shiny-black thing. Long arms with long fingers, a long
