@@ -69,6 +69,10 @@ export function sanitize(g) {
   const s = g.settings || {};
   out.settings.sky = SKIES[s.sky] ? s.sky : "day";
   out.settings.gravity = num(s.gravity, 10, 200, 70); out.settings.walk = num(s.walk, 4, 60, 14); out.settings.jump = num(s.jump, 5, 80, 26);
+  // 🎒 what the player starts holding (weapons.js): built-in ids or "c" + a home-made weapon's id
+  if (Array.isArray(s.arms) && s.arms.length) out.settings.arms = s.arms.filter((a) => a && /^[a-z0-9]{1,12}$/.test(a.id || "")).slice(0, 12).map((a) => ({ id: a.id, name: String(a.name || "My Weapon").slice(0, 24),
+    look: /^[a-z]{2,12}$/.test(a.look || "") ? a.look : "sword", color: /^#[0-9a-f]{6}$/i.test(a.color || "") ? a.color : "#a64bf4", script: /^[a-z0-9]{1,16}$/i.test(a.script || "") ? a.script : "" }));
+  if (Array.isArray(s.start) && s.start.length) out.settings.start = [...new Set(s.start.filter((id) => typeof id === "string" && /^[a-z0-9]{1,13}$/.test(id)))].slice(0, 4);
   for (const o of (g.objects || []).slice(0, 2000)) {
     if (!o || !BY_TYPE[o.type]) continue;
     const c = newObj(o.type);

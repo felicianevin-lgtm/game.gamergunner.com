@@ -506,3 +506,34 @@ body.playing .chat-box { display: none; }
 .ka-bedit input, .ka-bedit select { width: 100%; border-radius: 8px; border: 1px solid var(--edge); background: var(--bg); color: inherit; padding: 6px 8px; }
 .ka-off { opacity: .35; pointer-events: none; }
 .ka-tools button:disabled { opacity: .35; cursor: default; }
+
+/* 🎒 Player starts with (editor.js openArms, weapons.js) */
+.arms-btn { position: absolute; top: 10px; left: 10px; z-index: 4; max-width: calc(100% - 140px); height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--edge); background: rgba(7, 10, 13, .8); cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: inherit; }
+.arms-btn:hover { border-color: var(--green-hi); }
+.arms-btn b { color: #ffd25a; }
+body.playing .arms-btn { display: none; }
+.modal-box h3 { font: 600 15px var(--display); margin: 16px 0 8px; }
+.arms-now { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.arm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.arm-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px; border-radius: 12px; border: 2px solid var(--edge); background: var(--panel-2); cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.arm-card:hover { border-color: var(--green-hi); }
+.arm-card.on { border-color: #ffd25a; background: rgba(255, 210, 90, .12); }
+.arm-card.on::after { content: "✓"; position: absolute; top: 6px; right: 8px; color: #ffd25a; font-weight: 800; }
+.arm-card .ai { font-size: 26px; line-height: 1; }
+.arm-card small { color: var(--dim); font-size: 11px; line-height: 1.3; }
+.arm-card code { font-size: 11px; color: #ffd25a; letter-spacing: 1px; }
+.arm-card input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+.arm-card .arm-edit { position: absolute; bottom: 6px; right: 8px; font-size: 15px; padding: 2px; border-radius: 6px; }
+.arm-card .arm-edit:hover { background: rgba(255, 255, 255, .15); }
+.arm-new { border-style: dashed; border-color: var(--green); }
+.arm-field { display: inline-flex; align-items: center; gap: 8px; margin: 0 14px 8px 0; font-weight: 600; }
+.arm-field input { height: 34px; border-radius: 8px; border: 1px solid var(--edge); background: var(--panel-2); color: inherit; padding: 0 10px; font: inherit; }
+.arm-field input[type=color] { width: 50px; padding: 2px; }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 16px; }
+/* the weapons in Play (play.js) */
+.arm-bar { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; z-index: 6; }
+.arm-bar button { display: flex; align-items: center; gap: 5px; height: 40px; padding: 0 10px; border-radius: 10px; border: 2px solid rgba(255, 255, 255, .2); background: rgba(7, 10, 13, .75); color: #fff; font: 600 13px Inter, sans-serif; cursor: pointer; }
+.arm-bar button b { font-size: 11px; opacity: .7; }
+.arm-bar button.on { border-color: #ffd25a; background: rgba(60, 46, 10, .85); }
+.arm-bar .arm-go { font-size: 20px; background: rgba(232, 38, 28, .7); }
+@media (max-width: 700px) { .arm-bar button span { display: none; } }

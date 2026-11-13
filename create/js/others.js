@@ -3,6 +3,7 @@
 import * as THREE from "../vendor/three.module.js";
 import { buildAvatar, animateAvatar, sanitizeAvatar } from "./avatar.js";
 import { joinLive } from "./net.js";
+import { poseArm } from "./weapons.js";
 
 // A name over someone's head (a little picture that always faces the camera).
 export function nameTag(text, color) {
@@ -20,7 +21,9 @@ export function nameTag(text, color) {
 
 // me() -> {p: THREE.Vector3, r: facing, air: true when not on the ground, look: avatar}; say(text) shows a message.
 // server = {code, create} for a private server (play with friends, net.js joinLive); a code nobody is on falls back to public.
-export function startOthers(scene, key, me, say, server) {
+// arms (🎒 weapons, play.js): {held(id) -> a model for their hand, kind(id) -> "melee" / "ranged", attack(e): show their shots};
+// me().c = the weapon I hold. send(e) tells the others something happened (an attack: {a: "atk", w, p, d}).
+export function startOthers(scene, key, me, say, server, arms) {
   const list = new Map(); // id -> {g, tag, at, r, from}
   let sendT = 0, count = 1;
   function add(id, name, look) {
@@ -34,6 +37,11 @@ export function startOthers(scene, key, me, say, server) {
   function state(o, s) {
     if (!s || !Array.isArray(s.p)) return;
     o.at.set(s.p[0], s.p[1], s.p[2]); o.r = s.r || 0; o.air = s.a === "air";
+    if (arms && (s.c || "") !== (o.c || "")) { // (what they hold changed)
+      o.c = s.c || ""; if (o.held) o.held.parent && o.held.parent.remove(o.held);
+      o.held = o.c ? arms.held(o.c) : null; o.kind = o.c ? arms.kind(o.c) : "";
+      if (o.held) { o.held.position.set(0, -1.1, -0.12); o.g.userData.limbs.armR.add(o.held); }
+    }
     if (!o.seen) { o.g.position.copy(o.at); o.g.rotation.y = o.r; o.seen = true; o.g.visible = true; }
   }
   const onMsg = (m) => {
@@ -46,8 +54,9 @@ export function startOthers(scene, key, me, say, server) {
       if (m.code && !m.players.length) say("🔒 Private server " + m.code + ". Tell your friends this code!"); else if (m.players.length) say(m.players.length === 1 ? "1 other player is here!" : m.players.length + " other players are here!");
     } else if (m.t === "join") { add(m.id, m.n, null); count++; say(m.n + " joined"); }
     else if (m.t === "leave") { const o = list.get(m.id); if (o) { say(o.name + " left"); remove(m.id); count--; } }
-    else if (m.t === "look") { const o = list.get(m.id); if (o) { const keep = { at: o.at.clone(), r: o.r, seen: o.seen }; add(m.id, o.name, m.k); const n = list.get(m.id); if (keep.seen) state(n, { p: keep.at.toArray(), r: keep.r }); } }
+    else if (m.t === "look") { const o = list.get(m.id); if (o) { const keep = { at: o.at.clone(), r: o.r, seen: o.seen, c: o.c }; add(m.id, o.name, m.k); const n = list.get(m.id); if (keep.seen) state(n, { p: keep.at.toArray(), r: keep.r, c: keep.c }); } }
     else if (m.t === "s") { const o = list.get(m.id); if (o) state(o, m); }
+    else if (m.t === "ev" && m.e && m.e.a === "atk") { const o = list.get(m.id); if (o) { o.atkT = 0.001; if (arms) arms.attack(m.e); } }
     else if (m.t === "reset") { for (const id of [...list.keys()]) remove(id); count = 1; }
   };
   let net = joinLive(key, onMsg, server);
@@ -59,7 +68,7 @@ export function startOthers(scene, key, me, say, server) {
       if (sendT <= 0) {
         sendT = 1 / 12;
         const m = me();
-        net.send({ t: "s", p: [m.p.x, m.p.y, m.p.z], r: m.r, a: m.air ? "air" : "", h: 0 });
+        net.send({ t: "s", p: [m.p.x, m.p.y, m.p.z], r: m.r, a: m.air ? "air" : "", h: 0, c: m.c || "" });
       }
       for (const o of list.values()) {
         if (!o.seen) continue;
@@ -69,8 +78,10 @@ export function startOthers(scene, key, me, say, server) {
         o.g.rotation.y += d * Math.min(1, dt * 10);
         const sp = dt > 0 ? Math.hypot(o.g.position.x - o.last.x, o.g.position.z - o.last.z) / dt : 0;
         animateAvatar(o.g, dt, !o.air, sp);
+        if (o.held) { if (o.atkT > 0) { o.atkT += dt / (o.kind === "ranged" ? 0.18 : 0.35); if (o.atkT >= 1) o.atkT = 0; } poseArm(o.g.userData.limbs.armR, o.kind, o.atkT || 0); }
       }
     },
+    send(e) { net.send({ t: "ev", e }); },
     stop() { net.close(); for (const id of [...list.keys()]) remove(id); },
   };
 }

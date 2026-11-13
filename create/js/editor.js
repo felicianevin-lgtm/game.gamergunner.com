@@ -28,6 +28,7 @@ import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig,
 import { TEXTURES, texturePicture } from "./textures.js";
 import { sanitizeAnims, animSummary, MAX_ANIMS } from "./keyanim.js";
 import { openAnimMaker } from "./animmaker.js";
+import { WEAPONS, LOOKS, MAX_START, MAX_ARMS, startingWeapons, weaponCode } from "./weapons.js";
 import { CHASE_SOUNDS, SCARE_FX, FLASHES, SCARE_SOUNDS, SCARE_WHEN, DEFAULT_CHASE, DEFAULT_SCARE, sanitizeChase, sanitizeScare, playScare } from "./scare.js";
 
 const $ = (id) => document.getElementById(id);
@@ -123,7 +124,7 @@ function restore(snap) {
   const now = new Map((game.scripts || []).map((x) => [x.id, x]));
   game.scripts = (d.sc || []).map((x) => now.get(x.id) || x);
   if (scriptOpen() && !game.scripts.some((x) => x.id === scriptOpen())) closeScript();
-  world.setSky(game.settings.sky, true); rebuildAll(); drawTree(); drawProps(); changed(true);
+  world.setSky(game.settings.sky, true); rebuildAll(); drawTree(); drawProps(); drawArmsBtn(); changed(true);
 }
 function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); restore(undoStack.pop()); updateButtons(); }
 function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); restore(redoStack.pop()); updateButtons(); }
@@ -1506,6 +1507,7 @@ function openGame(g) {
   drawTree(); drawProps(); updateButtons();
   $("savedNote").textContent = "Saved ✓";
   try { localStorage.setItem("gv_studio_last", game.id); } catch {}
+  drawArmsBtn();
   if (game.shared) startCollab();
 }
 
@@ -1530,7 +1532,7 @@ function startCollab() {
       undoStack = []; redoStack = []; updateButtons();
       $("gameName").value = game.name;
       if (!playing) { world.setSky(game.settings.sky, true); rebuildAll(); }
-      drawTree(); drawProps(); drawGui();
+      drawTree(); drawProps(); drawGui(); drawArmsBtn();
       dirty = true; saveNow();
     },
     onEdit(m) {
@@ -1539,7 +1541,7 @@ function startCollab() {
       if (r.base.includes("files")) { useFiles(game.files); loadPictures(game.files).then(() => { drawGui(); for (const o of game.objects) if (o.type === "picture") rebuild(o); }); }
       if (r.base.includes("name")) $("gameName").value = game.name;
       if (!playing) {
-        if (r.base.includes("settings")) world.setSky(game.settings.sky, true);
+        if (r.base.includes("settings")) { world.setSky(game.settings.sky, true); drawArmsBtn(); }
         for (const id of r.gone) { const g = groups.get(id); if (g) { if (transform.object === g) transform.detach(); world.root.remove(g); disposeGroup(g); groups.delete(id); } extra.delete(id); }
         for (const id of r.ids) { const o = obj(id); if (o && !(transform.dragging && (selected === id || extra.has(id)))) rebuild(o); }
         if (selected && !obj(selected) && !guiItem(selected)) select(null);
@@ -1714,8 +1716,101 @@ function play() {
       if (again) play();
     },
     output,
+    // 👥 a shared studio: everyone who presses Play is put in the same test together (a live server just for this
+    // studio, relay live.js; each one still runs their own copy of the game, like a published game)
+    live: collab && collab.sid ? "st" + collab.sid : null,
   });
+  if (collab && collab.sid) toast("👥 Testing together: everyone in this shared game who presses ▶ Play joins you.", 3);
 }
+
+// ---------------------------------------------------------------- 🎒 Player starts with (weapons.js)
+// The button at the top left of the 3D view: pick up to 4 weapons the player holds when the game starts, or ✨ make
+// your own (a name, a look, a color, and a game script with onAttack() for what it does). Saved in game.settings
+// (start + arms), so a shared studio gets it right away and published games keep it.
+const bar = (n, max) => { const k = Math.max(1, Math.min(5, Math.round((n / max) * 5))); return "▰".repeat(k) + "▱".repeat(5 - k); };
+function drawArmsBtn() {
+  if (!game) return;
+  const list = startingWeapons(game);
+  $("armsList").textContent = list.length ? list.map((d) => d.icon + " " + d.name).join(", ") : "nothing";
+}
+function setStart(list) { pushUndo(); game.settings.start = list.slice(0, MAX_START); changed(true); drawArmsBtn(); }
+function openArms(keep) {
+  if (!game) return;
+  const top = keep ? $("modalBox").scrollTop : 0; // (picking one keeps the list where it was)
+  const start = game.settings.start || [], arms = game.settings.arms || [];
+  const card = (id, d, extra) => '<button type="button" class="arm-card' + (start.includes(id) ? " on" : "") + '" data-w="' + id + '"><span class="ai">' + d.icon + "</span><b>" + esc(d.name) + "</b>" +
+    (d.desc ? "<small>" + esc(d.desc) + "</small>" : "") + (d.dmg ? '<code title="Damage">💥 ' + bar(d.dmg, 60) + '</code><code title="Speed">⏱ ' + bar(1.2 - Math.min(1.1, d.cd), 1.1) + "</code>" : "") + (extra || "") + "</button>";
+  const melee = Object.entries(WEAPONS).filter(([, d]) => d.kind === "melee"), ranged = Object.entries(WEAPONS).filter(([, d]) => d.kind === "ranged");
+  openModal('<h2>🎒 Player starts with</h2><p>Pick up to ' + MAX_START + '. Players hold them when the game starts: <b>click</b> or <b>Q</b> attacks, <b>1-4</b> switches. Monsters have 100 health.</p>' +
+    '<p class="arms-now">Picked (' + start.length + "/" + MAX_START + "): <b>" + (start.length ? esc(startingWeapons(game).map((d) => d.icon + " " + d.name).join(", ")) : "nothing yet") + "</b>" + (start.length ? ' <button type="button" class="btn" id="armsNone">Clear</button>' : "") + "</p>" +
+    "<h3>⚔️ Melee</h3><div class=\"arm-grid\">" + melee.map(([id, d]) => card(id, d)).join("") + "</div>" +
+    "<h3>🎯 Ranged</h3><div class=\"arm-grid\">" + ranged.map(([id, d]) => card(id, d)).join("") + "</div>" +
+    "<h3>🛠️ Your own</h3><div class=\"arm-grid\">" + arms.map((a) => card("c" + a.id, { icon: (LOOKS[a.look] || LOOKS.sword).icon, name: a.name, desc: (LOOKS[a.look] || LOOKS.sword).name + " · script: " + ((game.scripts.find((x) => x.id === a.script) || {}).name || "missing!") },
+      '<span class="arm-edit" data-edit="' + a.id + '" title="Change it">✏️</span>')).join("") +
+    (arms.length < MAX_ARMS ? '<button type="button" class="arm-card arm-new" id="armNew"><span class="ai">✨</span><b>Create your own</b><small>Name it, pick a look, and write a script for what it does</small></button>' : "") + "</div>" +
+    '<div class="modal-btns"><button type="button" class="btn go" id="armsDone">Done</button></div>');
+  $("modalBox").classList.add("wide"); $("modalBox").scrollTop = top;
+  $("armsDone").onclick = closeModal;
+  if ($("armsNone")) $("armsNone").onclick = () => { setStart([]); openArms(true); };
+  $("modalBox").querySelectorAll("[data-w]").forEach((b) => (b.onclick = (e) => {
+    if (e.target.dataset.edit) { makeArm(arms.find((a) => a.id === e.target.dataset.edit)); return; }
+    const id = b.dataset.w, now = (game.settings.start || []).slice();
+    if (now.includes(id)) setStart(now.filter((x) => x !== id));
+    else if (now.length >= MAX_START) { toast("Players can start with up to " + MAX_START + " weapons. Take one away first."); return; }
+    else setStart(now.concat(id));
+    openArms(true);
+  }));
+  if ($("armNew")) $("armNew").onclick = () => makeArm(null);
+}
+// ✨ Create your own (or change one): name, look, color -> a weapon + its own game script (opens in the script editor).
+function makeArm(a) {
+  const looks = Object.entries(LOOKS);
+  const cur = a || { name: "", look: "staff", color: "#a64bf4" };
+  openModal("<h2>" + (a ? "✏️ Change " + esc(a.name) : "✨ Create your own weapon") + "</h2><p>Give it a name and a look. What it does is a script: it runs <code>onAttack()</code> when the player uses it.</p>" +
+    '<form id="armForm"><label class="arm-field">Name <input id="armName" maxlength="24" required placeholder="Lightning Staff" value="' + esc(cur.name) + '"></label>' +
+    '<label class="arm-field">Color <input type="color" id="armColor" value="' + esc(cur.color) + '"></label>' +
+    "<h3>Look</h3><div class=\"arm-grid looks\">" + looks.map(([k, L]) => '<label class="arm-card' + (k === cur.look ? " on" : "") + '"><input type="radio" name="armLook" value="' + k + '"' + (k === cur.look ? " checked" : "") + '><span class="ai">' + L.icon + "</span><b>" + L.name + "</b><small>" + (L.kind === "melee" ? "swings" : "shoots / casts") + "</small></label>").join("") + "</div>" +
+    '<p class="err" id="armErr"></p><div class="modal-btns">' + (a ? '<button type="button" class="btn danger" id="armDel">Delete weapon</button><button type="button" class="btn" id="armScript">📜 Edit its script</button>' : "") +
+    '<button type="button" class="btn" id="armBack">Back</button><button class="btn go">' + (a ? "Save" : "Make it + write its script") + "</button></div></form>");
+  $("modalBox").classList.add("wide");
+  $("armName").focus();
+  $("modalBox").querySelectorAll("input[name=armLook]").forEach((r) => (r.onchange = () => $("modalBox").querySelectorAll(".looks .arm-card").forEach((c) => c.classList.toggle("on", c.querySelector("input").checked))));
+  $("armBack").onclick = () => openArms();
+  const values = () => ({ name: $("armName").value.trim().slice(0, 24), look: ($("modalBox").querySelector("input[name=armLook]:checked") || {}).value || "staff", color: $("armColor").value });
+  if (a) {
+    $("armScript").onclick = () => { closeModal(); if (game.scripts.some((x) => x.id === a.script)) editScript(a.script); else toast("Its script was deleted. Delete the weapon and make it again."); };
+    $("armDel").onclick = () => {
+      if (!confirm('Delete "' + a.name + '" and its script?')) return;
+      pushUndo();
+      game.settings.arms = (game.settings.arms || []).filter((x) => x.id !== a.id);
+      game.settings.start = (game.settings.start || []).filter((x) => x !== "c" + a.id);
+      if (scriptOpen() === a.script) closeScript();
+      game.scripts = game.scripts.filter((x) => x.id !== a.script);
+      changed(); drawArmsBtn(); openArms();
+    };
+  }
+  $("armForm").onsubmit = (e) => {
+    e.preventDefault();
+    const v = values();
+    if (!v.name) { $("armErr").textContent = "Give it a name."; return; }
+    pushUndo();
+    if (a) {
+      Object.assign(a, v);
+      const sc = game.scripts.find((x) => x.id === a.script); if (sc) sc.name = "🎒 " + v.name;
+      changed(); drawArmsBtn(); openArms(); return;
+    }
+    if (game.scripts.length >= MAX_SCRIPTS) { $("armErr").textContent = "This game already has " + MAX_SCRIPTS + " scripts (the most)."; return; }
+    const sc = { id: uid(), name: "🎒 " + v.name, on: "", code: weaponCode(v.name) };
+    const arm = { id: uid(), ...v, script: sc.id };
+    game.scripts.push(sc);
+    game.settings.arms = (game.settings.arms || []).concat(arm);
+    if ((game.settings.start || []).length < MAX_START) game.settings.start = (game.settings.start || []).concat("c" + arm.id);
+    changed(); drawArmsBtn(); closeModal();
+    editScript(sc.id);
+    toast("Made " + v.name + "! Its script says what it does. Press ▶ Play to try it.", 5);
+  };
+}
+$("btnArms").onclick = () => openArms();
 
 // ---------------------------------------------------------------- the Output box (script errors and print())
 function clearOutput() { $("outList").innerHTML = ""; $("output").classList.add("hidden"); lastErr.clear(); }

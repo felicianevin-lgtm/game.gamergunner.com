@@ -27,6 +27,10 @@ export const HELP = [
     ["player.speed = 2", "Run 2 times faster (1 = normal)"], ["player.jump = 2", "Jump 2 times higher"],
     ["player.damage(25)", "Hurt the player (health starts at 100)"], ["player.health = 100", "Set the health"],
     ["player.freeze()", "Stop the player from moving (player.unfreeze() lets go)"], ["player.coins", "How many coins they have"], ["player.x", "Where the player is: player.x, player.y, player.z"]]],
+  ["Weapons 🎒", [
+    ["onAttack(function (aim) {\n  \n})", "In a home-made weapon's script: runs when the player uses it. aim.target = what you aim at (or null), aim.x / aim.y / aim.z = in front of you"],
+    ["shoot({ damage: 20, speed: 80, color: \"purple\", size: 0.5 })", "Fire a shot where the player aims (also: drop = falls, freeze = seconds frozen, boom = explosion size, count + spread = many shots)"],
+    ["me.damage(25)", "Hurt a monster (it has 100 health; 0 = defeated)"], ["me.onHit(function (damage) {\n  \n})", "Do something when a weapon hits this"]]],
   ["Finding things", [
     ["find(\"Door\")", "Get a part or GUI by its name (the name in the Explorer)"], ["findAll(\"Coin\")", "Get every thing with that name"],
     ["build(\"block\", { x: 0, y: 0, z: 0, width: 4, height: 6, depth: 1, color: \"#ff0000\" })", "Build a new part while the game runs (also: texture, textureSize, stretch, material, solid, name, turn). Types: block, ball, cylinder, wedge, coin, light, lava, crate..."]]],
@@ -189,7 +193,7 @@ export const EXAMPLES = [
 function RUNTIME(send) {
   "use strict";
   const things = new Map();
-  const H = { click: new Map(), touch: new Map(), untouch: new Map(), key: new Map() };
+  const H = { click: new Map(), touch: new Map(), untouch: new Map(), key: new Map(), attack: new Map(), hit: new Map() };
   const updates = [], timers = [], follows = new Map(), spins = new Map(), errs = new Map();
   let out = [], now = 0, cur = null, nclone = 1, nbuild = 1, ended = false;
   const P = { x: 0, y: 0, z: 0, ry: 0, coins: 0, health: 100, speed: 1, jump: 1 };
@@ -268,6 +272,8 @@ function RUNTIME(send) {
     onClick(fn) { on(H.click, this._s.id, fn, "onClick"); cmd("want", "click", this._s.id); return this; }
     onTouch(fn) { on(H.touch, this._s.id, fn, "onTouch"); cmd("want", "touch", this._s.id); return this; }
     onTouchEnd(fn) { on(H.untouch, this._s.id, fn, "onTouchEnd"); cmd("want", "touch", this._s.id); return this; }
+    onHit(fn) { on(H.hit, this._s.id, fn, "onHit"); cmd("want", "hit", this._s.id); return this; }
+    damage(n) { cmd("hurt", this._s.id, +n || 0); return this; }
     clone() {
       if (this._s.kind !== "part") throw new Error("Only parts can be cloned");
       const s = { ...this._s, id: "k" + nclone++ };
@@ -322,6 +328,13 @@ function RUNTIME(send) {
     every(secs, fn) { need(fn, "every"); const e = Math.max(0.05, +secs || 1); const t = { at: now + e, every: e, fn, sc: cur }; timers.push(t); return { stop() { t.dead = true; } }; },
     wait(secs) { return new Promise((res) => timers.push({ at: now + Math.max(0, +secs || 0), fn: res, sc: cur })); },
     onUpdate(fn) { need(fn, "onUpdate"); updates.push({ fn, sc: cur }); },
+    // 🎒 a home-made weapon's script (weapons.js): runs when the player uses that weapon
+    onAttack(fn) { need(fn, "onAttack"); on(H.attack, cur ? cur.id : "", fn, "onAttack"); },
+    shoot(o) {
+      o = o && typeof o === "object" ? o : {};
+      let c = String(o.color || "purple").toLowerCase(); c = COLORS[c] || c; if (!/^#[0-9a-f]{6}$/.test(c)) c = "#a64bf4";
+      cmd("shoot", { dmg: +o.damage || 0, sp: +o.speed || 80, color: c, size: +o.size || 0.25, drop: +o.drop || 0, freeze: +o.freeze || 0, boom: +o.boom || 0, spread: +o.spread || 0, n: +o.count || 1 });
+    },
     onKey(key, fn) { need(fn, "onKey"); key = String(key).toLowerCase(); on(H.key, key === " " ? "space" : key, fn, "onKey"); cmd("want", "keys", ""); },
     sound(name) { cmd("sound", String(name).slice(0, 12)); },
     win(text) { if (!ended) { ended = true; cmd("win", String(text == null ? "You win!" : text).slice(0, 120)); } },
@@ -354,6 +367,8 @@ function RUNTIME(send) {
     for (const [kind, id, v] of d.ev || []) {
       if (kind === "vis") { const s = things.get(id); if (s) s.visible = !!v; }
       else if (kind === "key") fire(H.key, id);
+      else if (kind === "attack") { const a = v && typeof v === "object" ? v : {}; fire(H.attack, id, { x: +a.x || 0, y: +a.y || 0, z: +a.z || 0, dx: +a.dx || 0, dz: +a.dz || 0, target: a.t ? get(a.t) : null }); }
+      else if (kind === "hit") fire(H.hit, id, +v || 0);
       else if (H[kind]) fire(H[kind], id);
     }
     const due = timers.filter((t) => !t.dead && t.at <= now);
