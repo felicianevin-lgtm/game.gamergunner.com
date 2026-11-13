@@ -17,7 +17,7 @@ import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js"
 import { Fishing, rodById } from "./fishing.js";
 import { Heist } from "./heist.js";
 import { NPCs } from "./npcs.js";
-import { Interiors, buildingById, JAIL_SPOT } from "./interiors.js";
+import { Interiors, buildingById, JAIL_SPOT, POCKET } from "./interiors.js";
 import { MP } from "./mp.js";
 import { FX } from "./fx.js";
 import { SFX, audio, setMuted, engine } from "./sfx.js";
@@ -439,6 +439,7 @@ export const GAME = {
     const f = freeSpot(-36, 12, Math.PI, 5); s.x = f.x; s.z = f.z;
     S.cars.push(s); const c = spawnCar(s);
     if (mine()) exitCar();
+    if (inside()) { interiors.leaveRoom(); applyItem(); H.flash("#fff"); } // (walk out of the showroom and straight into your new ride)
     enterCar(c); SFX.buy(); H.bumpMoney(); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 60);
     H.banner("NEW RIDE!", v.name); save(); return true;
   },
@@ -507,10 +508,13 @@ export const GAME = {
   setWaypoint(p) { G.waypoint = p; setBeacon(gpsBeacon, p); if (p) H.toast("GPS set", "Follow the purple arrow to " + (p.name || "your spot"), ""); },
   showroom(id, color) {
     if (G.preview) { scene.remove(G.preview.root); G.preview = null; }
-    if (!id) return;
+    if (!id) { if (inside() && interiors.cur.featured) interiors.cur.featured.visible = true; return; }
     const isT = !!trailerById(id);
     const m = isT ? { root: (() => { const g = new THREE.Group(); g.add(trailerModel(id, color)); return g; })() } : buildCar(newCar(id, 0));
-    m.root.position.set(-36, 1.45, 18); scene.add(m.root); G.preview = m;
+    const R = inside() && interiors.cur.stage ? interiors.cur : null; // (inside the showroom: it shows up on the big middle turntable)
+    if (R && R.featured) R.featured.visible = false;
+    G.previewAt = R ? { x: POCKET.x + R.stage.x, y: R.stage.y, z: POCKET.z + R.stage.z, inside: true } : { x: -36, y: 1.45, z: 18 };
+    m.root.position.set(G.previewAt.x, G.previewAt.y, G.previewAt.z); scene.add(m.root); G.preview = m;
   },
   paintTrailer(u, color) { const t = G.TRS.get(u); if (!t || !t.model.body || !spend(150)) { SFX.nope(); return false; } t.s.color = color; t.model.body.color.set(color); SFX.buy(); H.bumpMoney(); save(); return true; },
   wipe() { wipe(); location.reload(); },
@@ -734,7 +738,10 @@ function updateCamera(dt) {
   let px = tx - Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist, pz = tz - Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist, py = ty + Math.sin(cam.pitch) * dist + (inside() ? 0.5 : 1.2);
   if (inside() && G.mode !== "side") { [px, py, pz] = interiors.clampCam(px, py, pz); }
   // shop screens get their own camera
-  if (G.mode === "side" && G.panel === "dealer") { tx = -36; ty = 2.6; tz = 18; px = -36 + Math.sin(G.time * 0.25) * 2 + 8.5; py = 5.2; pz = 8.5; }
+  if (G.mode === "side" && G.panel === "dealer") {
+    const P = G.previewAt || { x: -36, y: 1.45, z: 18 }, ins = !!P.inside && inside();
+    tx = P.x; ty = P.y + 1.15; tz = P.z; px = P.x + Math.sin(G.time * 0.25) * (ins ? 1.2 : 2) + (ins ? 4.8 : 8.5); py = ins ? 3.2 : 5.2; pz = P.z + (ins ? 6.2 : -9.5);
+  }
   if (G.mode === "side" && G.panel === "customs" && c) { const a = G.time * 0.3; tx = c.b.x; ty = c.b.y + 1.2; tz = c.b.z; px = tx + Math.sin(a) * (4 + c.m.len); pz = tz + Math.cos(a) * (4 + c.m.len); py = ty + 2.2; }
   if (G.mode === "side" && G.panel === "house" && G.houseView) {
     // look at the front of the house from a little to the side

@@ -134,7 +134,13 @@ export function dealership(scene, b) {
   // a giant glass showroom (56 m wide) with a big car lot out front
   b.box(56, 11, 26, 0, 0, 0, 0xf2f4f7).solid(0, 0, 28, 13);
   b.box(50, 8.2, 0.3, 0, 0.8, 13.05, 0x7fc8f0, "glass");
-  for (const x of [-25, -12.5, 0, 12.5, 25]) b.box(1, 9.6, 0.7, x, 0, 13.3, 0xffffff);
+  for (const x of [-25, -12.5, 12.5, 25]) b.box(1, 9.6, 0.7, x, 0, 13.3, 0xffffff);
+  // the front door: chrome frame, two dark glass doors with handles, a canopy and a red carpet
+  b.box(4.4, 3.6, 0.5, 0, 0, 13.25, 0xd8dde3); b.box(1.8, 3.1, 0.12, -0.95, 0.05, 13.52, 0x1a2a3a, "glass"); b.box(1.8, 3.1, 0.12, 0.95, 0.05, 13.52, 0x1a2a3a, "glass");
+  for (const s of [-1, 1]) b.box(0.08, 1.2, 0.12, s * 0.22, 1.0, 13.64, 0xffd23a);
+  b.box(5.6, 0.3, 2.6, 0, 3.7, 14.5, 0x2a6fd6); b.box(5.7, 0.08, 2.7, 0, 3.66, 14.5, 0xbfe6ff, "glow");
+  for (const s of [-1, 1]) b.cyl(0.08, 3.7, s * 2.6, 0, 15.7, 0xd8dde3, 8);
+  b.box(3, 0.04, 4, 0, 0.02, 15.5, 0xb01a2a);
   b.box(58, 0.8, 29.5, 0, 11, 1.5, 0x2a6fd6); b.box(56.4, 0.8, 26.4, 0, 9.6, 0, 0x2a6fd6);
   b.box(58.2, 0.18, 0.3, 0, 11.2, 16.3, 0xbfe6ff, "glow");
   // the car lot: lines, a spinning stage in the middle and 4 show pads

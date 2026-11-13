@@ -4,7 +4,8 @@
 // drawn while you're inside.
 import * as THREE from "/create/vendor/three.module.js";
 import { HOUSES, PAWNS } from "./layout.js";
-import { Batch, prismGeo } from "./build.js";
+import { Batch, prismGeo, sign } from "./build.js";
+import { buildCar, vehicleById } from "./vehicles.js";
 import { makePerson, LOOKS } from "./character.js";
 import { S } from "./save.js";
 
@@ -17,7 +18,7 @@ export const ROOM_H = 4.4;
 // w, d = the room size; kind = what's inside; menu = the shop screen the counter opens
 const T = (id, name, kind, x, z, yaw, door, w, d, extra = {}) => ({ id, name, kind, x, z, yaw, door, w, d, ...extra });
 export const BUILDINGS = [
-  T("dealer", "Valley Motors", "shop", -36, 41, Math.PI, [0, 13.6], 26, 16, { menu: "dealer", keeper: "Sales clerk", goods: "cars" }),
+  T("dealer", "Valley Motors", "showroom", -36, 41, Math.PI, [0, 13.6], 28, 18, { menu: "dealer", keeper: "Sales clerk", goods: "cars" }),
   T("customs", "Mud & Chrome Customs", "garage", 36, -41, 0, [0, 11.6], 20, 14, { keeper: "Mechanic" }),
   T("jobs", "Job Center", "shop", -36, -41, 0, [0, 10.6], 18, 12, { menu: "jobs", keeper: "Job counselor", goods: "papers" }),
   T("post", "Post Office", "shop", 22, 40, Math.PI, [0, 9.6], 14, 10, { keeper: "Mail clerk", goods: "boxes" }),
@@ -75,13 +76,17 @@ export const HOLDUP = {
 export const JAIL_SPOT = { x: -7.2, z: -4.6 }; // inside the police station: the first jail cell
 
 // ---------------------------------------------------------------- building a room
-const WALL = { shop: 0xf2ece0, garage: 0xb8bcc4, diner: 0xffe9c8, gas: 0xf4f0e8, office: 0xe8e2d4, school: 0xffe2b0, neighbor: 0xd8ecf8, hideout: 0x7a6a50, barn: 0xb84a2a, bank: 0xe8e2d4, jewelry: 0xf4e4f8, police: 0xdfe6f4, hospital: 0xf4fbff, cafe: 0xf2e0c8, home: 0xf4ead8 };
-const FLOOR = { shop: 0xc8b090, garage: 0x6a6e78, diner: 0xd8d0c0, gas: 0xd0d0d0, office: 0x9a6a3a, school: 0xb08a5a, neighbor: 0xa8784a, hideout: 0x5a4a3a, barn: 0xc8a050, bank: 0xd8d0c0, jewelry: 0xe0d8f0, police: 0x9aa0aa, hospital: 0xd8e8f0, cafe: 0x9a6a3a, home: 0xa8784a };
+const WALL = { showroom: 0xf8f9fb, shop: 0xf2ece0, garage: 0xb8bcc4, diner: 0xffe9c8, gas: 0xf4f0e8, office: 0xe8e2d4, school: 0xffe2b0, neighbor: 0xd8ecf8, hideout: 0x7a6a50, barn: 0xb84a2a, bank: 0xe8e2d4, jewelry: 0xf4e4f8, police: 0xdfe6f4, hospital: 0xf4fbff, cafe: 0xf2e0c8, home: 0xf4ead8 };
+const FLOOR = { showroom: 0xe4e7ec, shop: 0xc8b090, garage: 0x6a6e78, diner: 0xd8d0c0, gas: 0xd0d0d0, office: 0x9a6a3a, school: 0xb08a5a, neighbor: 0xa8784a, hideout: 0x5a4a3a, barn: 0xc8a050, bank: 0xd8d0c0, jewelry: 0xe0d8f0, police: 0x9aa0aa, hospital: 0xd8e8f0, cafe: 0x9a6a3a, home: 0xa8784a };
 function room(B, w, d, kind) {
   const b = new Batch(); b.at(0, 0, 0);
   const wall = WALL[kind] || 0xeeeeee, H = ROOM_H;
   b.box(w, 0.1, d, 0, -0.1, 0, FLOOR[kind] || 0xaaaaaa);
-  if (kind !== "barn" && kind !== "garage") for (let i = -w / 2 + 1; i < w / 2; i += 2) b.box(0.05, 0.012, d, i, 0, 0, (FLOOR[kind] || 0xaaaaaa) - 0x181818 > 0 ? (FLOOR[kind] || 0xaaaaaa) & 0xdedede : 0x555555); // floor boards
+  if (kind === "showroom") { // (shiny tiles instead of floor boards)
+    b.box(w, 0.05, d, 0, H - 0.08, 0, 0xe6eaf0, "glow"); // (a bright white ceiling)
+    for (let i = -w / 2 + 2; i < w / 2; i += 2) b.box(0.04, 0.012, d, i, 0, 0, 0xc4c8d0);
+    for (let j = -d / 2 + 2; j < d / 2; j += 2) b.box(w, 0.012, 0.04, 0, 0, j, 0xc4c8d0);
+  } else if (kind !== "barn" && kind !== "garage") for (let i = -w / 2 + 1; i < w / 2; i += 2) b.box(0.05, 0.012, d, i, 0, 0, (FLOOR[kind] || 0xaaaaaa) - 0x181818 > 0 ? (FLOOR[kind] || 0xaaaaaa) & 0xdedede : 0x555555); // floor boards
   b.box(w + 0.4, 0.2, d + 0.4, 0, H, 0, kind === "hideout" ? 0x5a4a3a : 0xfafafa); // ceiling
   b.box(w + 0.4, H, 0.2, 0, 0, -d / 2 - 0.1, wall); // back wall
   b.box(0.2, H, d, -w / 2 - 0.1, 0, 0, wall); b.box(0.2, H, d, w / 2 + 0.1, 0, 0, wall); // side walls
@@ -119,10 +124,49 @@ function rug(b, x, z, w, d, color) { b.box(w, 0.02, d, x, 0, z, color); }
 
 // what's in each kind of room. Returns { spots: [{x, z, r, act}], keeper: {x, z} }
 function furnish(bd, b, C) {
-  const w = bd.w, d = bd.d, k = bd.kind, spots = []; let keeper = null;
+  const w = bd.w, d = bd.d, k = bd.kind, spots = []; let keeper = null, decor = null;
   const back = -d / 2;
   const shopCounter = (len = Math.min(8, w - 4)) => { counter(b, C, 0, back + 2.6, len); keeper = { x: 0, z: back + 1.6 }; if (bd.menu) spots.push({ x: 0, z: back + 3.6, r: 1.8, act: "menu" }); else spots.push({ x: 0, z: back + 3.6, r: 1.8, act: "chat" }); };
-  if (k === "shop") {
+  if (k === "showroom") {
+    // the sales desk: white + glowing blue, with a computer
+    counter(b, C, 0, back + 2.6, 7, 0xf4f6f8, 0xffffff); b.box(7.1, 0.08, 0.06, 0, 0.3, back + 3.02, 0x3ab0ff, "glow");
+    b.box(0.9, 0.55, 0.06, -1.6, 1.13, back + 2.4, 0x22262c); b.box(0.8, 0.45, 0.07, -1.6, 1.18, back + 2.37, 0x6ac8ff, "glow");
+    keeper = { x: 0, z: back + 1.6 }; spots.push({ x: 0, z: back + 3.6, r: 1.8, act: "menu" });
+    // the back wall: a big blue logo panel and glowing stripes
+    b.box(12, 2.6, 0.12, 0, 1.5, back + 0.08, 0x2a6fd6); b.box(12.4, 0.1, 0.14, 0, 4.15, back + 0.1, 0x3ab0ff, "glow"); b.box(12.4, 0.1, 0.14, 0, 1.4, back + 0.1, 0x3ab0ff, "glow");
+    // a glowing line along the ceiling all the way around
+    for (const s of [-1, 1]) { b.box(0.08, 0.08, d, s * (w / 2 - 0.05), ROOM_H - 0.3, 0, 0x3ab0ff, "glow"); b.box(w, 0.08, 0.08, 0, ROOM_H - 0.3, s * (d / 2 - 0.05), 0x3ab0ff, "glow"); }
+    // turntables: a big one in the middle (your pick shows up here) + 4 around it
+    const pads = [[0, 0.6, 3.2], [-9.2, -3.4, 2.9], [9.2, -3.4, 2.9], [-9.2, 3.6, 2.9], [9.2, 3.6, 2.9]];
+    for (const [x, z, r] of pads) {
+      b.cyl(r, 0.3, x, 0, z, 0xf0f2f6, 32); b.add(new THREE.CylinderGeometry(r + 0.1, r + 0.1, 0.1, 32, 1, true), 0x3ab0ff, x, 0.18, z, 0, 0, 0, "glow");
+      b.add(new THREE.CylinderGeometry(r * 0.8, r * 0.8, 0.02, 32), 0xfff6d8, x, ROOM_H - 0.12, z, 0, 0, 0, "glow"); // (a spotlight over it)
+      solid(C, x, z, r * 0.85, r * 0.85);
+    }
+    // a lounge with leather sofas, a coffee table and a rug
+    rug(b, 9.5, -7.2 + 2.2, 5, 2.6, 0x2a3a5a);
+    sofa(b, C, -9.5, back + 1.2, 0x2a2a30); sofa(b, C, 9.5, back + 1.2, 0x2a2a30);
+    b.box(1.4, 0.4, 0.8, -9.5, 0, back + 2.6, 0x1a1a1e); b.box(1.5, 0.06, 0.9, -9.5, 0.4, back + 2.6, 0xd8dde3); solid(C, -9.5, back + 2.6, 0.75, 0.45);
+    // plants, posters of rides on the side walls, flags hanging from the ceiling
+    for (const [x, z] of [[-w / 2 + 1, d / 2 - 1.2], [w / 2 - 1, d / 2 - 1.2], [-4.5, back + 0.8], [4.5, back + 0.8]]) plant(b, C, x, z);
+    for (const s of [-1, 1]) for (const z of [-2.5, 3]) { b.box(0.06, 1.8, 2.8, s * (w / 2 - 0.02), 1.6, z, 0xffffff); b.box(0.08, 1.5, 2.5, s * (w / 2 - 0.04), 1.75, z, [0xe0203a, 0xffd23a, 0x2a7ad0, 0x3aa04a][(s + 1) + (z > 0 ? 1 : 0)]); }
+    let fi = 0; for (let x = -w / 2 + 2; x < w / 2 - 1; x += 1.6) b.add(new THREE.ConeGeometry(0.22, 0.45, 3), [0xe0203a, 0xffd23a, 0x2a7ad0, 0x3aa04a][fi++ % 4], x, ROOM_H - 0.6, 1.8, Math.PI, 0, 0);
+    // the cars on display (built when you walk in) + the logo sign
+    const show = [["hyper", 0xe0203a], ["trailboss", 0x1a1a22], ["sportquad", 0xffd23a], ["prerunner", 0xff7a1a], ["swamp", 0x4a5a3a]];
+    decor = (scene, cur) => {
+      cur.spin = [];
+      pads.forEach(([x, z], i) => {
+        const [id, paint] = show[i], v = vehicleById(id);
+        const M = buildCar({ id, paint, rims: "chrome", tires: v.quad ? "mud" : "allterrain", engine: 3, limit: 1, lift: 0, neon: 2, dirt: 0 });
+        M.body.remove(M.rider.root); M.root.position.set(POCKET.x + x, 0.3, POCKET.z + z); M.root.rotation.y = i * 1.3;
+        scene.add(M.root); cur.extras.push(M.root); cur.spin.push(M.root);
+        if (i === 0) cur.featured = M.root;
+      });
+      cur.stage = { x: pads[0][0], y: 0.3, z: pads[0][1] };
+      cur.extras.push(sign(scene, "VALLEY MOTORS", 10, 1.6, POCKET.x, 2.8, POCKET.z + back + 0.16, 0, { bg: "#2a6fd6", fg: "#ffffff", stroke: "#123a7a", glow: true }));
+      cur.extras.push(sign(scene, "TRUCKS • QUADS • BIKES • CARS", 8, 0.7, POCKET.x, 1.85, POCKET.z + back + 0.16, 0, { bg: "#2a6fd6", fg: "#ffd23a" }));
+    };
+  } else if (k === "shop") {
     shopCounter();
     shelf(b, C, -w / 2 + 0.5, 0, Math.min(6, d - 4), bd.goods, 1); shelf(b, C, w / 2 - 0.5, 0, Math.min(6, d - 4), bd.goods, 1);
     if (w > 12) shelf(b, C, 0, back + 0.4, w - 6, bd.goods);
@@ -213,7 +257,7 @@ function furnish(bd, b, C) {
       else trophies(b, C, w, d);
     }
   }
-  return { spots, keeper };
+  return { decor, spots, keeper };
 }
 // your stuff: race trophies, fish on the wall and little models of all your rides
 function trophies(b, C, w, d) {
@@ -247,6 +291,7 @@ export class Interiors {
       keeper = makePerson(look); keeper.root.position.set(POCKET.x + f.keeper.x, 0, POCKET.z + f.keeper.z); this.api.scene.add(keeper.root);
     }
     this.cur = { bd, meshes, C, spots: f.spots, keeper, t: 0, keeperAt: f.keeper, register: f.register || null, extras: [] };
+    if (f.decor) f.decor(this.api.scene, this.cur);
     if (this.api.onEnter) this.api.onEnter(this.cur);
     const p = spot || { x: 0, z: bd.d / 2 - 1.3 };
     return { x: POCKET.x + p.x, z: POCKET.z + p.z, yaw: spot ? 0 : Math.PI };
@@ -265,6 +310,7 @@ export class Interiors {
   // walking inside: no hills, just walls and furniture
   step(p, mx, mz, run, jump, dt) {
     const c = this.cur, w = c.bd.w, d = c.bd.d;
+    if (c.spin) for (const r of c.spin) r.rotation.y += dt * 0.35; // (the display cars turn slowly on their turntables)
     const sp = run ? 7 : 4.5, l = Math.hypot(mx, mz);
     const tx = l > 0.1 ? (mx / Math.max(1, l)) * sp : 0, tz = l > 0.1 ? (mz / Math.max(1, l)) * sp : 0, k = Math.min(1, dt * 12);
     p.vx += (tx - p.vx) * k; p.vz += (tz - p.vz) * k;
