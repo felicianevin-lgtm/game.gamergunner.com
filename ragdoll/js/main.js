@@ -1,7 +1,7 @@
 // SPLAT LAB: a 2D physics ragdoll sandbox for GunnerVerse. Spawn floppy people and stuff, then mess with them.
 import { W, WW, WH, step, frame, removeBody, hurt, heal, ignite, explode, addVel, vel, rnd } from "./sim.js";
 import { drawPools, drawDrops, drawChunks, drawFlames, drawFx, drawTexts, OUT } from "./draw.js";
-import { CATS, ITEMS, ITEM, drawBody, spawnItem } from "./items.js";
+import { CATS, ITEMS, ITEM, drawBody, spawnItem, makeRope } from "./items.js";
 import { MAPS, segsOf } from "./maps.js";
 import { SFX, audio, setMuted, isMuted } from "./sfx.js";
 
@@ -33,15 +33,16 @@ function clearAll() { for (const b of [...W.bodies]) removeBody(b); W.pins.lengt
 
 // ---------------------------------------------------------------- state + UI
 let tool = "drag", spawnDef = null, paused = false, slow = false, started = false, cat = "people";
-let hintT = 0, mouse = { x: WW / 2, y: WH / 2, in: false }, lastTap = { b: null, t: 0 };
+let ropeA = null, hintT = 0, mouse = { x: WW / 2, y: WH / 2, in: false }, lastTap = { b: null, t: 0 };
 W.gore = store.get("gore", true);
 const HINT = {
   drag: "Drag people and things to throw them. Double-tap a thing (or right-click it) to USE it.",
   fire: "🔥 Tap someone or something to set it on fire.", boom: "💥 Tap anywhere to blow it up!",
+  rope: "🪢 Tap one spot, then another to tie a rope. Tap a person or thing to tie it, or empty space to nail it to the wall.",
   heal: "💉 Tap a person to heal them (lost arms and legs stay lost).", del: "🗑️ Tap a thing to delete it.",
 };
 function setTool(t) {
-  tool = t; if (t !== "drag") spawnDef = null;
+  tool = t; ropeA = null; if (t !== "drag") spawnDef = null;
   document.querySelectorAll(".tool").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
   updateHint();
 }
@@ -115,6 +116,7 @@ function pick(x, y, any = false, reach = 26) {
   for (let i = W.bodies.length - 1; i >= 0; i--) {
     const b = W.bodies[i];
     if (b.static && !any) continue;
+    if (b.rope) { if (!any) continue; const pts = [b.endA, ...b.chain, b.endB]; for (let k = 0; k + 1 < pts.length; k++) { const d = segD(x, y, pts[k], pts[k + 1])[0] - 3; if (d < bd) { bd = d; best = { b, sh: null }; } } continue; }
     if (x < b.x0 - 60 || x > b.x1 + 60 || y < b.y0 - 60 || y > b.y1 + 60) continue;
     for (const sh of b.shapes) {
       if (sh.off) continue;
@@ -166,6 +168,13 @@ cv.addEventListener("pointerdown", (e) => {
     if (h) { let near = null, nd = 1e9; for (const p of h.b.ps) { const d = Math.hypot(p.x - x, p.y - y); if (!p.gone && d < nd) { nd = d; near = p; } } ignite(h.b, near); }
     else { W.fires.push({ x, y: floorY(x) < y + 120 ? floorY(x) : y, life: 5, r: 30 }); SFX.fire(); }
   } else if (tool === "boom") explode(x, y, 1);
+  else if (tool === "rope") {
+    const h = pick(x, y, false, 18);
+    let end = { x, y };
+    if (h && h.sh) { let near = null, nd = 1e9; for (const p of h.b.ps) { if (p.gone || p.nc) continue; const d = Math.hypot(p.x - x, p.y - y); if (d < nd) { nd = d; near = p; } } if (near && h.b.kind === "rag" && near.part <= 1) near = h.b.ps[2]; if (near) end = { p: near }; }
+    if (!ropeA) { ropeA = end; SFX.click(); }
+    else { if (!(ropeA.p && end.p && ropeA.p === end.p)) { const r = makeRope(ropeA, end); if (r) SFX.spawn(); } ropeA = null; }
+  }
   else if (tool === "heal") { const h = pick(x, y, false, 40); if (h && h.b.kind === "rag" && heal(h.b)) SFX.heal(); }
   else if (tool === "del") { const h = pick(x, y, true, 20); if (h) { removeBody(h.b); SFX.click(); } }
 });
@@ -196,7 +205,8 @@ addEventListener("keydown", (e) => {
   else if (k === "s") toggleSlow(); else if (k === "p") togglePause();
   else if (k === "c") clean(); else if (k === "x") clearAll(); else if (k === "m") openPanel("maps");
   else if (k === "delete" || k === "backspace") { const b = hoveredBody(); if (b) removeBody(b); }
-  else if ("12345".includes(k)) setTool(["drag", "fire", "boom", "heal", "del"][+k - 1]);
+  else if ("123456".includes(k)) setTool(["drag", "rope", "fire", "boom", "heal", "del"][+k - 1]);
+  else if (k === "r") setTool("rope");
 });
 
 // ---------------------------------------------------------------- info card (who you're pointing at)
@@ -209,7 +219,8 @@ function updateInfo() {
     const burning = b.parts.some((q) => q.burn > 0), lost = b.parts.filter((q) => q.cut || q.gone).length;
     const st = b.state === "dead" ? "💀 Dead" : b.state === "ko" ? "💫 Knocked out" : burning ? "🔥 ON FIRE" : b.blood < 60 || b.pain > 0.4 ? "🤕 Hurt" : "🙂 OK";
     t = `<b>${b.name}</b> · ${st}<br><code>Blood [${bar(b.blood / 100)}] ${Math.round(b.blood)}%</code>` + (b.state !== "dead" ? `<br><code>Awake [${bar(1 - Math.min(1, b.shock / 100))}]</code>` : "") + (lost ? `<br>Missing ${lost} part${lost > 1 ? "s" : ""}` : "");
-  } else if (b && b.def) t = `<b>${b.def.name}</b>${b.def.usable ? " · double-tap = USE" + (b.on !== undefined ? (b.on ? " (ON)" : " (OFF)") : "") : ""}`;
+  } else if (b && b.rope) t = "<b>Rope</b> · 🗑️ delete it to cut it";
+  else if (b && b.def) t = `<b>${b.def.name}</b>${b.def.usable ? " · double-tap = USE" + (b.on !== undefined ? (b.on ? " (ON)" : " (OFF)") : "") : ""}`;
   if (t !== infoTxt) { infoTxt = t; $("info").innerHTML = t; $("info").classList.toggle("hidden", !t); }
 }
 
@@ -229,6 +240,7 @@ function render() {
     ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
     if (p) { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(g.tx, g.ty); ctx.stroke(); }
     ctx.setLineDash([]); ctx.beginPath(); ctx.arc(g.tx, g.ty, 7, 0, 6.283); ctx.stroke();
+  } else if (ropeA && mouse.in) { const ax = ropeA.p ? ropeA.p.x : ropeA.x, ay = ropeA.p ? ropeA.p.y : ropeA.y; ctx.strokeStyle = "#c8a165"; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(mouse.x, mouse.y); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "#c8a165"; ctx.beginPath(); ctx.arc(ax, ay, 5, 0, 6.283); ctx.fill();
   } else if (spawnDef && mouse.in && tool === "drag") { ctx.globalAlpha = 0.5; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 12, 0, 6.283); ctx.moveTo(mouse.x - 6, mouse.y); ctx.lineTo(mouse.x + 6, mouse.y); ctx.moveTo(mouse.x, mouse.y - 6); ctx.lineTo(mouse.x, mouse.y + 6); ctx.stroke(); ctx.globalAlpha = 1; }
   if (thumbTitle) {
     ctx.setTransform(SC, 0, 0, SC, OX, OY); ctx.textAlign = "center"; ctx.lineJoin = "round";
@@ -268,11 +280,11 @@ function thumb() {
   const S = (id, x, y, f) => spawnItem(ITEM[id], x, y, f);
   S("spikes", 560, 800, 1); S("saw", 1010, 690, 1);
   S("buddy", 560, 520, 1); S("brute", 790, 780, -1); S("goo", 1010, 470, -1); S("robo", 1180, 780, -1);
-  const gun = S("thumper", 380, 820, 1); gun.ps[1].y -= 22; gun.ps[1].py -= 22;
+  const gun = S("sniper", 380, 820, 1); gun.ps[1].y -= 22; gun.ps[1].py -= 22;
   for (let i = 0; i < 45; i++) simulate(1 / 60);
-  ITEM.thumper.use(gun); explode(860, 836, 0.9);
+  ITEM.sniper.use(gun); explode(860, 836, 0.9);
   for (let i = 0; i < 9; i++) simulate(1 / 60);
-  ITEM.thumper.use(gun);
+  ITEM.sniper.use(gun);
   for (let i = 0; i < 2; i++) simulate(1 / 60);
   cam = { x: 790, y: 640, z: 1.75 }; frozen = true; thumbTitle = true; window.__thumbReady = true;
 }

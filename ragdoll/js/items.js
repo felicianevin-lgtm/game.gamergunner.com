@@ -7,7 +7,7 @@ const S = (n, ...a) => W.sfx[n] && W.sfx[n](...a);
 const R = Math.random;
 
 export const CATS = [
-  { id: "people", name: "People", icon: "🧍" }, { id: "melee", name: "Melee", icon: "🗡️" }, { id: "guns", name: "Blasters", icon: "🔫" },
+  { id: "people", name: "People", icon: "🧍" }, { id: "melee", name: "Melee", icon: "🗡️" }, { id: "guns", name: "Guns", icon: "🔫" },
   { id: "boom", name: "Explosives", icon: "💣" }, { id: "machines", name: "Machines", icon: "⚙️" }, { id: "vehicles", name: "Vehicles", icon: "🚗" },
   { id: "props", name: "Props", icon: "📦" },
 ];
@@ -72,23 +72,39 @@ export const ITEMS = [
     spawn: (x, y, f, d) => stickItem(d, x, y, 104, 6, 0.4, 0.9, f),
     draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-5, -3.5, L * 0.4, -4.5, L + 5, -7.5, L + 6, 0, L + 5, 7.5, L * 0.4, 4.5, -5, 3.5], shade("#d4a373", -(b.char || 0))); rrect(ctx, -6, -4.5, 14, 9, 3, "#333"); bloodOn(ctx, b, () => shape(ctx, [L * 0.6, -6, L + 5, -7.5, L + 5, 7.5, L * 0.6, 6], "#a3101c", null)); ctx.restore(); } },
 
-  // BLASTERS (made-up toy-looking blasters, no real guns)
-  { id: "pea", cat: "guns", name: "Pea Popper", desc: "Small blaster. Tap USE to fire", metal: true, usable: true,
+  // GUNS (generic gun types, no real makes or models)
+  { id: "pistol", cat: "guns", name: "Pistol", desc: "Tap USE to shoot", metal: true, usable: true,
     spawn: (x, y, f, d) => stickItem(d, x, y, 40, 5, 0.6, 0.5, f),
-    use(b) { fire(b, { dmg: 34, force: 380, recoil: 120, kind: 0 }); },
-    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [2, 2, 12, 2, 8, 17, -2, 17], "#ff7b00"); rrect(ctx, -2, -7, L + 4, 10, 3, "#2ec4b6"); rrect(ctx, L - 4, -5, 9, 6, 2, "#1b4b5a"); ctx.restore(); } },
-  { id: "buzz", cat: "guns", name: "Buzz Blaster", desc: "Automatic! USE turns it on / off", metal: true, usable: true,
-    spawn: (x, y, f, d) => { const b = stickItem(d, x, y, 76, 5, 0.9, 0.7, f); b.pre = (b, h) => { if (b.on) { b.cool = (b.cool || 0) - h; if (b.cool <= 0) { b.cool = 0.085; fire(b, { dmg: 24, force: 260, recoil: 70, kind: 1, pierce: 2, spread: 0.035 }); } } }; return b; },
+    use(b) { fire(b, { dmg: 34, force: 380, recoil: 140, kind: 0 }); },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [1, 2, 11, 2, 8, 17, -3, 16], "#2b2b2e"); shape(ctx, [10, 2, 16, 2, 15, 8, 11, 8], "#1c1c1f"); rrect(ctx, -3, -7, L + 4, 9, 2, "#3a3a3f"); ctx.fillStyle = "#56565c"; ctx.fillRect(2, -6, L - 4, 2); ctx.fillStyle = "#111"; ctx.fillRect(L - 1, -4, 3, 3); ctx.restore(); } },
+  { id: "revolver", cat: "guns", name: "Revolver", desc: "Six-shooter. Big hits", metal: true, usable: true,
+    spawn: (x, y, f, d) => stickItem(d, x, y, 50, 5, 0.8, 0.6, f),
+    use(b) { fire(b, { dmg: 55, force: 600, recoil: 260, kind: 2 }); },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-2, 0, 9, 0, 6, 17, -5, 17], "#6b4423"); rrect(ctx, 6, -8, 14, 12, 3, "#4a4a50"); ctx.fillStyle = "#2b2b2e"; ctx.fillRect(9, -6, 2, 8); ctx.fillRect(14, -6, 2, 8); rrect(ctx, 18, -6, L - 16, 6, 2, "#5a5a62"); rrect(ctx, 0, -9, 10, 5, 2, "#3a3a3f"); ctx.restore(); } },
+  { id: "smg", cat: "guns", name: "SMG", desc: "Automatic! USE turns it on / off", metal: true, usable: true,
+    spawn: (x, y, f, d) => { const b = stickItem(d, x, y, 58, 5, 0.8, 0.6, f); b.pre = autoFire(0.07, { dmg: 20, force: 230, recoil: 60, kind: 1, spread: 0.05 }); return b; },
     use(b) { b.on = !b.on; S("click"); },
-    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-4, -4, 14, -6, 14, 8, -4, 10], "#3a0ca3"); shape(ctx, [L * 0.42, 2, L * 0.55, 2, L * 0.5, 20, L * 0.4, 20], "#222"); shape(ctx, [L * 0.25, 2, L * 0.35, 2, L * 0.3, 16, L * 0.22, 16], "#ff006e"); rrect(ctx, 12, -8, L * 0.66, 12, 3, "#7209b7"); rrect(ctx, L * 0.7, -5, L * 0.32, 6, 2, "#222"); ctx.fillStyle = b.on ? "#7dff7d" : "#444"; ctx.beginPath(); ctx.arc(L * 0.3, -2, 2.5, 0, 6.283); ctx.fill(); ctx.restore(); } },
-  { id: "scatter", cat: "guns", name: "Scatter Blaster", desc: "Shoots a spray of pellets", metal: true, usable: true,
-    spawn: (x, y, f, d) => stickItem(d, x, y, 72, 5, 1, 0.8, f),
-    use(b) { for (let i = 0; i < 8; i++) fire(b, { dmg: 17, force: 200, recoil: i ? 0 : 420, kind: 2, spread: 0.13, quiet: i > 0, range: 900 }); },
-    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-4, -4, 20, -6, 20, 6, 4, 14, -4, 10], "#8d5524"); shape(ctx, [22, 2, 32, 2, 28, 15, 20, 15], "#5c3a1a"); rrect(ctx, 18, -8, L - 14, 7, 3, "#ffbe0b"); rrect(ctx, 18, -1, L - 14, 6, 3, "#fb5607"); rrect(ctx, L * 0.55, 3, L * 0.3, 7, 3, "#5c3a1a"); ctx.restore(); } },
-  { id: "thumper", cat: "guns", name: "Thumper Cannon", desc: "Huge kick. Blasts through people", metal: true, usable: true,
-    spawn: (x, y, f, d) => stickItem(d, x, y, 104, 6, 2, 1.6, f),
-    use(b) { fire(b, { dmg: 130, force: 1800, recoil: 900, kind: 3, pierce: 4, sever: true, w: 5, flash: 2 }); W.shake = Math.min(20, W.shake + 6); },
-    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-6, -6, 24, -8, 24, 8, 6, 12, -6, 12], "#264653"); shape(ctx, [26, 4, 38, 4, 34, 20, 24, 20], "#1d3557"); rrect(ctx, 20, -10, L * 0.6, 16, 4, "#2a9d8f"); rrect(ctx, L * 0.62, -6, L * 0.4, 9, 3, "#1d3557"); rrect(ctx, L + 1, -8, 6, 13, 2, "#e9c46a"); rrect(ctx, 30, -20, 30, 8, 3, "#111"); ctx.fillStyle = "#53f2ff"; ctx.fillRect(56, -18, 3, 4); ctx.restore(); } },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); rrect(ctx, -6, -6, 10, 6, 2, "#2b2b2e"); shape(ctx, [6, 2, 13, 2, 11, 15, 4, 15], "#232326"); shape(ctx, [L * 0.42, 2, L * 0.52, 2, L * 0.5, 24, L * 0.4, 24], "#1c1c1f"); rrect(ctx, 2, -8, L * 0.78, 11, 2, "#36363b"); rrect(ctx, L * 0.75, -5, L * 0.3, 5, 1, "#2b2b2e"); ctx.fillStyle = b.on ? "#ff4d4d" : "#444"; ctx.fillRect(L * 0.3, -6, 3, 3); ctx.restore(); } },
+  { id: "rifle", cat: "guns", name: "Assault Rifle", desc: "Automatic, shoots through 2 people. USE = on / off", metal: true, usable: true,
+    spawn: (x, y, f, d) => { const b = stickItem(d, x, y, 92, 5, 1, 0.8, f); b.pre = autoFire(0.1, { dmg: 30, force: 330, recoil: 90, kind: 1, pierce: 2, spread: 0.03 }); return b; },
+    use(b) { b.on = !b.on; S("click"); },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-8, -6, 18, -5, 18, 5, -8, 9], "#3a3a3f"); shape(ctx, [22, 3, 30, 3, 27, 17, 20, 17], "#232326"); shape(ctx, [L * 0.42, 3, L * 0.52, 3, L * 0.5, 22, L * 0.38, 20], "#1c1c1f"); rrect(ctx, 16, -8, L * 0.5, 12, 2, "#2f2f34"); rrect(ctx, L * 0.6, -6, L * 0.3, 8, 2, "#3f3f45"); rrect(ctx, L * 0.85, -3, L * 0.2, 4, 1, "#1c1c1f"); rrect(ctx, 26, -12, 20, 4, 1, "#1c1c1f"); ctx.fillStyle = b.on ? "#ff4d4d" : "#444"; ctx.fillRect(34, -6, 3, 3); ctx.restore(); } },
+  { id: "shotgun", cat: "guns", name: "Shotgun", desc: "Blasts a spray of pellets", metal: true, usable: true,
+    spawn: (x, y, f, d) => stickItem(d, x, y, 96, 5, 1.1, 0.8, f),
+    use(b) { for (let i = 0; i < 9; i++) fire(b, { dmg: 18, force: 230, recoil: i ? 0 : 480, kind: 2, spread: 0.13, quiet: i > 0, range: 900 }); },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-8, -5, 22, -5, 22, 5, 2, 12, -8, 10], "#7a4a24"); shape(ctx, [24, 3, 31, 3, 28, 14, 21, 14], "#232326"); rrect(ctx, 20, -7, L - 18, 6, 2, "#36363b"); rrect(ctx, 30, -1, L - 34, 5, 2, "#2b2b2e"); rrect(ctx, L * 0.55, -2, L * 0.25, 8, 3, "#7a4a24"); ctx.restore(); } },
+  { id: "sniper", cat: "guns", name: "Sniper Rifle", desc: "Huge hits, goes through 4 people", metal: true, usable: true,
+    spawn: (x, y, f, d) => stickItem(d, x, y, 124, 5, 1.6, 1.2, f),
+    use(b) { fire(b, { dmg: 130, force: 1800, recoil: 900, kind: 3, pierce: 4, sever: true, w: 4, flash: 1.6 }); W.shake = Math.min(20, W.shake + 6); },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); shape(ctx, [-8, -5, 28, -5, 28, 5, 6, 10, -8, 10], "#4b5320"); shape(ctx, [30, 3, 37, 3, 34, 15, 27, 15], "#232326"); rrect(ctx, 26, -7, 40, 10, 2, "#3a3a3f"); rrect(ctx, 60, -4, L - 58, 5, 1, "#2b2b2e"); rrect(ctx, L - 6, -6, 9, 9, 1, "#1c1c1f"); rrect(ctx, 30, -17, 34, 7, 3, "#1c1c1f"); ctx.fillStyle = "#53b8ff"; ctx.fillRect(61, -16, 3, 5); ctx.fillStyle = "#2b2b2e"; ctx.fillRect(40, -11, 4, 5); ctx.fillRect(52, -11, 4, 5); ctx.restore(); } },
+  { id: "minigun", cat: "guns", name: "Minigun", desc: "Spinning barrels, crazy fast. USE = on / off", metal: true, usable: true,
+    spawn: (x, y, f, d) => { const b = stickItem(d, x, y, 110, 8, 4, 3, f); b.spin = 0; b.pre = autoFire(0.035, { dmg: 22, force: 260, recoil: 45, kind: 1, spread: 0.06 }, (b, h) => { b.spin += h * 40; }); return b; },
+    use(b) { b.on = !b.on; S("click"); },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); rrect(ctx, -6, -12, 40, 24, 5, "#3a3a3f"); shape(ctx, [8, 10, 18, 10, 16, 24, 6, 24], "#232326"); rrect(ctx, -2, -18, 26, 6, 2, "#2b2b2e"); const o = Math.sin(b.spin || 0) * 3; for (const yy of [-7 + o, -1 - o * 0.5, 5 + o * 0.3]) rrect(ctx, 34, yy, L - 30, 4, 1, "#56565c"); rrect(ctx, 46, -10, 6, 20, 2, "#2b2b2e"); rrect(ctx, L - 10, -10, 6, 20, 2, "#2b2b2e"); ctx.fillStyle = b.on ? "#ff4d4d" : "#444"; ctx.fillRect(4, -8, 4, 4); ctx.restore(); } },
+  { id: "rpg", cat: "guns", name: "Rocket Launcher", desc: "Fires a rocket that blows up on hit", metal: true, usable: true,
+    spawn: (x, y, f, d) => stickItem(d, x, y, 110, 7, 1.6, 1.4, f),
+    use(b) { if (W.time - (b.last || -9) < 0.6) return; b.last = W.time; const a = b.ps[0], c = b.ps[1], dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy) || 1; rocket(c.x + (dx / d) * 30, c.y + (dy / d) * 30, dx / d, dy / d, b); for (const p of [a, c]) addVel(p, (-dx / d) * 300, (-dy / d) * 300); S("whoosh"); for (let i = 0; i < 12; i++) W.fx.push({ t: "smoke", x: a.x, y: a.y, vx: (-dx / d) * rnd(80, 260), vy: (-dy / d) * rnd(80, 260) - 30, drag: 2, life: rnd(0.5, 1.1), max: 1.1, s: rnd(8, 16) }); },
+    draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1]); rrect(ctx, -6, -9, L + 10, 18, 4, "#4b5320"); rrect(ctx, -9, -11, 9, 22, 2, "#2b2b2e"); rrect(ctx, L - 2, -11, 9, 22, 2, "#2b2b2e"); shape(ctx, [L * 0.4, 8, L * 0.48, 8, L * 0.46, 22, L * 0.38, 22], "#232326"); rrect(ctx, L * 0.3, -18, 24, 8, 2, "#1c1c1f"); if (W.time - (b.last || -9) > 0.6) shape(ctx, [L + 7, -6, L + 22, 0, L + 7, 6], "#9d0208"); ctx.restore(); } },
 
   // EXPLOSIVES
   { id: "grenade", cat: "boom", name: "Pop Grenade", desc: "USE to start the 3 second fuse", usable: true, metal: true,
@@ -113,6 +129,12 @@ export const ITEMS = [
     spawn: (x, y, f, d) => { const b = box(d, x, y, 40, 10, 1.5); b.pre = (b, h) => fuseTick(b, h, 1.25, 0); return b; },
     touch(b, p) { if (W.time - b.born > 1.2 && p.body.kind === "rag" && !(b.fuse > 0)) { b.fuse = 0.12; S("beep"); } }, blast(b) { arm(b, 0.1); }, shot(b) { arm(b, 0.02); },
     draw(ctx, b) { const p = b.ps; polyPath(ctx, p); ctx.fillStyle = "#3d405b"; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke(); const [cx, cy] = center(b); const on = W.time - b.born > 1.2; ctx.fillStyle = on ? (Math.sin(W.time * 8) > 0 ? "#ff3b3b" : "#600") : "#777"; ctx.beginPath(); ctx.arc(cx, cy - 5, 3.5, 0, 6.283); ctx.fill(); } },
+
+  { id: "mega", cat: "boom", name: "Mega Bomb", desc: "USE = 3 seconds, then a GIANT boom", usable: true, metal: true,
+    spawn: (x, y, f, d) => { const b = box(d, x, y, 46, 38, 2.2); b.pre = (b, h) => fuseTick(b, h, 2.6, 0.5); return b; },
+    use(b) { if (!(b.fuse > 0)) { b.fuse = 3; S("click"); } }, blast(b) { arm(b, rnd(0.1, 0.3)); }, shot(b) { arm(b, 0.3); },
+    after(b, x, y) { W.shake = 30; for (let i = 0; i < 5; i++) firePatch(x + rnd(-150, 150), y, 7); },
+    draw(ctx, b) { const p = b.ps; polyPath(ctx, p); ctx.fillStyle = "#2b2d42"; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 2.5; ctx.stroke(); const [cx, cy] = center(b); ctx.fillStyle = "#ffd23f"; ctx.beginPath(); ctx.arc(cx, cy, 11, 0, 6.283); ctx.fill(); ctx.fillStyle = "#2b2d42"; for (let i = 0; i < 3; i++) { const a = i * 2.094 - 1.57; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, 9, a - 0.45, a + 0.45); ctx.fill(); } ctx.fillStyle = b.fuse > 0 && (b.blink = (b.blink || 0) - 1 / 60) > 0 ? "#ff3b3b" : "#600"; ctx.fillRect(cx - 4, p[0].y + 3, 8, 4); } },
 
   // MACHINES
   { id: "spikes", cat: "machines", name: "Spike Strip", desc: "Drop people on it. Snaps to the floor",
@@ -181,6 +203,20 @@ function fire(b, o) {
   if (!o.quiet) S("shot", o.kind);
   if (R() < 0.7) W.fx.push({ t: "spark", x: a.x + (c.x - a.x) * 0.5, y: a.y + (c.y - a.y) * 0.5, vx: -dy * 200 * (R() < 0.5 ? -1 : 1), vy: -220, g: 1500, life: 0.4, max: 0.4 }); // (shell flying out)
 }
+function autoFire(gap, o, extra) {
+  return (b, h) => { if (extra && b.on) extra(b, h); if (!b.on) return; b.cool = (b.cool || 0) - h; if (b.cool <= 0) { b.cool = gap; fire(b, o); } };
+}
+const ROCKET = { id: "rocketfly", name: "Rocket", metal: true,
+  impact(b) { boomRocket(b); }, shot(b) { boomRocket(b); }, blast(b) { boomRocket(b); },
+  draw(ctx, b) { const L = localFrame(ctx, b.ps[0], b.ps[1], false); rrect(ctx, -2, -4, L + 2, 8, 3, "#6c757d"); shape(ctx, [L, -4, L + 9, 0, L, 4], "#9d0208"); shape(ctx, [0, -4, -6, -8, -6, 8, 0, 4], "#343a40"); ctx.restore(); } };
+function rocket(x, y, dx, dy, from) {
+  const b = newBody("obj", ROCKET), a = pt(b, x - dx * 26, y - dy * 26, 4, 0.5, { g: 0 }), c = pt(b, x, y, 4, 0.5, { g: 0 });
+  stick(b, a, c); cap(b, a, c, 4); b.from = from; b.born = W.time;
+  for (const p of [a, c]) addVel(p, dx * 1300, dy * 1300);
+  b.pre = (b, h) => { if (W.time - b.born > 3.5) boomRocket(b); if (Math.random() < h * 60) { flame(b.ps[0].x, b.ps[0].y, 0.8); W.fx.push({ t: "smoke", x: b.ps[0].x, y: b.ps[0].y, vx: rnd(-30, 30), vy: rnd(-30, 10), drag: 1.5, life: 0.7, max: 0.7, s: rnd(5, 9) }); } };
+  return b;
+}
+function boomRocket(b) { if (b.kill) return; b.kill = true; const [x, y] = center(b); explode(x, y, 1.3, { self: b }); }
 function shatter(b) {
   if (b.kill) return; b.kill = true;
   const [x, y] = center(b); S("whoosh"); S("fire");
@@ -248,8 +284,33 @@ function drawCar(ctx, b) {
   }
 }
 
+
+// ---------------------------------------------------------------- ropes (tie anything to anything, or to the wall / ceiling)
+const ROPE = { id: "rope", name: "Rope",
+  draw(ctx, b) { const c = b.chain; ctx.lineCap = "round"; ctx.lineJoin = "round"; for (const [w, col] of [[5, OUT], [3, "#c8a165"]]) { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(b.endA.x, b.endA.y); for (const p of c) ctx.lineTo(p.x, p.y); ctx.lineTo(b.endB.x, b.endB.y); ctx.stroke(); } } };
+// a and b: { p } to tie to a point of a body, or { x, y } to nail it to the background
+export function makeRope(A, B) {
+  const ax = A.p ? A.p.x : A.x, ay = A.p ? A.p.y : A.y, bx = B.p ? B.p.x : B.x, by = B.p ? B.p.y : B.y;
+  const L = Math.hypot(bx - ax, by - ay); if (L < 8) return null;
+  const b = newBody("obj", ROPE); b.rope = true;
+  const n = Math.max(3, Math.min(60, Math.round(L / 14)));
+  const ends = [];
+  for (const E of [A, B]) {
+    if (E.p) ends.push(E.p);
+    else { const q = pt(b, E.x, E.y, 3, 0, { nc: true }); q.nail = true; ends.push(q); }
+  }
+  let prev = ends[0]; b.chain = [];
+  const seg = (L / n) * 1.02;
+  for (let i = 1; i < n; i++) { const q = pt(b, ax + ((bx - ax) * i) / n, ay + ((by - ay) * i) / n, 2, 0.15, { nc: true }); b.chain.push(q); stick(b, prev, q, { len: seg }); prev = q; }
+  stick(b, prev, ends[1], { len: seg });
+  b.endA = ends[0]; b.endB = ends[1];
+  b.post = (b) => { if (b.endA.gone || b.endB.gone) b.kill = true; };
+  return b;
+}
+
 export function drawBody(ctx, b) {
   if (b.kind === "rag") drawPerson(ctx, b);
+  else if (b.rope) { b.def.draw(ctx, b); for (const p of b.ps) if (p.nail) { disc(ctx, p.x, p.y, 4, "#adb5bd"); } }
   else if (b.def && b.def.draw) b.def.draw(ctx, b);
 }
 export function spawnItem(def, x, y, f) { const b = def.spawn(x, y, f, def); S("spawn"); return b; }

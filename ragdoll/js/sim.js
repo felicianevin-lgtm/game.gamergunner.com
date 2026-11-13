@@ -30,6 +30,7 @@ export function poly(b, pts, o = {}) { const s = { t: "poly", pts, body: b, r: 0
 export function rigid(b, list, k = 1) { for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) stick(b, list[i], list[j], { k }); }
 export function removeBody(b) {
   const i = W.bodies.indexOf(b); if (i >= 0) W.bodies.splice(i, 1);
+  for (const p of b.ps) p.gone = true; // (ropes tied to it let go)
   W.pins = W.pins.filter((pin) => { const keep = pin.p.body !== b && pin.sh.body !== b; if (!keep) pin.p.skew = null; return keep; });
   if (W.grab && W.grab.body === b) W.grab = null;
 }
@@ -73,6 +74,7 @@ function constraints(n) {
     for (const b of W.bodies) for (const s of b.ss) if (s.on) solveStick(b, s);
     for (let i = W.pins.length - 1; i >= 0; i--) solvePin(W.pins[i], i);
     if (W.grab) grabSolve();
+    for (const b of W.bodies) if (b.solve) b.solve(b);
   }
 }
 function solveStick(body, s) {
@@ -191,15 +193,13 @@ function collideWorld(p, h) {
     const d2 = nx * nx + ny * ny, Rr = p.r + s.r; if (d2 >= Rr * Rr) continue;
     const d = Math.sqrt(d2); if (d < 1e-6) { nx = 0; ny = -1; } else { nx /= d; ny /= d; }
     p.x += nx * (Rr - d); p.y += ny * (Rr - d);
-    let vx = p.x - p.px, vy = p.y - p.py; const vn = vx * nx + vy * ny;
-    if (vn < 0) {
-      const sp = -vn / h;
-      vx -= nx * vn * (1 + p.bounce); vy -= ny * vn * (1 + p.bounce);
-      const vt = vx * -ny + vy * nx, f = Math.min(1, p.fr * (p.bounce ? 0.2 : 1)) * (p.fr > 0.9 ? 0.9 : 0.35);
-      vx -= -ny * vt * f; vy -= nx * vt * f;
-      p.px = p.x - vx; p.py = p.y - vy;
-      if (sp > 140) contact(p, null, sp, nx, ny, 0, 0, 0, h);
-    }
+    let vx = p.x - p.px, vy = p.y - p.py; const vn = vx * nx + vy * ny, sp = -vn / h;
+    if (vn < 0) { vx -= nx * vn * (1 + p.bounce); vy -= ny * vn * (1 + p.bounce); }
+    const vt = vx * -ny + vy * nx, f = Math.min(1, p.fr * (p.bounce ? 0.2 : 1)) * (p.fr > 0.9 ? 0.9 : 0.35);
+    const grip = Math.abs(vt) < (p.fr > 0.9 ? 70 : 30) * h && !p.bounce ? 1 : f; // (things at rest stay put: no sliding around)
+    vx -= -ny * vt * grip; vy -= nx * vt * grip;
+    p.px = p.x - vx; p.py = p.y - vy;
+    if (sp > 140) contact(p, null, sp, nx, ny, 0, 0, 0, h);
     if (ny < -0.45) p.ground = 0.12;
   }
 }
@@ -240,8 +240,8 @@ const RP = [
   [0, -62, 13, 1.3, 0], [0, -46, 7, 1.6, 1], [0, -23, 10, 2.2, 1], [0, 0, 9, 2.2, 2],
   [0, -46, 5, 0.6, 3], [3, -24, 5, 0.5, 3], [3, -24, 5, 0.5, 4], [4, -3, 5, 0.6, 4],
   [0, -46, 5, 0.6, 5], [-3, -24, 5, 0.5, 5], [-3, -24, 5, 0.5, 6], [-4, -3, 5, 0.6, 6],
-  [0, 0, 7, 1, 7], [3, 26, 6, 0.9, 7], [3, 26, 6, 0.9, 8], [6, 52, 6, 1, 8],
-  [0, 0, 7, 1, 9], [-3, 26, 6, 0.9, 9], [-3, 26, 6, 0.9, 10], [-6, 52, 6, 1, 10],
+  [0, 0, 7, 1, 7], [5, 26, 6, 0.9, 7], [5, 26, 6, 0.9, 8], [10, 52, 6, 1, 8],
+  [0, 0, 7, 1, 9], [-5, 26, 6, 0.9, 9], [-5, 26, 6, 0.9, 10], [-10, 52, 6, 1, 10],
 ];
 // [a, b, kind, part it cuts off]
 const RS = [
@@ -288,7 +288,7 @@ export function spawnPerson(x, y, kind = "buddy", face = 1, def = null) {
     : kind === "brute" ? { skin: pick(SKINS), shirt: pick(["#5c4033", "#2d6a4f", "#9d0208", "#333"]), pants: pick(PANTS), shoe: "#2a1a10", hair: pick(HAIRS), style: 3 }
     : { skin: pick(SKINS), shirt: pick(SHIRTS), pants: pick(PANTS), shoe: "#2a2a2a", hair: pick(HAIRS), style: 1 + ((R() * 3) | 0) };
   b.state = "alive"; b.blood = 100; b.shock = 0; b.str = 1; b.down = 0; b.pain = 0; b.air = 0; b.deadT = 0; b.blink = R() * 4;
-  b.pre = ragPre; b.post = ragPost;
+  b.post = ragPost; b.solve = ragSolve; b.rest = b.ps.map((p) => [p.x, p.y]);
   return b;
 }
 export function attached(b, i) { let j = i; while (j >= 0) { const q = b.parts[j]; if (q.gone || q.cut) return false; j = PARENT[j]; } return true; }
@@ -297,44 +297,32 @@ function nudge(p, tx, ty, f) { if (p.gone) return; p.x += (tx - p.x) * f; p.y +=
 // (moves a point without giving it speed)
 function shift(p, tx, ty, f) { if (p.gone) return; const dx = (tx - p.x) * f, dy = (ty - p.y) * f; p.x += dx; p.y += dy; p.px += dx; p.py += dy; }
 
-function ragPre(b, h) {
-  const s = b.str; if (s < 0.03) return;
-  const P = b.ps, head = P[0], neck = P[1], chest = P[2], hip = P[3], sc = b.sc, k = h * 60, f = b.face;
-  const lOK = legOK(b, 7), rOK = legOK(b, 9), fL = P[15], fR = P[19];
-  const gL = lOK && fL.ground > 0, gR = rOK && fR.ground > 0, grounded = gL || gR;
-  const v0 = [hip, chest, neck, head].map((p) => p.py - p.y);
-  const grabbed = W.grab && W.grab.body === b;
-  if (grounded && !grabbed) {
-    let fy = 0, fx = 0, n = 0; if (gL) { fy += fL.y; fx += fL.x; n++; } if (gR) { fy += fR.y; fx += fR.x; n++; }
-    fy /= n; fx /= n;
-    const ls = s * (lOK && rOK ? 1 : 0.5);
-    nudge(hip, hip.x + (fx - hip.x) * 0.5, fy - 49 * sc, 0.16 * ls * k);
-    if (b.standX === null || b.standX === undefined) b.standX = gL && gR ? (fL.x + fR.x) / 2 : hip.x;
-    if (Math.abs(hip.x - b.standX) > 14) b.standX = (hip.x + b.standX) / 2; // (pushed? then stand somewhere new)
-    const mid = b.standX;
-    if (lOK) { shift(fL, mid + 8 * sc * f, fL.y, 0.04 * ls * k); shift(P[13], (P[12].x + fL.x) / 2 + 3 * f * sc, (P[12].y + fL.y) / 2, 0.1 * ls * k); }
-    if (rOK) { shift(fR, mid - 8 * sc * f, fR.y, 0.04 * ls * k); shift(P[17], (P[16].x + fR.x) / 2 + 3 * f * sc, (P[16].y + fR.y) / 2, 0.1 * ls * k); }
-    shift(hip, mid, hip.y, 0.03 * ls * k);
-    for (const p of [hip, chest, neck, head]) { p.px += (p.x - p.px) * 0.12 * s * k; p.py += (p.y - p.py) * 0.22 * s * k; }
-    for (const p of [fL, fR, P[13], P[17]]) p.px += (p.x - p.px) * 0.15 * s * k;
+// People hold whatever pose they are in (like an action figure). They never move by themselves:
+// only when you drag a body part, throw them, or something hits them. Knocked out / dead = floppy,
+// and when they wake up they keep the pose they landed in.
+const CHAIN = { 0: [0], 3: [3, 4], 4: [3, 4], 5: [5, 6], 6: [5, 6], 7: [7, 8], 8: [7, 8], 9: [9, 10], 10: [9, 10] };
+function ragSolve(b) {
+  const P = b.ps, Rr = b.rest, g = W.grab;
+  const free = g && g.body === b && !g.rigid ? CHAIN[g.p.part] || [] : [];
+  if (free.length && free[0] !== 0 && b.str > 0.6 && b.air < 0.1) { // posing: drag an arm or leg and the rest of them stays planted
+    const root = P[{ 3: 4, 5: 8, 7: 12, 9: 16 }[free[0]]], reach = free[0] >= 7 ? 64 : 56;
+    if (Math.hypot(g.tx - root.x, g.ty - root.y) < reach) {
+      if (!g.anchor) g.anchor = P.map((p) => [p.x, p.y]);
+      for (let i = 0; i < P.length; i++) if (!P[i].gone && !free.includes(P[i].part)) { P[i].x = P[i].px = g.anchor[i][0]; P[i].y = P[i].py = g.anchor[i][1]; }
+    } else g.anchor = null;
   }
-  else b.standX = null;
-  if (b.down > 0 || s < 0.6) b.standX = null;
-  const up = grounded && !grabbed ? 1 : 0.3;
-  if (!hip.gone && !neck.gone) {
-    const tx = hip.x, ty = hip.y - 46 * sc, ff = 0.16 * s * up * k;
-    const mv = nudge, ex = (tx - neck.x) * ff, ey = (ty - neck.y) * ff;
-    mv(neck, tx, ty, ff); mv(hip, hip.x - ex * 0.3, hip.y - ey * 0.3, 1);
-    mv(chest, hip.x, hip.y - 23 * sc, 0.08 * s * up * k);
-  }
-  if (attached(b, 0)) nudge(head, neck.x + f, neck.y - 16 * sc, 0.2 * s * k);
-  if (grounded) [hip, chest, neck, head].forEach((p, i) => { const mx = Math.max(v0[i], 160 * h); if (p.py - p.y > mx) p.py = p.y + mx; }); // (muscles never launch you into the air)
-  const panic = !grounded || grabbed || b.parts.some((q) => q.burn > 0) || b.pain > 0.6;
-  for (const [u, sh, hand, side] of [[3, P[4], P[7], 1], [5, P[8], P[11], -1]]) {
-    if (!attached(b, u + 1) || b.parts[u].broken) continue;
-    if (panic) { const a = W.time * (b.parts.some((q) => q.burn > 0) ? 18 : 11) + side * 2 + b.id; nudge(hand, sh.x + Math.cos(a) * 30 * sc, sh.y + Math.sin(a) * 30 * sc, 0.07 * s * k); }
-    else nudge(hand, sh.x + f * side * 6, sh.y + 40 * sc, 0.03 * s * k);
-  }
+  let M = 0, cx = 0, cy = 0, rx = 0, ry = 0; const idx = [];
+  for (let i = 0; i < P.length; i++) { const p = P[i]; if (p.gone || !attached(b, p.part) || free.includes(p.part)) continue; idx.push(i); M += p.m; cx += p.m * p.x; cy += p.m * p.y; rx += p.m * Rr[i][0]; ry += p.m * Rr[i][1]; }
+  if (M <= 0 || idx.length < 3) return;
+  cx /= M; cy /= M; rx /= M; ry /= M;
+  let A = 0, B = 0;
+  for (const i of idx) { const p = P[i], ox = Rr[i][0] - rx, oy = Rr[i][1] - ry, qx = p.x - cx, qy = p.y - cy; A += p.m * (ox * qx + oy * qy); B += p.m * (ox * qy - oy * qx); }
+  const th = Math.atan2(B, A), c = Math.cos(th), sn = Math.sin(th);
+  const toRest = (p) => { const dx = p.x - cx, dy = p.y - cy; return [rx + c * dx + sn * dy, ry - sn * dx + c * dy]; };
+  if (b.str < 0.4 || b.relax > 0) { for (let i = 0; i < P.length; i++) if (!P[i].gone) Rr[i] = toRest(P[i]); return; } // (floppy: the pose follows the body)
+  for (let i = 0; i < P.length; i++) if (!P[i].gone && free.includes(P[i].part)) Rr[i] = toRest(P[i]); // (the limb you're moving gets its new pose)
+  const k = 0.45 * b.str;
+  for (const i of idx) { const p = P[i], ox = Rr[i][0] - rx, oy = Rr[i][1] - ry; p.x += (cx + c * ox - sn * oy - p.x) * k; p.y += (cy + sn * ox + c * oy - p.y) * k; }
 }
 function ragPost(b, h) {
   if (b.state === "alive") {
@@ -342,6 +330,8 @@ function ragPost(b, h) {
     if (b.down > 0) tgt *= 0.06;
     b.str += (tgt - b.str) * Math.min(1, h * 4);
   } else b.str += (0 - b.str) * Math.min(1, h * 8);
+  if (b.relax > 0) b.relax--;
+  const held = !!(W.grab && W.grab.body === b); if (b.held && !held) b.relax = 3; b.held = held; // (after you let go, the new pose settles before it locks)
   b.down = Math.max(0, b.down - h); b.pain = Math.max(0, b.pain - h * 0.8);
   b.shock = Math.max(0, b.shock - h * (b.state === "ko" ? 7 : 10));
   if (b.state === "ko" && b.shock < 30 && b.blood >= 32 && !b.parts.some((q) => q.burn > 0)) { b.state = "alive"; b.down = 1.2; say(b, "...huh?", "#cde"); }

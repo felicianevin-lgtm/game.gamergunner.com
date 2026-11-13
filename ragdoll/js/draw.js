@@ -19,6 +19,14 @@ export function disc(ctx, x, y, r, col, outline = true) {
   if (outline) { ctx.fillStyle = OUT; ctx.beginPath(); ctx.arc(x, y, r + 1.5, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); }
   ctx.fillStyle = col; ctx.fill();
 }
+// flat rectangle body part from a to b (r = half thickness)
+export function slab(ctx, a, b, r, col, outline = true, ext = 0.55) {
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+  ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(Math.atan2(dy, dx));
+  ctx.beginPath(); ctx.roundRect(-r * ext, -r, len + r * ext * 2, r * 2, Math.min(3, r * 0.45));
+  ctx.fillStyle = col; ctx.fill(); if (outline) { ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke(); }
+  ctx.restore();
+}
 const partCol = (L, i) => (i === 0 || i === 4 || i === 6 ? L.skin : i <= 3 || i === 5 ? L.shirt : L.pants);
 
 export function drawPerson(ctx, b) {
@@ -30,12 +38,13 @@ export function drawPerson(ctx, b) {
     const dark = back.includes(i) ? -0.22 : 0, col = shade(partCol(L, i), dark - q.char * 0.75);
     if (i === 0) drawHead(ctx, b, q, col);
     else {
-      capsule(ctx, q.a, q.b, q.r, col);
-      if (i === 2) { ctx.strokeStyle = shade(L.pants, dark - q.char * 0.7); ctx.lineWidth = q.r * 2; ctx.beginPath(); const mx = q.a.x + (q.b.x - q.a.x) * 0.72, my = q.a.y + (q.b.y - q.a.y) * 0.72; ctx.moveTo(mx, my); ctx.lineTo(q.b.x + 0.01, q.b.y); ctx.stroke(); }
-      if (i === 4 || i === 6) disc(ctx, q.b.x, q.b.y, q.r * 1.3, shade(L.skin, dark - q.char * 0.75));
-      if (i === 8 || i === 10) { const dx = q.b.x - q.a.x, dy = q.b.y - q.a.y, d = Math.hypot(dx, dy) || 1; ctx.save(); ctx.translate(q.b.x, q.b.y); ctx.rotate(Math.atan2(dy, dx) - Math.PI / 2); ctx.fillStyle = OUT; ctx.beginPath(); ctx.ellipse(f * 3, 2, q.r * 1.55 + 1.5, q.r * 0.95 + 1.5, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = shade(L.shoe, dark); ctx.beginPath(); ctx.ellipse(f * 3, 2, q.r * 1.55, q.r * 0.95, 0, 0, 6.283); ctx.fill(); ctx.restore(); }
+      const r = i <= 2 ? q.r * 1.05 : q.r;
+      if (i === 2) { slab(ctx, q.a, q.b, r, col); const mx = q.a.x + (q.b.x - q.a.x) * 0.62, my = q.a.y + (q.b.y - q.a.y) * 0.62; slab(ctx, { x: mx, y: my }, q.b, r, shade(L.pants, dark - q.char * 0.7), true, 0.7); }
+      else slab(ctx, q.a, q.b, r, col);
+      if (i === 4 || i === 6) slab(ctx, q.b, { x: q.b.x + (q.b.x - q.a.x) * 0.18, y: q.b.y + (q.b.y - q.a.y) * 0.18 }, q.r * 1.15, shade(L.skin, dark - q.char * 0.75), true, 0.6);
+      if (i === 8 || i === 10) { const dx = q.b.x - q.a.x, dy = q.b.y - q.a.y, d = Math.hypot(dx, dy) || 1, fx = -dy / d * f, fy = dx / d * f; slab(ctx, { x: q.b.x - fx * 3, y: q.b.y - fy * 3 }, { x: q.b.x + fx * 9, y: q.b.y + fy * 9 }, q.r * 0.8, shade(L.shoe, dark)); }
       if (b.kindName === "dummy" && (i === 1 || i === 7 || i === 9)) { const mx = (q.a.x + q.b.x) / 2, my = (q.a.y + q.b.y) / 2; dummyMark(ctx, mx, my, q.r * 0.55); }
-      if (q.bloody > 0 && b.bc && W.gore) { ctx.globalAlpha = Math.min(0.55, q.bloody * 0.55); ctx.strokeStyle = b.bc[1]; ctx.lineWidth = q.r * 1.5; ctx.beginPath(); ctx.moveTo(q.a.x, q.a.y); ctx.lineTo(q.b.x + 0.01, q.b.y); ctx.stroke(); ctx.globalAlpha = 1; }
+      if (q.bloody > 0 && b.bc && W.gore) { ctx.globalAlpha = Math.min(0.55, q.bloody * 0.55); slab(ctx, q.a, q.b, r * 0.8, b.bc[1], false); ctx.globalAlpha = 1; }
     }
     for (const w of q.wounds) drawWound(ctx, b, q, w);
   }
@@ -48,14 +57,14 @@ function drawHead(ctx, b, q, col) {
   const h = q.a, neck = b.ps[1], r = q.r, L = b.look;
   if (attached(b, 0) && !neck.gone) b.headAng = Math.atan2(h.y - neck.y, h.x - neck.x) + Math.PI / 2;
   else b.headAng = (b.headAng || 0) + (h.x - h.px) / r;
-  disc(ctx, h.x, h.y, r, col);
   ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(b.headAng); ctx.scale(b.face, 1);
+  ctx.beginPath(); ctx.roundRect(-r, -r, r * 2, r * 2, 4); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 2; ctx.stroke();
   const k = b.kindName, st = b.state, burning = b.parts.some((p) => p.burn > 0), hurt = burning || b.pain > 0.35;
   if (L.hair && L.style) {
     ctx.fillStyle = shade(L.hair, -q.char * 0.7);
-    if (L.style === 1) { ctx.beginPath(); ctx.arc(0, 0, r + 0.5, Math.PI * 0.95, Math.PI * 1.85); ctx.lineTo(0, -r * 0.35); ctx.closePath(); ctx.fill(); }
-    else if (L.style === 2) { ctx.beginPath(); ctx.moveTo(-r, -2); for (let i = 0; i <= 5; i++) { const a = Math.PI * (1 + i / 5.6); ctx.lineTo(Math.cos(a) * (r + (i % 2 ? 6 : 1)), Math.sin(a) * (r + (i % 2 ? 6 : 1))); } ctx.lineTo(r * 0.6, -r * 0.5); ctx.closePath(); ctx.fill(); }
-    else if (L.style === 3) { ctx.beginPath(); ctx.arc(0, 0, r + 0.5, Math.PI * 1.05, Math.PI * 1.95); ctx.closePath(); ctx.fill(); }
+    if (L.style === 1) { ctx.fillRect(-r, -r, r * 2, r * 0.6); ctx.fillRect(-r, -r, r * 0.55, r * 1.1); }
+    else if (L.style === 2) { ctx.beginPath(); ctx.moveTo(-r, -r * 0.4); for (let i = 0; i <= 4; i++) { ctx.lineTo(-r + (i * r) / 2, -r - (i % 2 ? 0 : 6)); } ctx.lineTo(r, -r * 0.5); ctx.lineTo(-r, -r * 0.4); ctx.fill(); ctx.fillRect(-r, -r, r * 2, r * 0.5); }
+    else if (L.style === 3) { ctx.fillRect(-r, -r, r * 2, r * 0.35); }
   }
   if (k === "robo") {
     ctx.fillStyle = OUT; ctx.fillRect(-1, -r - 9, 2, 8); ctx.fillStyle = st === "dead" ? "#555" : "#ff4d4d"; ctx.beginPath(); ctx.arc(0, -r - 10, 2.5, 0, 6.283); ctx.fill();
