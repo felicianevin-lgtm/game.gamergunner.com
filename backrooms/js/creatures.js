@@ -1,8 +1,9 @@
 // THE BACKROOMS: the monsters and how they look and move.
 //   bacteria  Level 0: the Bacteria, a thick, shiny-black, faceless walker with a huge jaw (original design, made of shapes)
 //   entity    an older stand-in (a tall, thin, faceless thing with long dangly strands; original design, made of shapes)
-//   crawler   the Poolrooms: a pale thing that crawls along the bottom of the pool (original design)
-//   partygoer Level Fun: the Partygoer model (models/partygoer.glb, "Partygoer from Backrooms (Updated)" by FilinMinv, CC-BY-4.0)
+//   crawler   the Poolrooms: a long, pale, bony thing with spider legs and spikes out of the water (original design)
+//   partygoer Level Fun: the Partygoer model (models/partygoer.glb, "Partygoer from Backrooms (Updated)" by FilinMinv, CC-BY-4.0),
+//             made creepier here: taller and thinner, grimy, head tilted, twitching, long arms reaching for you
 //   clark     the final level: Captain Clark (models/captain-clark.glb, Gamer Gunner's model). 3.7 m tall, hunched, darker;
 //             he reaches for you while he chases. pose() holds him still for his cutscene.
 // make(kind) -> {g: Object3D (feet at 0, facing +z), animate(dt, speed), height}. Models load once (preload) and are
@@ -45,22 +46,50 @@ function entity() {
   } };
 }
 
-// ---------------------------------------------------------------- the Crawler (Poolrooms): long, pale, low, many legs
+// ---------------------------------------------------------------- the Crawler (Poolrooms): long, pale and bony
+// A long body under the water with a row of bone spikes sticking up out of it (you see them cut through the water
+// before you see IT), long spider legs that arch up over the surface, a big head with four small white eyes and a
+// jaw full of teeth. When it chases you its head comes up, the jaw opens and the spikes shake.
 function crawler() {
-  const g = new THREE.Group(), skin = M(0xd8dcd2), dark = M(0x8a9088), eye = glowM(0xff3030);
-  const segs = [];
-  for (let i = 0; i < 7; i++) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.42 - i * 0.03, 12, 8), i % 2 ? skin : dark); s.scale.set(1.2, 0.55, 1); s.position.set(0, 0.35, -i * 0.55); g.add(s); segs.push(s); }
-  const head = segs[0];
-  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), eye); e.position.set(s * 0.18, 0.35, 0.3); head.add(e); }
-  const jaw = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.5, 6), dark); jaw.rotation.x = Math.PI / 2; jaw.position.set(0, -0.05, 0.45); head.add(jaw);
-  const legs = [];
-  for (let i = 0; i < 6; i++) for (const s of [-1, 1]) { const l = pivot(g, s * 0.4, 0.35, -i * 0.55 - 0.2); const b = box(l, 0.7, 0.07, 0.07, skin, s * 0.35, -0.12, 0); b.rotation.z = s * 0.5; legs.push({ l, s, i }); }
-  let t = 0;
-  return { g, height: 0.8, animate(dt, sp) {
+  const g = new THREE.Group(), body = pivot(g, 0, 0, 0);
+  const skin = new THREE.MeshStandardMaterial({ color: 0xaab09e, roughness: 0.5 }), dark = M(0x3f443b), bone = M(0xe4ddc6), gum = M(0x4a0808), eyeM = glowM(0xf2f6ff);
+  body.scale.setScalar(1.2);
+  const segs = [], legs = [], spikes = [];
+  for (let i = 0; i < 9; i++) {
+    const s = pivot(body, 0, 0.34, -0.25 - i * 0.5), r = 0.42 - i * 0.028;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), i % 2 ? skin : dark); m.scale.set(1.15, 0.6, 1.05); m.castShadow = true; s.add(m);
+    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.35 + (i < 6 ? 0.18 : 0) - i * 0.015, 5), bone); sp.position.set(0, r * 0.5 + 0.12, 0); sp.rotation.x = -0.35; s.add(sp); spikes.push(sp);
+    segs.push(s);
+    if (i > 0 && i < 7) for (const side of [-1, 1]) { // spider legs: up and out, then down to the bottom of the pool
+      const hip = pivot(s, side * r * 0.9, 0, 0); hip.rotation.z = side * 2.3;
+      const up = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.62, 3, 6), skin); up.position.y = -0.35; hip.add(up);
+      const knee = pivot(hip, 0, -0.7, 0); knee.rotation.z = side * -1.88;
+      const lo = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.82, 3, 6), dark); lo.position.y = -0.45; knee.add(lo);
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 5), bone); claw.rotation.x = Math.PI; claw.position.y = -0.95; knee.add(claw);
+      legs.push({ hip, i, side });
+    }
+  }
+  // the head: wide and flat, four white eyes, teeth on top and on the jaw
+  const head = pivot(body, 0, 0.36, 0.2);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), skin); skull.scale.set(1.1, 0.55, 1.25); skull.position.set(0, 0.06, 0.15); skull.castShadow = true; head.add(skull);
+  for (const [x, y] of [[-0.17, 0.2], [0.17, 0.2], [-0.09, 0.25], [0.09, 0.25]]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), eyeM); e.position.set(x, y, 0.55); head.add(e); }
+  box(head, 0.5, 0.08, 0.3, gum, 0, -0.06, 0.4);
+  for (let k = 0; k < 9; k++) { const tt = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.12, 5), bone); tt.rotation.x = Math.PI; const a = (k - 4) * 0.3; tt.position.set(Math.sin(a) * 0.36, -0.04, 0.28 + Math.cos(a) * 0.3); head.add(tt); }
+  const jaw = pivot(head, 0, -0.06, 0.05);
+  const jm = new THREE.Mesh(new THREE.SphereGeometry(0.38, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), dark); jm.scale.set(1.05, 0.4, 1.2); jm.position.set(0, 0, 0.12); jaw.add(jm);
+  for (let k = 0; k < 9; k++) { const tt = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.1, 5), bone); const a = (k - 4) * 0.3; tt.position.set(Math.sin(a) * 0.33, 0.03, 0.12 + Math.cos(a) * 0.3); jaw.add(tt); }
+  let t = 0, open = 0, lift = 0;
+  return { g, height: 1.0, animate(dt, sp, chasing) {
     if (!(sp >= 0)) sp = 0;
-    t += dt * (3 + sp * 2.2);
-    segs.forEach((s, i) => { s.position.x = Math.sin(t - i * 0.8) * 0.18 * Math.min(1, sp / 2 + 0.2); });
-    for (const L of legs) L.l.rotation.y = Math.sin(t + L.i * 1.1 + (L.s > 0 ? Math.PI : 0)) * 0.6;
+    t += dt * (3 + sp * 1.6);
+    const w = Math.min(1, sp / 3 + 0.2);
+    segs.forEach((s, i) => { s.position.x = Math.sin(t - i * 0.75) * 0.2 * w; s.rotation.y = Math.cos(t - i * 0.75) * 0.25 * w; });
+    for (const L of legs) { const ph = t * 1.4 + L.i * 1.1 + (L.side > 0 ? Math.PI : 0); L.hip.rotation.y = Math.sin(ph) * 0.55 * L.side; L.hip.rotation.x = Math.max(0, Math.cos(ph)) * 0.35; }
+    open += ((chasing ? 0.75 + Math.sin(t * 2.7) * 0.2 : 0.08) - open) * Math.min(1, dt * 6);
+    lift += ((chasing ? 1 : 0) - lift) * Math.min(1, dt * 4);
+    jaw.rotation.x = open * 0.9;
+    head.position.x = segs[0].position.x; head.position.y = 0.36 + lift * 0.3; head.rotation.x = -lift * 0.4 + Math.sin(t * 0.8) * 0.05; head.rotation.y = Math.sin(t * 0.5) * 0.2;
+    spikes.forEach((s, i) => { s.rotation.z = chasing ? Math.sin(t * 9 + i * 1.7) * 0.18 : 0; });
   } };
 }
 
@@ -74,7 +103,8 @@ export function preload(kind) {
 }
 // Bones are found by name; legs / arms swing around the model's own "sideways" axis, whatever way each bone points.
 const BONES = {
-  partygoer: { legL: /L_Thigh_\d/, legR: /R_Thigh_\d/, calfL: /L_Calf_\d/, calfR: /R_Calf_\d/, armL: /L_Upperarm_\d/ },
+  partygoer: { legL: /L_Thigh_\d/, legR: /R_Thigh_\d/, calfL: /L_Calf_\d/, calfR: /R_Calf_\d/, armL: /L_Upperarm_\d/, armR: /R_Upperarm_\d/,
+    handL: /L_Hand_\d+$/, handR: /R_Hand_\d+$/, head: /CC_Base_Head_\d+$/ },
   clark: { legL: /mixamorig:?LeftUpLeg$/, legR: /mixamorig:?RightUpLeg$/, calfL: /mixamorig:?LeftLeg$/, calfR: /mixamorig:?RightLeg$/, armL: /mixamorig:?LeftArm$/, armR: /mixamorig:?RightArm$/, handL: /mixamorig:?LeftHand$/, handR: /mixamorig:?RightHand$/,
     footL: /mixamorig:?LeftFoot$/, head: /mixamorig:?Head$/, headTop: /mixamorig:?HeadTop_End$/, spine: /mixamorig:?Spine2$/ },
 };
@@ -105,6 +135,7 @@ function fromModel(kind, scene, height) {
   for (const [a, hnd] of [["armL", "handL"], ["armR", "handR"]]) {
     const R = rig[a], H = bones[hnd];
     if (!R || !H) continue;
+    if (R.b.getWorldPosition(V()).y - H.getWorldPosition(V()).y > height * 0.12) continue; // (arms already down: leave them)
     const yAt = (ang) => { R.b.quaternion.copy(new THREE.Quaternion().setFromAxisAngle(R.fwd, ang).multiply(R.rest)); g.updateMatrixWorld(true); return H.getWorldPosition(V()).y; };
     R.drop = yAt(1.2) < yAt(-1.2) ? 1.2 : -1.2;
     R.b.quaternion.copy(R.rest);
@@ -128,6 +159,14 @@ function fromModel(kind, scene, height) {
     raw.traverse((o) => { if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.color.setHex(0x8a7470); } });
     eyes = new THREE.Group(); g.add(eyes);
   }
+  // THE PARTYGOERS are creepier too: taller and thinner, a grimy yellow, hunched, head tilted to one side
+  let tilt = 0;
+  if (kind === "partygoer") {
+    lean = 0.1; tilt = 0.38;
+    holder.scale.set(0.85, 1, 0.85);
+    raw.traverse((o) => { if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.color.setHex(0xb59e72); } });
+  }
+  const creepy = kind === "clark" || kind === "partygoer";
   const tmp = V(), tmp2 = V();
   function placeEyes() {
     if (!eyes || !bones.head) return;
@@ -145,15 +184,15 @@ function fromModel(kind, scene, height) {
     turn(rig.legL, sw); turn(rig.legR, -sw);
     turn(rig.calfL, Math.max(0, -Math.sin(t)) * 0.7 * w * (rig.calfL && rig.calfL.side.x < 0 ? -1 : 1));
     turn(rig.calfR, Math.max(0, Math.sin(t)) * 0.7 * w * (rig.calfR && rig.calfR.side.x < 0 ? -1 : 1));
-    const reach = eyes && chasing ? 0.9 : 0; // (Clark reaches for you while he chases you)
+    const reach = creepy && chasing ? 0.9 : 0; // (Clark and the Partygoers reach for you while they chase you)
     if (rig.armL) turn(rig.armL, -sw * 0.6 * (reach ? 0.3 : 1) + reach * reachL, rig.armL.drop);
     if (rig.armR) turn(rig.armR, sw * 0.6 * (reach ? 0.3 : 1) + reach * reachR, rig.armR.drop);
     holder.position.y = Math.abs(Math.cos(t)) * 0.04 * w;
-    if (eyes) { // hunched, and his head twitches now and then
+    if (creepy) { // hunched, and the head twitches now and then
       holder.rotation.x = lean + (chasing ? 0.08 : 0);
-      if ((twitch -= dt) < 0) { twitch = 0.6 + Math.random() * 2.2; tw = (Math.random() - 0.5) * 0.7; }
+      if ((twitch -= dt) < 0) { twitch = (tilt ? 0.3 : 0.6) + Math.random() * 2.2; tw = (Math.random() - 0.5) * (tilt ? 1.0 : 0.7); }
       tw *= Math.exp(-dt * 3);
-      turn(rig.head, 0, tw);
+      turn(rig.head, 0, tilt + tw);
       placeEyes();
     }
   },
@@ -284,5 +323,5 @@ export async function make(kind) {
   if (kind === "bacteria") return bacteria();
   const scene = await preload(kind);
   if (!scene) return standIn(kind);
-  return fromModel(kind, scene, kind === "clark" ? CLARK_H : 2.9);
+  return fromModel(kind, scene, kind === "clark" ? CLARK_H : 3.15); // (the Partygoers got taller too)
 }
