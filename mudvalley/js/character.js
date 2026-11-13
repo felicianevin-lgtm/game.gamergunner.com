@@ -123,6 +123,10 @@ export function makePerson(look = LOOKS.you, scale = 1) {
       hip.position.y = 0.9 + Math.sin(t * 2) * 0.01;
       if (P.item) arms[1].rotation.x = -0.5;
     }
+    // holding a gun or taser: arm straight out in front, other hand helping (like aiming), while standing, walking, running or jumping
+    if (P.item && P.item.userData.level && (kind === "stand" || kind === "walk" || kind === "run" || kind === "jump")) {
+      arms[1].rotation.x = -1.45; arms[1].rotation.z = 0; arms[0].rotation.x = -1.25; arms[0].rotation.z = -0.35;
+    }
     // guns + tasers always point straight ahead (level with the ground), whatever the arm is doing
     if (P.item && P.item.userData.level) P.item.rotation.x = -(Math.PI / 2 + arms[1].rotation.x) * Math.cos(arms[1].rotation.z);
   };
