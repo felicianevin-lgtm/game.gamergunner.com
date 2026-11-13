@@ -179,7 +179,8 @@ function fromModel(kind, scene, height) {
   }
   let t = 0, twitch = 0, tw = 0;
   return { g, height,
-  face(v) { return eyes ? eyes.getWorldPosition(v) : null; }, // (where his eyes are: the cutscene camera looks there)
+  face(v) { return eyes ? eyes.getWorldPosition(v) : null; },
+  hand(i, v) { const h = i ? bones.handR : bones.handL; return h ? h.getWorldPosition(v) : null; }, // (where his eyes are: the cutscene camera looks there)
   animate(dt, sp, chasing) {
     if (!(sp >= 0)) sp = 0;
     t += dt * (2 + sp * 1.6);
@@ -205,7 +206,7 @@ function fromModel(kind, scene, height) {
     turn(rig.legL, (o.kick || 0) * kickS);
     const r = Math.min(1, o.arms || 0) * 1.0 + (o.fling || 0) * 0.9;
     if (rig.armL) turn(rig.armL, r * reachL, rig.armL.drop);
-    if (rig.armR) turn(rig.armR, r * reachR, rig.armR.drop);
+    if (rig.armR) turn(rig.armR, r * reachR + (o.raise || 0) * 0.9 * reachR, rig.armR.drop); // (raise: one hand comes up higher)
     holder.position.y = 0; holder.rotation.x = lean + (o.lean || 0) * 0.4 - Math.max(0, o.kick || 0) * 0.15;
     placeEyes();
   } };
