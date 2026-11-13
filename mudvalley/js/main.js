@@ -17,6 +17,7 @@ import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js"
 import { Fishing, rodById } from "./fishing.js";
 import { Heist } from "./heist.js";
 import { NPCs } from "./npcs.js";
+import { Drops, PARTS, partById, addPart, have, SHIP_FEE } from "./parts.js";
 import { Interiors, buildingById, JAIL_SPOT, POCKET } from "./interiors.js";
 import { MP } from "./mp.js";
 import { FX } from "./fx.js";
@@ -61,7 +62,7 @@ const G = {
   // fast travel to your home (from the phone)
   goHome(h) { if (crime.noTeleport()) return; const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
 };
-let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs;
+let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs, drops;
 const cam = { yaw: Math.PI, pitch: 0.3, zoom: 1, x: 0, y: 5, z: 0, tx: 0, ty: 0, tz: 0, snap: true };
 
 // ---------------------------------------------------------------- your vehicles + trailers in the world
@@ -394,6 +395,8 @@ function actions() {
     }
     if (tr.loaded.length) { const last = tr.loaded[tr.loaded.length - 1]; out.E = { text: "Unload " + vehicleById(G.CARS.get(last.uid).s.id).name, fn: () => unloadCar(tr) }; break; }
   }
+  // E: open a SkyDrop delivery box
+  if (!c && !out.E && drops) { const bx = drops.near(me.x, me.z); if (bx) out.E = { text: "📦 Open your SkyDrop box", fn: () => openDrop(bx) }; }
   // E: robbing, cuffing, booking (hold E)
   const cme = { x: me.x, z: me.z, inCar: !!c };
   if (!out.E) out.E = crime.bookAction(cme) || crime.cuffAction(cme) || (c ? null : crime.robAction(cme) || npcs.bagAction(cme));
@@ -413,6 +416,7 @@ function actions() {
       if (id === "police") { out.E = { text: "Enter the Police Station", fn: () => UI.police() }; break; }
       if (id === "gear") { out.E = { text: "Shop at the Tool Barn", fn: () => UI.gear() }; break; }
       if (id === "blasters") { out.E = { text: "Shop at the Gun Shop", fn: () => UI.blasters() }; break; }
+      if (id === "parts") { out.E = { text: "Shop at Valley Parts", fn: () => UI.parts() }; break; }
       if (id === "bait") { out.E = { text: "Bait & Tackle: rods + sell fish", fn: () => UI.bait() }; break; }
       if (id === "hideout") { out.E = S.role === "robber" ? { text: S.loot ? "Stash your loot (" + money(S.loot) + ")" : "Robber Hideout", fn: () => UI.hideout() } : { text: "A spooky old shack...", fn: () => UI.hideout() }; break; }
     }
@@ -494,6 +498,12 @@ function unloadBed(h) {
   const f = freeSpot(b.x, b.z, b.yaw, c.m.len); b.x = f.x; b.z = f.z;
   c.on = null; c.s.bed = null; settle(b); SFX.load(); save();
 }
+// ---- parts: buy, order by drone, open boxes, build a ride
+function openDrop(bx) {
+  const items = drops.open(bx), n = {}; for (const id of items) n[id] = (n[id] || 0) + 1;
+  SFX.cash(); fx.confetti(bx.d.x, groundAt(bx.d.x, bx.d.z) + 1, bx.d.z, 40);
+  H.toast("📦 You got:", Object.entries(n).map(([id, k]) => (k > 1 ? k + "× " : "") + partById(id).name).join(", "), "good", 4500);
+}
 function washCar() {
   const c = mine(); c.s.dirt = 0; applyLook(c.m, c.s); SFX.wash();
   for (let i = 0; i < 6; i++) setTimeout(() => fx.splash(c.b.x + (Math.random() - 0.5) * 3, c.b.y + 2.5, c.b.z + (Math.random() - 0.5) * 3, 8), i * 200);
@@ -568,6 +578,30 @@ export const GAME = {
     const cash = Math.round(h.price * 0.6); pay(cash); houseSigns(); SFX.cash(); H.bumpMoney(); H.toast("🏠 Sold " + h.name, "+" + money(cash), "cash", 3000); save(); return true;
   },
   // customizing the vehicle you're in
+  // ---- car parts
+  buyPart(id) { const p = partById(id); if (!p || !spend(p.price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } addPart(id); SFX.cash(); H.bumpMoney(); save(); return true; },
+  cartAdd(id) { if (S.cart.length >= 12) { SFX.nope(); H.toast("Cart is full", "A drone can only carry 12 parts at a time.", "warn"); return; } S.cart.push(id); SFX.click(); save(); },
+  cartRemove(i) { S.cart.splice(i, 1); SFX.click(); save(); },
+  orderCart() {
+    if (!S.cart.length) return false;
+    const sub = S.cart.reduce((a, id) => a + partById(id).price, 0), total = sub + SHIP_FEE(sub);
+    if (!spend(total)) { SFX.nope(); H.toast("Not enough money", "You need " + money(total - S.money) + " more.", "warn"); return false; }
+    drops.order(S.cart.slice()); S.cart = []; SFX.buy(); H.bumpMoney();
+    H.toast("🚁 Order placed!", "A SkyDrop drone is on its way to you. Look up!", "good", 3500); save(); return true;
+  },
+  // put the parts together in your garage
+  buildRide(h, o) {
+    const fr = partById(o.frame), mo = partById(o.motor), ti = partById(o.tires);
+    const need = [o.frame, o.motor, o.tires, "p_seat", ...(fr && fr.body ? ["p_body"] : []), ...(o.lift ? ["p_lift"] : [])];
+    const cnt = {}; for (const id of need) cnt[id] = (cnt[id] || 0) + 1;
+    if (!fr || !mo || !ti || Object.entries(cnt).some(([id, k]) => have(id) < k)) { SFX.nope(); H.toast("Missing parts!", "Check the list: you need every part.", "warn"); return false; }
+    if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Sell a ride or buy a bigger house first.", "warn"); SFX.nope(); return false; }
+    for (const id of need) addPart(id, -1);
+    const s = newCar(fr.model, uid()); Object.assign(s, { paint: o.color ?? s.paint, engine: mo.lv, maxEngine: mo.lv, tires: ti.tires, ownTires: ["street", ti.tires], lift: o.lift ? 1 : 0, maxLift: o.lift ? 1 : 0, rust: 0, built: true });
+    const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, 6); s.x = f.x; s.z = f.z; s.yaw = yaw;
+    S.cars.push(s); const c = spawnCar(s); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 80); SFX.buy();
+    H.banner("YOU BUILT IT!", vehicleById(s.id).name + " · " + mo.name); save(); return c;
+  },
   buyScrubber() { if (!spend(25)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.scrubber = true; SFX.cash(); H.bumpMoney(); save(); return true; },
   scrubFx(done) {
     const c = mine(); if (!c) return; SFX.wash(); for (let i = 0; i < 3; i++) fx.splash(c.b.x + (Math.random() - 0.5) * 2.5, c.b.y + 1.4, c.b.z + (Math.random() - 0.5) * 3, 6);
@@ -705,6 +739,7 @@ function tick(dt) {
   crime.update(dt);
   if (inside()) heist.update(dt);
   npcs.update(dt, inside() || !!G.race);
+  drops.update(dt);
   fishing.update(dt, !blocked && IN.isHeld("KeyQ"));
   mp.update(dt);
   if (G.aimT > 0) G.aimT -= dt;
@@ -977,6 +1012,9 @@ async function boot() {
   });
   fishing = new Fishing({ scene, fx, toast: H.toast, banner: H.banner, me: () => G.me.w, person: () => G.me.p, rodModel: () => (S.equip === "rod" ? G.me.p.item && G.me.p.item.userData.bend ? G.me.p.item : itemModels["r" + S.rod] : null) });
   interiors = new Interiors({ scene, onEnter: (c) => heist.enter(c), onLeave: () => heist.leave() });
+  drops = new Drops({ scene, me: () => { const b = mapPos(); return { x: b.x, z: b.z, yaw: b.yaw || 0 }; }, indoors: () => inside(),
+    dropped: () => { SFX.door(); H.toast("📦 Special delivery!", "Your SkyDrop box just dropped. Walk up to it and press E to open it.", "good", 3500); },
+    landed: (x, y, z) => { fx.dust(x, y, z, 10); SFX.land(2); } });
   npcs = new NPCs({ scene, me: () => crime.api.me(), toast: H.toast, bumpMoney: H.bumpMoney, crime, quality: () => quality });
   heist = new Heist({ scene, crime, interiors, me: () => G.me.w, toast: H.toast, banner: H.banner, bumpMoney: H.bumpMoney,
     aim() { G.aimT = 0.3; const w = G.me.w; if (w.moving < 0.5) w.yaw = heist.aimYaw(); } });

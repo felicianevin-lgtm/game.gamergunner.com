@@ -175,6 +175,12 @@ export function customs(scene, b) {
   }
   b.box(1.4, 1, 0.8, -4.6, 0, -9.8, 0xd0302a); b.cyl(0.35, 1.1, -3.4, 0, -9.9, 0x3a7ad0, 10);
   bsign(scene, b, "PAINT · WHEELS · LIFTS · NEON", 9, 0.8, 0, 5.2, -10.55, { bg: "#22262c", fg: "#ff8a1a" });
+  // the Valley Parts counter on the front of the left wing: an awning, a counter, shelves of motors + tires in the window
+  b.box(8, 0.25, 2.4, -14.5, 3.6, 12.2, 0x2a9ad0); b.box(8, 1.1, 0.7, -14.5, 0, 11.6, 0x3a3e46).solid(-14.5, 11.6, 4, 0.35, 1.1);
+  for (let i = 0; i < 4; i++) { b.box(1, 0.7, 0.6, -17.5 + i * 2, 1.1, 11.6, [0x8a8d92, 0x5a5f6a, 0xd0302a, 0x8a8d92][i]); }
+  for (let i = 0; i < 3; i++) b.add(new THREE.TorusGeometry(0.35, 0.15, 6, 10), 0x1e1f22, -11.6, 0.5 + i * 0.45, 11.9, Math.PI / 2, 0, 0);
+  for (const x of [-18.3, -10.7]) b.cyl(0.1, 3.6, x, 0, 13.3, 0x9aa0aa, 6);
+  bsign(scene, b, "VALLEY PARTS", 7, 1.1, -14.5, 4.6, 11.2, { bg: "#2a9ad0", fg: "#ffffff" });
   for (let x = -22; x <= 22; x += 2.2) b.box(0.3, 7, 0.2, x, 0, -11.05, 0x7a8693);
   b.box(46.4, 1.1, 22.4, 0, 7, 0, 0xff8a1a); b.box(47, 0.5, 23, 0, 8, 0, 0x55606a);
   for (const x of [-14, 0, 14]) {

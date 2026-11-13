@@ -12,6 +12,7 @@ import { GEAR, BLASTERS, RANKS, rankOf, nextRank, lootCap, BOOK_PAY } from "./cr
 import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } from "./fishing.js";
 import { QUICK } from "./mp.js";
 import { itemById, packCap } from "./npcs.js";
+import { PARTS, partById, KINDS, SHIP_FEE, have } from "./parts.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
@@ -118,6 +119,48 @@ function customs() {
   };
 }
 
+// ---------------------------------------------------------------- Valley Parts + building your own ride
+function parts() {
+  side(`<h2>🔩 VALLEY PARTS</h2><div class="bank">${money(S.money)}</div><p class="sub">Buy parts here, then build a ride in your garage (🏠 Open garage → 🔧 Build a ride). No delivery fee in the store!</p>
+    <div class="tabs">${KINDS.map(([k, n]) => `<button type="button" data-a="tab" data-v="${k}" class="${vpTab === k ? "on" : ""}">${n}</button>`).join("")}</div>
+    <div class="list">${PARTS.filter((p) => p.kind === vpTab).map((p) => `<div class="item"><span class="ico">${p.icon}</span><span class="nm"><b>${esc(p.name)}${have(p.id) ? `<span class="tag">HAVE ${have(p.id)}</span>` : ""}</b><small>${esc(p.desc)}</small></span><span class="pr">${money(p.price)}</span><button type="button" class="small" data-a="buy" data-v="${p.id}" ${S.money >= p.price ? "" : "disabled"}>Buy</button></div>`).join("")}</div>`, "parts");
+  onAct = (a, val) => {
+    if (a === "tab") { vpTab = val; SFX.click(); parts(); }
+    if (a === "buy") { GM.buyPart(val); parts(); }
+  };
+}
+let bSel = { frame: null, motor: null, tires: null, color: null, lift: false };
+function builder(h) {
+  const own = (kind) => PARTS.filter((p) => p.kind === kind && have(p.id));
+  for (const k of ["frame", "motor", "tires"]) if (!bSel[k] || !have(bSel[k])) bSel[k] = own(k)[0] ? own(k)[0].id : null;
+  if (bSel.lift && !have("p_lift")) bSel.lift = false;
+  const fr = bSel.frame && partById(bSel.frame), needBody = !!(fr && fr.body);
+  const checks = [["🔩 Frame", !!bSel.frame], ["⚙️ Motor", !!bSel.motor], ["⚫ Tires", !!bSel.tires], ["💺 Seat", have("p_seat") > 0], ...(needBody ? [["🧱 Body panels", have("p_body") > 0]] : [])];
+  const done = checks.filter((c) => c[1]).length, bar = "█".repeat(Math.round((done / checks.length) * 10)).padEnd(10, "░"), ready = done === checks.length;
+  const pick = (kind, title) => `<h3>${title}</h3>${own(kind).length ? `<div class="opts">${own(kind).map((p) => `<button type="button" class="opt ${bSel[kind] === p.id ? "on" : ""}" data-a="bPick" data-v="${kind}:${p.id}"><span>${p.icon} ${esc(p.name)}<small>you have ${have(p.id)}</small></span><em>${bSel[kind] === p.id ? "✓" : ""}</em></button>`).join("")}</div>` : `<p class="note">You don't have any. Buy some at Valley Parts or on 📦 SkyDrop.</p>`}`;
+  const v = fr ? vehicleById(fr.model) : null;
+  side(`<h2>🔧 BUILD A RIDE</h2><div class="bank">${money(S.money)}</div><p class="sub">At ${esc(h.name)}. Pick your parts and put them together!</p>
+    ${pick("frame", "1. Frame")}${pick("motor", "2. Motor")}${pick("tires", "3. Tires")}
+    <h3>4. Color</h3><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === (bSel.color ?? (v ? v.color : -1)) ? "on" : ""}" style="background:${hex(p)}" data-a="bColor" data-v="${p}"></button>`).join("")}</div>
+    ${have("p_lift") ? `<div class="btns"><button type="button" class="small" data-a="bLift">${bSel.lift ? "✓ Use a lift kit" : "Add a lift kit"}</button></div>` : ""}
+    <h3>Checklist</h3><p style="font:700 16px monospace">[${bar}] ${done}/${checks.length}</p><p class="note">${checks.map(([n, ok]) => (ok ? "✅ " : "❌ ") + n).join("<br>")}</p>
+    <div class="btns"><button type="button" class="big" data-a="build" ${ready ? "" : "disabled"}>🔧 BUILD IT!</button><span class="note">${S.cars.length}/${slots()} rides in your garage</span></div>
+    <div class="btns"><button type="button" class="small" data-a="back">← Back to the garage</button></div>`, "house");
+  onAct = (a, val) => {
+    if (a === "bPick") { const [k, id] = String(val).split(":"); bSel[k] = id; if (k === "frame") bSel.color = null; SFX.click(); builder(h); }
+    if (a === "bColor") { bSel.color = +val; SFX.click(); builder(h); }
+    if (a === "bLift") { bSel.lift = !bSel.lift; SFX.click(); builder(h); }
+    if (a === "back") house(h);
+    if (a === "build") {
+      // a little "putting it together" moment, then it rolls out of the garage
+      const box = $("sideBox"); let k = 0; SFX.click();
+      const tickB = () => { k++; box.innerHTML = `<h2>🔧 BUILDING...</h2><p style="font:700 20px monospace;margin-top:30px">[${"█".repeat(k).padEnd(10, "░")}]</p><p class="sub">${["Bolting on the motor...", "Mounting the tires...", "Putting in the seat...", "Painting it...", "Tightening every bolt..."][Math.min(4, Math.floor(k / 2))]}</p>`; SFX.click();
+        if (k < 10) setTimeout(tickB, 140); else { const c = GM.buildRide(h, bSel); if (c) { bSel = { frame: null, motor: null, tires: null, color: null, lift: false }; close(); } else builder(h); } };
+      tickB();
+    }
+  };
+}
+
 // ---------------------------------------------------------------- houses + garage
 function house(h) {
   const own = S.houses.includes(h.id);
@@ -128,7 +171,7 @@ function house(h) {
       <h3>All houses</h3><div class="list">${HOUSES.filter((x) => x.price).map((x) => `<div class="item ${x.id === h.id ? "sel" : ""}"><span class="ico">🏠</span><span class="nm"><b>${esc(x.name)}${S.houses.includes(x.id) ? '<span class="tag">YOURS</span>' : ""}</b><small>${x.slots} rides</small></span><span class="pr">${money(x.price)}</span></div>`).join("")}</div>`;
   } else {
     html += `<p class="note">${S.home === h.id ? "⭐ This is your home." : ""} Garage room: <b>${S.cars.length} / ${slots()}</b></p>
-      <div class="btns">${S.home !== h.id ? `<button type="button" class="small" data-a="home">⭐ Make this my home</button>` : ""}${h.price ? `<button type="button" class="small" data-a="sellHouse">💲 Sell this house for ${money(Math.round(h.price * 0.6))}</button>` : ""}</div>
+      <div class="btns">${S.home !== h.id ? `<button type="button" class="small" data-a="home">⭐ Make this my home</button>` : ""}<button type="button" class="small" data-a="builder">🔧 Build a ride from parts</button>${h.price ? `<button type="button" class="small" data-a="sellHouse">💲 Sell this house for ${money(Math.round(h.price * 0.6))}</button>` : ""}</div>
       <h3>Your rides</h3><div class="list">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid), d = C ? Math.round(Math.hypot(C.b.x - h.garage.x, C.b.z - h.garage.z)) : 0, onTr = C && C.on; return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${onTr ? "On a trailer" : d < 25 ? "Parked here" : d + " m away"}${C === GM.mine() ? " · you're driving it" : ""}</small></span>
         <span class="btns" style="margin:0"><button type="button" class="small" data-a="drive" data-v="${c.uid}">Drive</button>${d >= 25 || onTr ? `<button type="button" class="small" data-a="bring" data-v="${c.uid}">Bring here${d > 60 ? " $25" : ""}</button>` : ""}${S.cars.length > 1 && vehicleById(c.id).price ? `<button type="button" class="small" data-a="sell" data-v="${c.uid}">Sell ${money(vehicleById(c.id).price / 2)}</button>` : ""}</span></div>`; }).join("")}</div>
       ${S.trailers.length ? `<h3>Your trailers</h3><div class="list">${S.trailers.map((t) => { const T = GM.G.TRS.get(t.uid), d = Math.round(Math.hypot(T.x - h.garage.x, T.z - h.garage.z)); return `<div class="item"><span class="ico">${ICON[t.type]}</span><span class="nm"><b>${esc(trailerById(t.type).name)}</b><small>${T.hitched ? "Hitched to a truck" : d < 25 ? "Parked here" : d + " m away"} · ${T.loaded.length ? T.loaded.length + " ride(s) on it" : "empty"}</small></span>${d >= 25 ? `<button type="button" class="small" data-a="bringT" data-v="${t.uid}">Bring here</button>` : ""}</div>${t.type === "enclosed" ? `<p class="note">Repaint it ($150):</p>` + swatches(t.color, "tpaint").replace(/data-v="(\d+)"/g, 'data-v="${t.uid}:$1"') : ""}`; }).join("")}</div>` : ""}`;
@@ -137,6 +180,7 @@ function house(h) {
   onAct = (a, val) => {
     if (a === "buyHouse") { GM.buyHouse(h); house(h); }
     if (a === "home") { GM.setHome(h.id); SFX.click(); house(h); }
+    if (a === "builder") { SFX.click(); builder(h); }
     if (a === "sellHouse") { if (confirm("Sell " + h.name + " for " + money(Math.round(h.price * 0.6)) + "?")) { GM.sellHouse(h); house(h); } }
     if (a === "drive") { GM.bringCar(+val, h, true); }
     if (a === "bring") { GM.bringCar(+val, h, false); house(h); }
@@ -191,12 +235,13 @@ function raceResults(r) {
 const DEV_CODE = "2468";
 let devUnlocked = false;
 const devOpen = () => { if (devUnlocked) return true; try { return sessionStorage.getItem("mv_dev") === "1"; } catch { return false; } };
+let sdTab = "frame", vpTab = "frame";
 function phone(view = "home") {
   SFX.phone();
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? H.fmtTime(S.best[r.id]) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
@@ -215,6 +260,15 @@ function phone(view = "home") {
   if (view === "ideas") html = `<h2>💡 IDEAS</h2>${back}<p class="sub">What should we add to Mud Valley? New cars, places, jobs, anything! Your idea goes straight to the game maker.</p>
     <textarea id="ideaTxt" maxlength="480" rows="5" placeholder="I think you should add..." style="width:100%;box-sizing:border-box;font:inherit;padding:8px;border-radius:8px"></textarea>
     <div class="btns"><button type="button" class="big" data-a="sendIdea">SEND IDEA 💡</button></div><p class="note" id="ideaNote">Please don't put your real name, address or phone number in it.</p>`;
+  if (view === "skydrop") {
+    const sub = S.cart.reduce((a, id) => a + partById(id).price, 0), fee = sub ? SHIP_FEE(sub) : 0;
+    html = `<h2>📦 SKYDROP</h2>${back}<div class="bank">${money(S.money)}</div><p class="sub">Car parts delivered by drone, right to where you're standing! Drone delivery: ${money(60)} + 10%.</p>
+      <div class="tabs">${KINDS.map(([k, n]) => `<button type="button" data-a="sdTab" data-v="${k}" class="${sdTab === k ? "on" : ""}">${n}</button>`).join("")}</div>
+      <div class="list">${PARTS.filter((p) => p.kind === sdTab).map((p) => `<div class="item"><span class="ico">${p.icon}</span><span class="nm"><b>${esc(p.name)}${have(p.id) ? `<span class="tag">HAVE ${have(p.id)}</span>` : ""}</b><small>${esc(p.desc)}</small></span><span class="pr">${money(p.price)}</span><button type="button" class="small" data-a="sdAdd" data-v="${p.id}">+ Cart</button></div>`).join("")}</div>
+      <h3>🛒 Your cart (${S.cart.length})</h3>${S.cart.length ? `<div class="list">${S.cart.map((id, i) => `<div class="item"><span class="ico">${partById(id).icon}</span><span class="nm"><b>${esc(partById(id).name)}</b></span><span class="pr">${money(partById(id).price)}</span><button type="button" class="small" data-a="sdRm" data-v="${i}">✕</button></div>`).join("")}</div>
+      <p class="note">Parts: ${money(sub)} · Drone delivery: ${money(fee)} · <b>Total: ${money(sub + fee)}</b></p><div class="btns"><button type="button" class="big" data-a="sdOrder" ${S.money >= sub + fee ? "" : "disabled"}>🚁 ORDER ${money(sub + fee)}</button></div>` : `<p class="note">Your cart is empty. Tap "+ Cart" on some parts!</p>`}
+      <p class="note">Build your own ride from parts in any of your garages (🏠 Open garage → 🔧 Build a ride).</p>`;
+  }
   if (view === "dev") {
     if (!devOpen()) html = `<h2>🛠 DEV</h2>${back}<p class="sub">Type the dev code:</p>
       <input id="devCode" type="password" inputmode="numeric" maxlength="8" autocomplete="off" style="font:inherit;font-size:22px;letter-spacing:6px;width:9em;padding:8px;border-radius:8px;text-align:center">
@@ -233,6 +287,10 @@ function phone(view = "home") {
   modal(html, "phone");
   if (view === "dev" && !devOpen()) { const i = document.getElementById("devCode"); if (i) { i.focus(); i.addEventListener("keydown", (e) => { if (e.key === "Enter") onAct("devUnlock"); }); } }
   onAct = (a, val) => {
+    if (a === "sdTab") { sdTab = val; SFX.click(); phone("skydrop"); return; }
+    if (a === "sdAdd") { GM.cartAdd(val); phone("skydrop"); return; }
+    if (a === "sdRm") { GM.cartRemove(+val); phone("skydrop"); return; }
+    if (a === "sdOrder") { if (GM.orderCart()) close(); else phone("skydrop"); return; }
     if (a === "devUnlock") { const i = document.getElementById("devCode"); if (i && i.value.trim() === DEV_CODE) { try { sessionStorage.setItem("mv_dev", "1"); } catch {} devUnlocked = true; SFX.cash(); phone("dev"); } else { SFX.nope(); const n = document.getElementById("devNote"); if (n) n.textContent = "❌ Wrong code."; if (i) i.value = ""; } return; }
     if (a === "devLock") { try { sessionStorage.removeItem("mv_dev"); } catch {} devUnlocked = false; phone("dev"); return; }
     if (a.startsWith("dev") && !devOpen()) return;
@@ -433,7 +491,7 @@ function intro() {
   onAct = (a) => { if (a === "go") { S.intro = true; save(); close(); GM.setWaypoint({ x: PLACES.jobs.x, z: PLACES.jobs.z, name: "the Job Center" }); H.banner("MUD VALLEY", "Follow the purple arrow to the Job Center!"); } };
 }
 
-export const UI = { close, dealer, customs, house, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged, pawn };
+export const UI = { close, dealer, customs, house, parts, builder, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged, pawn };
 export function initMenus(game) {
   GM = game; wire();
   $("mapClose").addEventListener("click", () => { SFX.click(); closeMap(); });
