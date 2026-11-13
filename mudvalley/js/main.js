@@ -59,7 +59,7 @@ const G = {
   time: 0, CARS: new Map(), TRS: new Map(), me: null, race: null, tow: null, waypoint: null, panel: null, preview: null,
   shake: 0, hint: null, hintT: 0, siren: false, hold: null, lockWalk: false, aimT: 0, deepT: 0, rescueT: 0,
   // fast travel to your home (from the phone)
-  goHome(h) { const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
+  goHome(h) { if (crime.noTeleport()) return; const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
 };
 let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs;
 const cam = { yaw: Math.PI, pitch: 0.3, zoom: 1, x: 0, y: 5, z: 0, tx: 0, ty: 0, tz: 0, snap: true };
@@ -461,7 +461,7 @@ export const GAME = {
     pay(Math.round(vehicleById(c.s.id).price * 0.5)); SFX.cash(); save(); return true;
   },
   bringCar(u, h, drive) {
-    const c = G.CARS.get(u); if (!c) return;
+    const c = G.CARS.get(u); if (!c || crime.noTeleport()) return;
     if (c.on) unloadCarByUid(u);
     for (const t of G.TRS.values()) if (t.hitched === c.b && c !== mine()) { t.hitched = null; t.s.hitched = null; }
     const far = Math.hypot(c.b.x - h.garage.x, c.b.z - h.garage.z) > 60;
@@ -473,7 +473,7 @@ export const GAME = {
     SFX.click(); if (far) H.toast("Delivered!", "A tow service brought it here for $25.", ""); save();
   },
   bringTrailer(u, h) {
-    const t = G.TRS.get(u); if (!t) return; t.hitched = null; t.s.hitched = null;
+    const t = G.TRS.get(u); if (!t || crime.noTeleport()) return; t.hitched = null; t.s.hitched = null;
     const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, t.T.len * 2);
     t.x = f.x; t.z = f.z; t.yaw = yaw; stepTrailer(t, DT); SFX.click(); save();
   },
@@ -494,6 +494,7 @@ export const GAME = {
   startRace(id) {
     const def = raceById(id), c = mine();
     if (!c) { H.toast("You need a vehicle to race!", "", "warn"); return; }
+    if (crime.noTeleport()) return;
     if (jobs.active) { H.toast("You're on a job", "Finish or quit your job first (phone → Jobs).", "warn"); return; }
     const t = myTrailer(); if (t) { t.hitched = null; t.s.hitched = null; }
     UI.close();

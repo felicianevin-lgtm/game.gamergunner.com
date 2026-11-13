@@ -19,6 +19,7 @@ import { makeBody, stepCar, placeModel, speedOf, makeWalker, stepWalker } from "
 import { makePerson, LOOKS } from "./character.js";
 import { S, save, pay, money } from "./save.js";
 import { SFX, siren } from "./sfx.js";
+import { SkyForce } from "./air.js";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -104,6 +105,8 @@ export class Crime {
     this.spikeModel = sp;
     // the beacon over the robbery (red)
     this.beacon = api.makeBeacon(0xff3a3a);
+    // 5 stars: missile drones, foot cops + the police helicopter (air.js)
+    this.air = new SkyForce(this);
   }
   get wanted() { return S.wanted; }
   vaultOpen() { return this.t < this.vaultUntil; }
@@ -158,10 +161,18 @@ export class Crime {
       if (!this.jail) { SFX.escape(); this.api.toast("You lost the cops!", S.loot ? "Now stash your " + money(S.loot) + " at the Robber Hideout." : "Phew!", "good", 4000); }
     }
   }
-  copCount() { return [0, 1, 2, 3, 3, 4][S.wanted]; }
+  copCount() { return [0, 1, 2, 3, 3, 6][S.wanted]; }
+  // how long nobody has to see you before you lose the cops (5 stars is MUCH harder)
+  evadeNeed() { return S.wanted >= 5 ? 30 : 6 + S.wanted * 2; }
+  // no teleporting / fast travel at 5 stars (phone Home, bring-a-car, races...). Returns true = blocked
+  noTeleport() {
+    if (S.wanted < 5) return false;
+    SFX.nope(); this.api.toast("🚨 Can’t teleport with 5 stars!", "The whole police force is watching you. Lose some stars first!", "warn", 3200);
+    return true;
+  }
   spawnCop() {
     const me = this.api.me(), pts = roadPoints();
-    let cand = pts.filter((p) => { const d = Math.hypot(p.x - me.x, p.z - me.z); return d > 110 && d < 200 && p.road; });
+    let cand = pts.filter((p) => { const d = Math.hypot(p.x - me.x, p.z - me.z); return S.wanted >= 5 ? d > 80 && d < 160 && p.road : d > 110 && d < 200 && p.road; });
     if (!cand.length) cand = pts.filter((p) => Math.hypot(p.x - me.x, p.z - me.z) > 90);
     const p = cand[Math.floor(Math.random() * cand.length)] || { x: me.x + 120, z: me.z, yaw: 0 };
     const id = S.wanted >= 4 ? "interceptor" : "cruiser", v = vehicleById(id);
@@ -271,6 +282,7 @@ export class Crime {
     if (bp) setTimeout(() => this.api.toast("🎒 Backpack confiscated!", "The cops took the " + bp + " thing" + (bp === 1 ? "" : "s") + " in your backpack.", "warn", 4000), 2600);
     this.setWanted(0);
     for (const c of this.cops.slice()) this.removeCop(c);
+    this.air.clear();
     this.api.exitCar(); this.ko = null;
     this.jail = { t: clamp(14 + stars * 7, 15, 50), wins: 0, needle: 0, zone: rnd(0.25, 0.75), cool: 0 };
     this.api.goJail();
@@ -356,6 +368,7 @@ export class Crime {
     const r = this.call && this.call.robber;
     for (const t of this.api.civilians()) out.push(t);
     for (const p of this.api.friends()) if (Crime.canHit(S.role, p.role) && p.x !== undefined) out.push({ kind: "player", ref: p, x: p.x, y: p.y, z: p.z, vx: 0, vz: 0, r: p.car ? 2.2 : 0.8 });
+    for (const t of this.air.targets()) out.push(t);
     if (r) { if (r.state === "fleeing") out.push({ kind: "robcar", ref: r, x: r.car.b.x, y: r.car.b.y, z: r.car.b.z, vx: r.car.b.vx, vz: r.car.b.vz, r: 2.2 }); else if (r.w && r.state !== "cuffed" && r.state !== "carried") out.push({ kind: "robber", ref: r, x: r.w.x, y: r.w.y, z: r.w.z, vx: r.w.vx, vz: r.w.vz, r: 0.9 }); }
     return out;
   }
@@ -366,6 +379,7 @@ export class Crime {
     this.splats.push({ x: x + rnd(-0.3, 0.3), z: z + rnd(-0.3, 0.3), y: gy + 0.04 + Math.random() * 0.01, r: big ? 0.75 : 0.5, life: 16, color: 0x7a0a10 });
   }
   hit(t, s) {
+    if (t.air) { this.air.hit(t, s); return; } // (a drone, the helicopter or a cop on foot)
     if (t.kind === "civ" || t.kind === "robber" || (t.kind === "player" && !t.ref.car)) this.bleed(t.x, t.y + 1.2, t.z, !!s.splash);
     if (t.kind === "cop") {
       if (S.role !== "robber") { if (this.warnT <= 0) { this.warnT = 4; this.api.toast("Hey, that’s a cop!", "Only robbers fight the cops.", "warn"); } return; }
@@ -567,7 +581,7 @@ export class Crime {
     // the cops (only chase wanted robbers)
     if (S.wanted > 0) {
       this.spawnT -= dt;
-      if (this.cops.filter((c) => !c.leaving).length < this.copCount() && this.spawnT <= 0) { this.spawnCop(); this.spawnT = 3; }
+      if (this.cops.filter((c) => !c.leaving).length < this.copCount() && this.spawnT <= 0) { this.spawnCop(); this.spawnT = S.wanted >= 5 ? 2 : 3; }
     }
     let seen = false, sirenVol = 0, nearest = 1e9;
     const inAlarm = S.wanted > 0 && me.indoors && this.alarmAt && this.api.roomId() === this.alarmAt;
@@ -577,7 +591,7 @@ export class Crime {
       const at = this.cops.some((c) => !c.leaving && Math.hypot(c.b.x - me.x, c.b.z - me.z) < 30);
       this.doorT = at ? (this.doorT || 0) + dt : 0;
       if (at && this.doorT > 0.2 && this.doorT < 0.25) this.api.toast("🚓 The cops are waiting outside!", "They’ll come in soon... (sneak out and run, or wait it out)", "warn", 3600);
-      if (this.doorT > 14) { this.doorT = 0; this.api.toast("“Police! You’re under arrest!”", "", "warn"); this.bust(); }
+      if (this.doorT > (S.wanted >= 5 ? 8 : 14)) { this.doorT = 0; this.api.toast("“Police! You’re under arrest!”", "", "warn"); this.bust(); }
     } else this.doorT = 0;
     for (const c of this.cops.slice()) {
       const b = c.b; c.life += dt;
@@ -591,10 +605,19 @@ export class Crime {
         if (d > 160 || c.life > 40) { this.removeCop(c); continue; }
       } else {
         // can this cop see you?
-        const can = !this.hidden && (d < 24 || (d < 150 && sees({ x: b.x, y: b.y, z: b.z }, me)));
+        const five = S.wanted >= 5, spot = this.air.spotOn; // (the helicopter's spotlight tells every cop where you are)
+        const can = !this.hidden && (spot || d < (five ? 34 : 24) || (d < (five ? 200 : 150) && sees({ x: b.x, y: b.y, z: b.z }, me)));
         if (me.indoors) { this.aiDrive(c, me.x, me.z, dt, 9); continue; } // (park by the door and wait)
         c.seen = can; if (can) { seen = true; c.lastX = me.x; c.lastZ = me.z; c.searching = false; }
         else if (!c.searching && ((c.lastX !== undefined && Math.hypot(c.lastX - b.x, c.lastZ - b.z) < 16) || (c.stuckCount || 0) >= 2)) { c.searching = true; c.stuckCount = 0; this.attachRoad(c); }
+        if (c.searching && five && !this.hidden) { // (5 stars: they don't just cruise around, they sweep the area near you)
+          c.huntT = (c.huntT || 0) - dt;
+          if (c.huntT <= 0 || (c.hx !== undefined && Math.hypot(c.hx - b.x, c.hz - b.z) < 14)) { c.huntT = rnd(6, 9); const a = rnd(0, 6.283), r = rnd(15, 55); c.hx = me.x + Math.sin(a) * r; c.hz = me.z + Math.cos(a) * r; }
+          if (c.top0 !== undefined) b.t.top = c.top0 * 0.8;
+          this.aiDrive(c, c.hx, c.hz, dt);
+          if ((c.stuckCount || 0) > 6) { this.removeCop(c); continue; }
+          sirenVol = Math.max(sirenVol, 1 - d / 200); continue;
+        }
         if (c.searching) { this.patrolDrive(c, dt, 20); continue; } // (lost you: cruise the roads looking for you)
         else if (c.top0 !== undefined && c.mode !== "pull") b.t.top = c.top0; // (full speed again when they spot you)
         const tx = can ? me.x + (me.vx || 0) * Math.min(1, d / 30) : c.lastX ?? me.x, tz = can ? me.z + (me.vz || 0) * Math.min(1, d / 30) : c.lastZ ?? me.z;
@@ -617,10 +640,12 @@ export class Crime {
     if (this.bustT > 1.6 && S.wanted > 0) { this.bustT = 0; this.bust(); }
     // losing the cops: nobody sees you for long enough
     if (S.wanted > 0 && !this.jail) {
-      if (seen || this.doorT > 0 || inAlarm) this.evadeT = 0; else this.evadeT += dt * (S.gear.mask ? 1.5 : 1) * (this.hidden ? 2 : 1);
-      if (this.evadeT > 6 + S.wanted * 2) this.setWanted(0);
+      const five = S.wanted >= 5;
+      if (seen || this.doorT > 0 || inAlarm || this.air.spotOn) this.evadeT = 0; else this.evadeT += dt * (S.gear.mask ? (five ? 1.2 : 1.5) : 1) * (this.hidden ? (five ? 1.3 : 2) : 1);
+      if (this.evadeT > this.evadeNeed()) this.setWanted(0);
     }
     this.updatePatrols(dt, me);
+    this.air.update(dt);
     // the player's own siren
     if (this.api.mySiren()) sirenVol = Math.max(sirenVol, 0.7);
     if (this.call && this.call.robber.state === "fleeing") sirenVol = Math.max(sirenVol, 0);
@@ -738,6 +763,7 @@ export class Crime {
       }
       if (!on) this.bolt = null;
     }
+    this.air.draw(dt, time);
     for (const c of this.cops) { placeModel(c.b); animateCar(c.m, { speed: speedOf(c.b), steer: c.b.steer, siren: !c.leaving || c.life < 3, t: time, wheelDrop: c.b.wheelDrop }, dt); }
     if (this.call) { const r = this.call.robber; if (r.state === "fleeing" || r.state === "robbing") { placeModel(r.car.b); animateCar(r.car.m, { speed: speedOf(r.car.b), steer: r.car.b.steer, wheelDrop: r.car.b.wheelDrop }, dt); r.stars.rotation.y += dt * 4; } }
     const M = new THREE.Matrix4(), col = new THREE.Color(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
@@ -757,11 +783,11 @@ export class Crime {
   hud() {
     const r = this.call && this.call.robber;
     return {
-      headStart: this.headStart > 0 ? Math.ceil(this.headStart) : 0, wanted: S.wanted, evade: S.wanted ? clamp(this.evadeT / (6 + S.wanted * 2), 0, 1) : 0, hidden: this.hidden, loot: S.loot, cap: lootCap(),
+      headStart: this.headStart > 0 ? Math.ceil(this.headStart) : 0, wanted: S.wanted, evade: S.wanted ? clamp(this.evadeT / this.evadeNeed(), 0, 1) : 0, hidden: this.hidden, loot: S.loot, cap: lootCap(),
       jail: this.jail, ko: !!this.ko, call: this.call ? { what: this.call.what, state: r.state } : null,
       target: this.call ? (r.state === "carried" || r.state === "cuffed" ? { x: PLACES.police.x, z: PLACES.police.z } : r.state === "fleeing" ? { x: r.car.b.x, z: r.car.b.z } : { x: r.w.x, z: r.w.z }) : null,
     };
   }
   // test helpers
-  clearAll() { for (const c of this.cops.slice()) this.removeCop(c); for (const c of this.patrols.slice()) this.removePatrol(c); this.pull = null; this.endCall(true); this.setWanted(0); }
+  clearAll() { this.air.clear(); for (const c of this.cops.slice()) this.removeCop(c); for (const c of this.patrols.slice()) this.removePatrol(c); this.pull = null; this.endCall(true); this.setWanted(0); }
 }
