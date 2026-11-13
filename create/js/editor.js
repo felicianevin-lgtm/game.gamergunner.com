@@ -28,7 +28,7 @@ import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig,
 import { TEXTURES, texturePicture } from "./textures.js";
 import { sanitizeAnims, animSummary, MAX_ANIMS } from "./keyanim.js";
 import { openAnimMaker } from "./animmaker.js";
-import { WEAPONS, LOOKS, MAX_START, MAX_ARMS, startingWeapons, weaponCode } from "./weapons.js";
+import { WEAPONS, LOOKS, MAX_HELD, sanitizeWeapon, weaponObjectStats, weaponStarter } from "./weapons.js";
 import { CHASE_SOUNDS, SCARE_FX, FLASHES, SCARE_SOUNDS, SCARE_WHEN, DEFAULT_CHASE, DEFAULT_SCARE, sanitizeChase, sanitizeScare, playScare } from "./scare.js";
 
 const $ = (id) => document.getElementById(id);
@@ -471,6 +471,7 @@ function drawManyProps(box) {
   const ids = selIds();
   $("propsFor").textContent = ids.length + " things";
   box.innerHTML = '<p class="note">' + ids.length + " things selected. Drag the gizmo to move, turn or size them all together. Shift / Ctrl + click adds or takes away.</p>" +
+    '<button type="button" class="btn add-script" id="mWeapon">🎒 Make it a weapon</button>' +
     '<button type="button" class="btn add-script" id="mMesh">🧩 Mesh together</button><p class="note">Glues them into ONE thing: it moves, animates and can get 🦴 bones as one.</p>' +
     '<div class="group-title">⧉ Copies right next to them</div><div class="many-dirs">' + Object.entries(DIRS).map(([k, v]) => '<button type="button" class="btn small ghost" data-dir="' + k + '">' + v + "</button>").join("") + "</div>" +
     '<p class="note">Press again to keep going: a whole row, wall or forest. (Ctrl+D does → Right.)</p>' +
@@ -480,7 +481,7 @@ function drawManyProps(box) {
   box.querySelectorAll("[data-dir]").forEach((b) => (b.onclick = () => dupNextTo(b.dataset.dir)));
   box.querySelectorAll("[data-c]").forEach((b) => (b.onclick = () => { pushUndo(); for (const id of selIds()) { const o = obj(id); o.color = b.dataset.c; rebuild(o); } changed(); }));
   wireSpread(box);
-  $("mCopy").onclick = copySel; $("mPaste").onclick = pasteClip; $("mDel").onclick = removeMany; $("mMesh").onclick = meshTogether;
+  $("mCopy").onclick = copySel; $("mPaste").onclick = pasteClip; $("mDel").onclick = removeMany; $("mMesh").onclick = () => meshTogether(); $("mWeapon").onclick = makeWeaponFromSelection;
   $("mFocus").onclick = () => { const b = boxOf(selIds()), c = b.getCenter(new THREE.Vector3()), r = Math.max(8, b.getSize(new THREE.Vector3()).length()); const d = camera.position.clone().sub(orbit.target).normalize(); orbit.target.copy(c); camera.position.copy(c).addScaledVector(d, r); };
 }
 function spreadBox() {
@@ -505,9 +506,10 @@ function pieceInWorld(m, p) {
   const e = new THREE.Euler().setFromQuaternion(mq.multiply(pq));
   return { pos: [r2(pos.x), r2(pos.y), r2(pos.z)], rot: [e.x, e.y, e.z].map((v) => r2(v / D2R)), size: [0, 1, 2].map((i) => r2(Math.max(0.1, p.size[i] * k[i]))) };
 }
-function meshTogether() {
+function meshTogether(asType) {
+  const weapon = asType === "weapon"; // (🎒 Make it a weapon: the same, but the new thing is a weapon)
   const all = selIds().map(obj).filter(Boolean), list = all.filter((o) => o.type === "mesh" || !NOT_IN_MESH.has(o.type));
-  if (list.length < 2) { alert("Select 2 or more things first (Shift + click, or drag a box around them), then Mesh together."); return; }
+  if (list.length < (weapon ? 1 : 2)) { alert(weapon ? "Select the parts of your weapon first (Shift + click, or drag a box around them)." : "Select 2 or more things first (Shift + click, or drag a box around them), then Mesh together."); return null; }
   const skipped = all.length - list.length;
   const box = new THREE.Box3();
   for (const o of list) { const g = groups.get(o.id); if (g) box.expandByObject(g); }
@@ -518,11 +520,12 @@ function meshTogether() {
     else parts.push(pieceOf(o));
   }
   for (const p of parts) p.pos = [0, 1, 2].map((i) => r2(p.pos[i] - origin[i]));
-  if (parts.length > MAX_PARTS) { alert("A mesh can have up to " + MAX_PARTS + " pieces."); return; }
+  if (parts.length > MAX_PARTS) { alert("A mesh can have up to " + MAX_PARTS + " pieces."); return null; }
   pushUndo();
-  const m = newObj("mesh", origin);
-  m.name = uniqueName("Mesh"); m.size = [size.x, size.y, size.z].map((v) => r2(Math.max(0.1, v))); m.mb = m.size.slice(); m.parts = parts;
-  m.solid = list.some((o) => o.solid);
+  const m = newObj(weapon ? "weapon" : "mesh", origin);
+  m.name = uniqueName(weapon ? "My Weapon" : "Mesh"); m.size = [size.x, size.y, size.z].map((v) => r2(Math.max(0.1, v))); m.mb = m.size.slice(); m.parts = parts;
+  m.solid = !weapon && list.some((o) => o.solid);
+  if (weapon) { m.color = (list.find((o) => /blade|head|tip/i.test(o.name)) || list[list.length - 1]).color; m.w = sanitizeWeapon({ look: "built", mode: "swing" }); }
   const gone = new Set(list.map((o) => o.id));
   for (const sc of game.scripts || []) if (gone.has(sc.on)) sc.on = m.id; // (their scripts now belong to the mesh)
   game.objects = game.objects.filter((o) => !gone.has(o.id));
@@ -530,6 +533,7 @@ function meshTogether() {
   for (const id of gone) { const g = groups.get(id); if (g) { world.root.remove(g); disposeGroup(g); groups.delete(id); } }
   game.objects.push(m); rebuild(m); select(m.id); changed();
   if (skipped) alert(skipped + " thing" + (skipped === 1 ? "" : "s") + " (imported models / monsters) can't go in a mesh, so they stayed separate.");
+  return m;
 }
 function breakApart(m) {
   if (!m || m.type !== "mesh") return;
@@ -555,7 +559,7 @@ function addScript(onId) {
   pushUndo();
   const t = onId ? obj(onId) || guiItem(onId) : null;
   const kind = !t ? "game" : t.kind === "label" ? "label" : "part";
-  const sc = { id: uid(), name: "Script", on: t ? t.id : "", code: starterCode(kind, t ? t.name : "") };
+  const sc = { id: uid(), name: "Script", on: t ? t.id : "", code: t && t.type === "weapon" ? weaponStarter(t.name) : starterCode(kind, t ? t.name : "") };
   game.scripts.push(sc);
   changed();
   editScript(sc.id);
@@ -604,7 +608,8 @@ function manyMenu(x, y) {
     { icon: "⧉", label: "Copies next to them (Ctrl+D)", fn: () => dupNextTo("right") },
     { icon: "🌲", label: "Spread copies around…", fn: () => { const k = prompt("How many copies? (scattered around them, each turned a different way)", "12"); if (k) spreadCopies(clamp(k, 1, 200, 12), Math.max(30, boxOf(selIds()).getSize(new THREE.Vector3()).length() * 1.5), true); } },
     { icon: "📋", label: "Copy " + n + " things (Ctrl+C)", fn: copySel },
-    { icon: "🧩", label: "Mesh together (one thing)", fn: meshTogether },
+    { icon: "🧩", label: "Mesh together (one thing)", fn: () => meshTogether() },
+    { icon: "🎒", label: "Make it a weapon", fn: makeWeaponFromSelection },
     "-", { icon: "🗑️", label: "Delete " + n + " things", danger: true, fn: removeMany },
   ]);
 }
@@ -989,6 +994,7 @@ function drawProps(numbersOnly) {
   html += '<div class="group-title">Animation</div><p class="note">' + (mo ? (GAITS[mo.g].icon + " " + esc(GAITS[mo.g].label) + " · " + IDLES[mo.i].icon + " " + esc(IDLES[mo.i].label) + " · " + esc(WHEN[mo.w])) : "No animation yet. Any thing can walk, dance, wave, hop…") + "</p>" +
     '<button type="button" class="btn add-script" id="pAnimate">🎬 Animation…</button>' +
     row("Walls stop it", '<input type="checkbox" id="pBump"' + (bumps(o) ? " checked" : "") + ' title="When a script moves it, it bumps into walls and stands on floors instead of going through">');
+  html = html.replace('<div class="group-title">Animation</div>', weaponProps(o) + '<div class="group-title">Animation</div>'); // (🎒 a weapon's settings go first)
   html += myAnimsProps(o);
   html += monsterProps(o);
   html += '<div class="group-title">Asset</div><p class="note">' + a.icon + " " + esc(a.label) + " · " + esc(a.cat) + "</p>" + scriptBox(o.id);
@@ -1018,6 +1024,7 @@ function drawProps(numbersOnly) {
   $("pBump").onchange = (e) => { pushUndo(); if (e.target.checked === (o.type === "monster" || !!o.chase)) delete o.bump; else o.bump = e.target.checked; changed(); };
   if ($("pPic")) wirePicture($("pPic"), o.file, (id) => edit(() => { o.file = id; }, true));
   wireMonsterProps(o);
+  wireWeaponProps(o);
 
   const edit = (fn, look) => { pushUndo(); fn(); if (look) rebuild(o); else placeObject(groups.get(o.id), o); changed(); };
   $("pObjName").onchange = (e) => { pushUndo(); o.name = e.target.value.trim() || a.label; $("propsFor").textContent = o.name; changed(); };
@@ -1029,7 +1036,7 @@ function drawProps(numbersOnly) {
       edit(() => { o[k][i] = r2(v); }, k === "size");
     };
   });
-  const colorSet = (c) => edit(() => { o.color = c; if (o.type === "mesh") for (const p of o.parts) p.color = c; }, true); // (🧩 a mesh: paints every piece)
+  const colorSet = (c) => edit(() => { o.color = c; if (o.parts) for (const p of o.parts) p.color = c; }, true); // (🧩 a mesh: paints every piece)
   $("pColor").onchange = (e) => colorSet(e.target.value);
   box.querySelectorAll(".swatches button").forEach((b) => (b.onclick = () => { colorSet(b.dataset.c); $("pColor").value = b.dataset.c; }));
   $("pMat").onchange = (e) => edit(() => { o.mat = e.target.value; if (o.type === "mesh") for (const p of o.parts) p.mat = e.target.value; }, true);
@@ -1507,6 +1514,7 @@ function openGame(g) {
   drawTree(); drawProps(); updateButtons();
   $("savedNote").textContent = "Saved ✓";
   try { localStorage.setItem("gv_studio_last", game.id); } catch {}
+  if (migrateArms()) { rebuildAll(); drawTree(); changed(true); }
   drawArmsBtn();
   if (game.shared) startCollab();
 }
@@ -1532,6 +1540,7 @@ function startCollab() {
       undoStack = []; redoStack = []; updateButtons();
       $("gameName").value = game.name;
       if (!playing) { world.setSky(game.settings.sky, true); rebuildAll(); }
+      if (migrateArms() && !playing) { rebuildAll(); collabPush(); }
       drawTree(); drawProps(); drawGui(); drawArmsBtn();
       dirty = true; saveNow();
     },
@@ -1724,91 +1733,169 @@ function play() {
 }
 
 // ---------------------------------------------------------------- 🎒 Player starts with (weapons.js)
-// The button at the top left of the 3D view: pick up to 4 weapons the player holds when the game starts, or ✨ make
-// your own (a name, a look, a color, and a game script with onAttack() for what it does). Saved in game.settings
-// (start + arms), so a shared studio gets it right away and published games keep it.
+// The button at the top left of the 3D view. Every weapon is a real thing in the world (obj.type "weapon", like a
+// Tool): it's in the Explorer, scripts go INSIDE it (📜 Add script: me = the weapon, with me.onEquip / me.onAttack),
+// and its Properties say how it works: Swing or Shoot, damage, shot color, 💨 Fling + how hard. "Player starts with
+// it" on = in your hand when the game starts; off = it lies there until you walk into it.
+// ✨ Build your own: build it from parts (standing up, handle at the bottom), select them, 🎒 Make it a weapon.
 const bar = (n, max) => { const k = Math.max(1, Math.min(5, Math.round((n / max) * 5))); return "▰".repeat(k) + "▱".repeat(5 - k); };
+const weaponObjs = () => game.objects.filter((o) => o.type === "weapon");
+const startsWith = () => weaponObjs().filter((o) => o.w && o.w.start !== false);
+const weaponIcon = (o) => (WEAPONS[o.w && o.w.base] || {}).icon || (o.w && o.w.look === "built" ? "🛠️" : (LOOKS[o.w && o.w.look] || {}).icon || "🎒");
 function drawArmsBtn() {
   if (!game) return;
-  const list = startingWeapons(game);
-  $("armsList").textContent = list.length ? list.map((d) => d.icon + " " + d.name).join(", ") : "nothing";
+  const list = startsWith();
+  $("armsList").textContent = list.length ? list.map((o) => weaponIcon(o) + " " + o.name).join(", ") : "nothing";
 }
-function setStart(list) { pushUndo(); game.settings.start = list.slice(0, MAX_START); changed(true); drawArmsBtn(); }
+// Games from before weapons were things (settings.start / settings.arms): turn them into weapon things, once.
+function migrateArms() {
+  const s = game.settings;
+  if (!(s.start && s.start.length) && !(s.arms && s.arms.length)) return false;
+  const sp = game.objects.find((o) => o.b.k === "spawn"), at = sp ? sp.pos : [0, 0, 0];
+  let i = weaponObjs().length;
+  for (const id of s.start || []) {
+    const c = (s.arms || []).find((a) => "c" + a.id === id), B = WEAPONS[id];
+    if (!B && !c) continue;
+    const o = newObj("weapon", [at[0] + 4 + 2.5 * i++, at[1], at[2] + 4]);
+    o.name = uniqueName(B ? B.name : c.name); o.color = B ? B.color : c.color;
+    o.w = B ? weaponObjectStats(id) : { ...weaponObjectStats(""), look: c.look, mode: (LOOKS[c.look] || {}).kind === "ranged" ? "shoot" : "swing", shot: c.color, dmg: 0 };
+    o.w = sanitizeWeapon(o.w);
+    game.objects.push(o);
+    if (c) { const sc = game.scripts.find((x) => x.id === c.script); if (sc) { sc.on = o.id; sc.name = "Script"; } }
+  }
+  delete s.start; delete s.arms;
+  return true;
+}
+function addWeapon(base) {
+  if (startsWith().length >= MAX_HELD) { toast("Players can start with up to " + MAX_HELD + " weapons. Take one away first."); return null; }
+  pushUndo();
+  const B = WEAPONS[base], sp = game.objects.find((o) => o.b.k === "spawn"), at = sp ? sp.pos : [0, 0, 0], n = weaponObjs().length;
+  const o = newObj("weapon", [at[0] + 4 + 2.5 * (n % 6), at[1], at[2] + 4 + 3.5 * Math.floor(n / 6)]);
+  o.name = uniqueName(B.name); o.color = B.color; o.w = weaponObjectStats(base);
+  game.objects.push(o); rebuild(o); changed(); drawArmsBtn();
+  return o;
+}
+function removeWeapon(o) {
+  const scs = scriptsOf(o.id);
+  if (scs.length && !confirm('Take away "' + o.name + '"? Its ' + scs.length + " script" + (scs.length === 1 ? "" : "s") + " go too.")) return false;
+  pushUndo();
+  if (scriptOpen() && scs.some((x) => x.id === scriptOpen())) closeScript();
+  game.scripts = game.scripts.filter((x) => x.on !== o.id);
+  game.objects = game.objects.filter((x) => x.id !== o.id);
+  const g = groups.get(o.id); if (g) { if (transform.object === g) transform.detach(); world.root.remove(g); disposeGroup(g); groups.delete(o.id); }
+  if (selected === o.id) select(null);
+  changed(); drawArmsBtn(); drawProps();
+  return true;
+}
+// 📜 a script INSIDE the weapon, already filled in (me.onEquip = when you get it, me.onAttack = every time you use it)
+function addWeaponScript(o) {
+  if (game.scripts.length >= MAX_SCRIPTS) { alert("You can have up to " + MAX_SCRIPTS + " scripts."); return; }
+  pushUndo();
+  const sc = { id: uid(), name: "Script", on: o.id, code: weaponStarter(o.name) };
+  game.scripts.push(sc); changed(); editScript(sc.id);
+}
 function openArms(keep) {
   if (!game) return;
   const top = keep ? $("modalBox").scrollTop : 0; // (picking one keeps the list where it was)
-  const start = game.settings.start || [], arms = game.settings.arms || [];
-  const card = (id, d, extra) => '<button type="button" class="arm-card' + (start.includes(id) ? " on" : "") + '" data-w="' + id + '"><span class="ai">' + d.icon + "</span><b>" + esc(d.name) + "</b>" +
-    (d.desc ? "<small>" + esc(d.desc) + "</small>" : "") + (d.dmg ? '<code title="Damage">💥 ' + bar(d.dmg, 60) + '</code><code title="Speed">⏱ ' + bar(1.2 - Math.min(1.1, d.cd), 1.1) + "</code>" : "") + (extra || "") + "</button>";
+  const mine = weaponObjs(), have = new Set(mine.map((o) => o.w && o.w.base).filter(Boolean));
+  const card = (id, d) => '<button type="button" class="arm-card' + (have.has(id) ? " on" : "") + '" data-w="' + id + '"><span class="ai">' + d.icon + "</span><b>" + esc(d.name) + "</b>" +
+    "<small>" + esc(d.desc) + '</small><code title="Damage">💥 ' + bar(d.dmg, 60) + '</code><code title="Speed">⏱ ' + bar(1.2 - Math.min(1.1, d.cd), 1.1) + "</code></button>";
+  const row = (o) => { const n = scriptsOf(o.id).length, w = o.w || {};
+    return '<div class="arm-row"><span class="ai">' + weaponIcon(o) + "</span><div><b>" + esc(o.name) + "</b><small>" + (w.mode === "shoot" ? "🎯 Shoots" : "⚔️ Swings") + (w.fling > 0 ? " · 💨 Fling " + w.fling : "") +
+      (w.start !== false ? " · in your hand at the start" : " · lies in the world: walk into it") + (n ? " · 📜 " + n + " script" + (n === 1 ? "" : "s") : "") + "</small></div>" +
+      '<button type="button" class="btn small" data-sc="' + o.id + '">📜 Add script</button><button type="button" class="btn small" data-sel="' + o.id + '">⚙️ Properties</button><button type="button" class="btn small danger" data-rm="' + o.id + '" title="Take it away">✕</button></div>'; };
   const melee = Object.entries(WEAPONS).filter(([, d]) => d.kind === "melee"), ranged = Object.entries(WEAPONS).filter(([, d]) => d.kind === "ranged");
-  openModal('<h2>🎒 Player starts with</h2><p>Pick up to ' + MAX_START + '. Players hold them when the game starts: <b>click</b> or <b>Q</b> attacks, <b>1-4</b> switches. Monsters have 100 health.</p>' +
-    '<p class="arms-now">Picked (' + start.length + "/" + MAX_START + "): <b>" + (start.length ? esc(startingWeapons(game).map((d) => d.icon + " " + d.name).join(", ")) : "nothing yet") + "</b>" + (start.length ? ' <button type="button" class="btn" id="armsNone">Clear</button>' : "") + "</p>" +
-    "<h3>⚔️ Melee</h3><div class=\"arm-grid\">" + melee.map(([id, d]) => card(id, d)).join("") + "</div>" +
-    "<h3>🎯 Ranged</h3><div class=\"arm-grid\">" + ranged.map(([id, d]) => card(id, d)).join("") + "</div>" +
-    "<h3>🛠️ Your own</h3><div class=\"arm-grid\">" + arms.map((a) => card("c" + a.id, { icon: (LOOKS[a.look] || LOOKS.sword).icon, name: a.name, desc: (LOOKS[a.look] || LOOKS.sword).name + " · script: " + ((game.scripts.find((x) => x.id === a.script) || {}).name || "missing!") },
-      '<span class="arm-edit" data-edit="' + a.id + '" title="Change it">✏️</span>')).join("") +
-    (arms.length < MAX_ARMS ? '<button type="button" class="arm-card arm-new" id="armNew"><span class="ai">✨</span><b>Create your own</b><small>Name it, pick a look, and write a script for what it does</small></button>' : "") + "</div>" +
+  openModal('<h2>🎒 Player starts with</h2><p>Pick up to ' + MAX_HELD + '. Each one goes in your world and the Explorer, so you can put scripts inside it and change it in Properties. In the game: <b>click</b> or <b>Q</b> attacks, <b>1-' + MAX_HELD + "</b> switches.</p>" +
+    (mine.length ? "<h3>In your game</h3><div class=\"arm-rows\">" + mine.map(row).join("") + "</div>" : "") +
+    '<div class="arm-grid" style="margin-top:12px"><button type="button" class="arm-card arm-new" id="armBuild"><span class="ai">🛠️</span><b>Build your own</b><small>Build it from parts, then pick Swing or Shoot (and what color it shoots)</small></button></div>' +
+    "<h3>⚔️ Swing</h3><div class=\"arm-grid\">" + melee.map(([id, d]) => card(id, d)).join("") + "</div>" +
+    "<h3>🎯 Shoot</h3><div class=\"arm-grid\">" + ranged.map(([id, d]) => card(id, d)).join("") + "</div>" +
     '<div class="modal-btns"><button type="button" class="btn go" id="armsDone">Done</button></div>');
   $("modalBox").classList.add("wide"); $("modalBox").scrollTop = top;
   $("armsDone").onclick = closeModal;
-  if ($("armsNone")) $("armsNone").onclick = () => { setStart([]); openArms(true); };
-  $("modalBox").querySelectorAll("[data-w]").forEach((b) => (b.onclick = (e) => {
-    if (e.target.dataset.edit) { makeArm(arms.find((a) => a.id === e.target.dataset.edit)); return; }
-    const id = b.dataset.w, now = (game.settings.start || []).slice();
-    if (now.includes(id)) setStart(now.filter((x) => x !== id));
-    else if (now.length >= MAX_START) { toast("Players can start with up to " + MAX_START + " weapons. Take one away first."); return; }
-    else setStart(now.concat(id));
-    openArms(true);
+  $("armBuild").onclick = () => { closeModal(); startWeaponBuild(); };
+  $("modalBox").querySelectorAll("[data-w]").forEach((b) => (b.onclick = () => {
+    const id = b.dataset.w, o = weaponObjs().find((x) => x.w && x.w.base === id);
+    if (o) { if (removeWeapon(o)) openArms(true); return; }
+    if (addWeapon(id)) openArms(true);
   }));
-  if ($("armNew")) $("armNew").onclick = () => makeArm(null);
+  $("modalBox").querySelectorAll("[data-sc]").forEach((b) => (b.onclick = () => { const o = obj(b.dataset.sc); closeModal(); if (o) addWeaponScript(o); }));
+  $("modalBox").querySelectorAll("[data-sel]").forEach((b) => (b.onclick = () => { closeModal(); select(b.dataset.sel); focusSelected(); }));
+  $("modalBox").querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => { const o = obj(b.dataset.rm); if (o && removeWeapon(o)) openArms(true); }));
 }
-// ✨ Create your own (or change one): name, look, color -> a weapon + its own game script (opens in the script editor).
-function makeArm(a) {
-  const looks = Object.entries(LOOKS);
-  const cur = a || { name: "", look: "staff", color: "#a64bf4" };
-  openModal("<h2>" + (a ? "✏️ Change " + esc(a.name) : "✨ Create your own weapon") + "</h2><p>Give it a name and a look. What it does is a script: it runs <code>onAttack()</code> when the player uses it.</p>" +
-    '<form id="armForm"><label class="arm-field">Name <input id="armName" maxlength="24" required placeholder="Lightning Staff" value="' + esc(cur.name) + '"></label>' +
-    '<label class="arm-field">Color <input type="color" id="armColor" value="' + esc(cur.color) + '"></label>' +
-    "<h3>Look</h3><div class=\"arm-grid looks\">" + looks.map(([k, L]) => '<label class="arm-card' + (k === cur.look ? " on" : "") + '"><input type="radio" name="armLook" value="' + k + '"' + (k === cur.look ? " checked" : "") + '><span class="ai">' + L.icon + "</span><b>" + L.name + "</b><small>" + (L.kind === "melee" ? "swings" : "shoots / casts") + "</small></label>").join("") + "</div>" +
-    '<p class="err" id="armErr"></p><div class="modal-btns">' + (a ? '<button type="button" class="btn danger" id="armDel">Delete weapon</button><button type="button" class="btn" id="armScript">📜 Edit its script</button>' : "") +
-    '<button type="button" class="btn" id="armBack">Back</button><button class="btn go">' + (a ? "Save" : "Make it + write its script") + "</button></div></form>");
-  $("modalBox").classList.add("wide");
-  $("armName").focus();
-  $("modalBox").querySelectorAll("input[name=armLook]").forEach((r) => (r.onchange = () => $("modalBox").querySelectorAll(".looks .arm-card").forEach((c) => c.classList.toggle("on", c.querySelector("input").checked))));
-  $("armBack").onclick = () => openArms();
-  const values = () => ({ name: $("armName").value.trim().slice(0, 24), look: ($("modalBox").querySelector("input[name=armLook]:checked") || {}).value || "staff", color: $("armColor").value });
-  if (a) {
-    $("armScript").onclick = () => { closeModal(); if (game.scripts.some((x) => x.id === a.script)) editScript(a.script); else toast("Its script was deleted. Delete the weapon and make it again."); };
-    $("armDel").onclick = () => {
-      if (!confirm('Delete "' + a.name + '" and its script?')) return;
-      pushUndo();
-      game.settings.arms = (game.settings.arms || []).filter((x) => x.id !== a.id);
-      game.settings.start = (game.settings.start || []).filter((x) => x !== "c" + a.id);
-      if (scriptOpen() === a.script) closeScript();
-      game.scripts = game.scripts.filter((x) => x.id !== a.script);
-      changed(); drawArmsBtn(); openArms();
-    };
-  }
-  $("armForm").onsubmit = (e) => {
-    e.preventDefault();
-    const v = values();
-    if (!v.name) { $("armErr").textContent = "Give it a name."; return; }
-    pushUndo();
-    if (a) {
-      Object.assign(a, v);
-      const sc = game.scripts.find((x) => x.id === a.script); if (sc) sc.name = "🎒 " + v.name;
-      changed(); drawArmsBtn(); openArms(); return;
-    }
-    if (game.scripts.length >= MAX_SCRIPTS) { $("armErr").textContent = "This game already has " + MAX_SCRIPTS + " scripts (the most)."; return; }
-    const sc = { id: uid(), name: "🎒 " + v.name, on: "", code: weaponCode(v.name) };
-    const arm = { id: uid(), ...v, script: sc.id };
-    game.scripts.push(sc);
-    game.settings.arms = (game.settings.arms || []).concat(arm);
-    if ((game.settings.start || []).length < MAX_START) game.settings.start = (game.settings.start || []).concat("c" + arm.id);
-    changed(); drawArmsBtn(); closeModal();
-    editScript(sc.id);
-    toast("Made " + v.name + "! Its script says what it does. Press ▶ Play to try it.", 5);
+// 🛠️ Build your own: a starter handle, guard and blade in front of the spawn, all selected. Change them, add parts,
+// then 🎒 Make it a weapon (Properties of the selection, or right-click).
+function startWeaponBuild() {
+  closeScript(); pushUndo();
+  const sp = game.objects.find((o) => o.b.k === "spawn"), at = sp ? sp.pos : [0, 0, 0], x = at[0], z = at[2] - 10, y = at[1];
+  const make = (type, name, pos, size, color, mat) => { const o = newObj(type, pos); o.name = uniqueName(name); o.size = size; o.color = color; if (mat) o.mat = mat; game.objects.push(o); rebuild(o); return o.id; };
+  const ids = [make("cylinder", "Weapon Handle", [x, y, z], [0.5, 1.6, 0.5], "#6b4426", "wood"), make("block", "Weapon Guard", [x, y + 1.6, z], [1.8, 0.3, 0.5], "#c9a25a", "metal"),
+    make("block", "Weapon Blade", [x, y + 1.9, z], [0.5, 3.2, 0.2], "#cfd6de", "metal")];
+  changed(); selectMany(ids); focusSelected();
+  toast("🛠️ Build your weapon STANDING UP, handle at the bottom. Move, resize, recolor, add parts... then select all of it and click 🎒 Make it a weapon.", 9);
+}
+// Selected parts -> one weapon thing (like 🧩 Mesh together), then pick how it works.
+function makeWeaponFromSelection() {
+  const m = meshTogether("weapon");
+  if (m) weaponSetup(m, true);
+}
+function weaponSetup(o, fresh) {
+  const w = sanitizeWeapon(o.w);
+  openModal("<h2>" + (fresh ? "🎒 Your new weapon!" : "🎒 " + esc(o.name)) + "</h2><p>What does it do? You can change all of this later in its Properties.</p>" +
+    '<form id="wsForm"><label class="arm-field">Name <input id="wsName" maxlength="40" value="' + esc(o.name) + '"></label>' +
+    '<div class="ws-modes"><label class="arm-card' + (w.mode === "swing" ? " on" : "") + '"><input type="radio" name="wsMode" value="swing"' + (w.mode === "swing" ? " checked" : "") + '><span class="ai">⚔️</span><b>Swing</b><small>Hits whatever is in front of you</small></label>' +
+    '<label class="arm-card' + (w.mode === "shoot" ? " on" : "") + '"><input type="radio" name="wsMode" value="shoot"' + (w.mode === "shoot" ? " checked" : "") + '><span class="ai">🎯</span><b>Shoot</b><small>Fires shots where you aim</small></label></div>' +
+    '<label class="arm-field" id="wsShotRow">Color it shoots <input type="color" id="wsShot" value="' + esc(w.shot) + '"></label>' +
+    '<label class="arm-field"><input type="checkbox" id="wsFling"' + (w.fling > 0 ? " checked" : "") + '> 💨 Fling whoever it hits</label>' +
+    '<label class="arm-field" id="wsFlingRow">How hard <input type="range" id="wsFlingN" min="1" max="100" value="' + (w.fling || 40) + '"><b id="wsFlingV">' + (w.fling || 40) + "</b></label>" +
+    '<div class="modal-btns"><button class="btn go">Done</button></div></form>');
+  const sync = () => {
+    const shoot = $("modalBox").querySelector("input[name=wsMode]:checked").value === "shoot";
+    $("wsShotRow").style.display = shoot ? "" : "none"; $("wsFlingRow").style.display = $("wsFling").checked ? "" : "none";
+    $("modalBox").querySelectorAll(".ws-modes .arm-card").forEach((c) => c.classList.toggle("on", c.querySelector("input").checked));
+    $("wsFlingV").textContent = $("wsFlingN").value;
   };
+  $("modalBox").querySelectorAll("input").forEach((i) => (i.oninput = sync)); sync();
+  $("wsForm").onsubmit = (e) => {
+    e.preventDefault();
+    pushUndo();
+    const mode = $("modalBox").querySelector("input[name=wsMode]:checked").value;
+    o.name = $("wsName").value.trim().slice(0, 40) || o.name;
+    o.w = sanitizeWeapon({ ...o.w, mode, range: mode === "shoot" ? Math.max(o.w.range || 0, 80) : Math.min(o.w.range || 4.6, 8), shot: $("wsShot").value, fling: $("wsFling").checked ? +$("wsFlingN").value : 0 });
+    closeModal(); changed(); drawArmsBtn(); select(o.id);
+    if (fresh && !scriptsOf(o.id).length) addWeaponScript(o); // (a new weapon comes with its script, ready to change)
+  };
+}
+// ⚙️ Properties of a weapon thing
+function weaponProps(o) {
+  if (o.type !== "weapon") return "";
+  const w = sanitizeWeapon(o.w), num = (id, v, step, title) => '<input type="number" id="' + id + '" step="' + step + '" value="' + v + '"' + (title ? ' title="' + title + '"' : "") + ">";
+  return '<div class="group-title">🎒 Weapon</div>' +
+    row("Player starts with it", '<input type="checkbox" id="pwStart"' + (w.start ? " checked" : "") + ' title="On: in your hand when the game starts. Off: it lies here until a player walks into it.">') +
+    row("It does", '<select id="pwMode"><option value="swing"' + (w.mode === "swing" ? " selected" : "") + '>⚔️ Swing</option><option value="shoot"' + (w.mode === "shoot" ? " selected" : "") + ">🎯 Shoot</option></select>") +
+    (w.look !== "built" ? row("Look", '<select id="pwLook">' + Object.entries(LOOKS).map(([k, L]) => '<option value="' + k + '"' + (k === w.look ? " selected" : "") + ">" + L.icon + " " + L.name + "</option>").join("") + "</select>") : "") +
+    row("Damage", num("pwDmg", w.dmg, 1, "How much health a hit takes away (monsters have 100)")) +
+    row("Seconds between", num("pwCd", w.cd, 0.05, "How long until you can attack again")) +
+    row(w.mode === "shoot" ? "Range" : "Reach", num("pwRange", w.range, 0.5)) +
+    (w.mode === "shoot" ? row("Color it shoots", '<input type="color" id="pwShot" value="' + w.shot + '">') + row("Shot speed", num("pwSp", w.sp, 5)) : "") +
+    row("💨 Fling", '<input type="checkbox" id="pwFling"' + (w.fling > 0 ? " checked" : "") + ' title="Whoever it hits gets flung back (monsters, and other players in a live game)">') +
+    (w.fling > 0 ? row("Fling strength", '<input type="range" id="pwFlingN" min="1" max="100" value="' + w.fling + '"><b class="fling-v">' + w.fling + "</b>") : "") +
+    '<button type="button" class="btn add-script" id="pwScript">📜 Add a script inside it</button>';
+}
+function wireWeaponProps(o) {
+  if (o.type !== "weapon") return;
+  const set = (fn, look) => { pushUndo(); o.w = sanitizeWeapon({ ...o.w, ...fn(sanitizeWeapon(o.w)) }); if (look) rebuild(o); changed(); drawArmsBtn(); drawProps(); };
+  $("pwStart").onchange = (e) => set(() => ({ start: e.target.checked }));
+  $("pwMode").onchange = (e) => set((w) => ({ mode: e.target.value, range: e.target.value === "shoot" ? Math.max(w.range, 60) : Math.min(w.range, 8) }));
+  if ($("pwLook")) $("pwLook").onchange = (e) => set(() => ({ look: e.target.value }), true);
+  $("pwDmg").onchange = (e) => set(() => ({ dmg: +e.target.value }));
+  $("pwCd").onchange = (e) => set(() => ({ cd: +e.target.value }));
+  $("pwRange").onchange = (e) => set(() => ({ range: +e.target.value }));
+  if ($("pwShot")) $("pwShot").onchange = (e) => set(() => ({ shot: e.target.value }));
+  if ($("pwSp")) $("pwSp").onchange = (e) => set(() => ({ sp: +e.target.value }));
+  $("pwFling").onchange = (e) => set((w) => ({ fling: e.target.checked ? w.fling || 40 : 0 }));
+  if ($("pwFlingN")) { $("pwFlingN").oninput = (e) => { $("props").querySelector(".fling-v").textContent = e.target.value; }; $("pwFlingN").onchange = (e) => set(() => ({ fling: +e.target.value })); }
+  $("pwScript").onclick = () => addWeaponScript(o);
 }
 $("btnArms").onclick = () => openArms();
 

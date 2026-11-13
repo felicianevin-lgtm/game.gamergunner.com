@@ -121,7 +121,7 @@ const D2R = Math.PI / 180;
 export function buildObject(o) {
   const a = BY_TYPE[o.type];
   const inner = a.build(o);
-  if (o.type === "mesh") buildMesh(inner, o);
+  if (o.type === "mesh" || (o.type === "weapon" && Array.isArray(o.parts) && o.parts.length)) buildMesh(inner, o, a.base); // (🎒 a home-made weapon is built like a mesh)
   if (o.mat === "grass" && o.type !== "mesh") { // the grid texture repeats with the part's size
     const gm = gridMaterialFor(o.color, o.size), plain = material(o.color, "grass");
     inner.traverse((m) => { if (m.isMesh && m.material === plain) m.material = gm; });
@@ -145,9 +145,9 @@ export function buildObject(o) {
 }
 // 🧩 A mesh's pieces, each hanging from its 🦴 bone (if it has one): a bone is a joint at `at` that turns the pieces
 // it holds (and the bones under it). inner.userData.bones = Map(bone id -> its joint), for keyanim.js boneList.
-function buildMesh(inner, o) {
-  const mb = o.mb || [1, 1, 1], sub = new THREE.Group();
-  sub.scale.set(1 / mb[0], 1 / mb[1], 1 / mb[2]);
+function buildMesh(inner, o, base) {
+  const mb = o.mb || [1, 1, 1], sub = new THREE.Group(), bs = base || [1, 1, 1];
+  sub.scale.set(bs[0] / mb[0], bs[1] / mb[1], bs[2] / mb[2]);
   inner.add(sub);
   const bones = Array.isArray(o.bones) ? o.bones : [], byId = new Map(bones.map((b) => [b.id, b])), made = new Map(), owner = new Map();
   for (const b of bones) for (const i of b.parts || []) if (!owner.has(i)) owner.set(i, b.id);

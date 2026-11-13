@@ -30,6 +30,8 @@ export const HELP = [
   ["Weapons 🎒", [
     ["onAttack(function (aim) {\n  \n})", "In a home-made weapon's script: runs when the player uses it. aim.target = what you aim at (or null), aim.x / aim.y / aim.z = in front of you"],
     ["shoot({ damage: 20, speed: 80, color: \"purple\", size: 0.5 })", "Fire a shot where the player aims (also: drop = falls, freeze = seconds frozen, boom = explosion size, count + spread = many shots)"],
+    ["me.onEquip(function () {\n  \n})", "In a script inside a weapon: runs when the player gets it (at the start, or picking it up)"],
+    ["me.onAttack(function (aim) {\n  \n})", "In a script inside a weapon: runs every time the player uses it"],
     ["me.damage(25)", "Hurt a monster (it has 100 health; 0 = defeated)"], ["me.onHit(function (damage) {\n  \n})", "Do something when a weapon hits this"]]],
   ["Finding things", [
     ["find(\"Door\")", "Get a part or GUI by its name (the name in the Explorer)"], ["findAll(\"Coin\")", "Get every thing with that name"],
@@ -193,7 +195,7 @@ export const EXAMPLES = [
 function RUNTIME(send) {
   "use strict";
   const things = new Map();
-  const H = { click: new Map(), touch: new Map(), untouch: new Map(), key: new Map(), attack: new Map(), hit: new Map() };
+  const H = { click: new Map(), touch: new Map(), untouch: new Map(), key: new Map(), attack: new Map(), hit: new Map(), equip: new Map() };
   const updates = [], timers = [], follows = new Map(), spins = new Map(), errs = new Map();
   let out = [], now = 0, cur = null, nclone = 1, nbuild = 1, ended = false;
   const P = { x: 0, y: 0, z: 0, ry: 0, coins: 0, health: 100, speed: 1, jump: 1 };
@@ -273,6 +275,8 @@ function RUNTIME(send) {
     onTouch(fn) { on(H.touch, this._s.id, fn, "onTouch"); cmd("want", "touch", this._s.id); return this; }
     onTouchEnd(fn) { on(H.untouch, this._s.id, fn, "onTouchEnd"); cmd("want", "touch", this._s.id); return this; }
     onHit(fn) { on(H.hit, this._s.id, fn, "onHit"); cmd("want", "hit", this._s.id); return this; }
+    onEquip(fn) { on(H.equip, this._s.id, fn, "onEquip"); return this; }   // (🎒 a weapon: the player got it)
+    onAttack(fn) { on(H.attack, this._s.id, fn, "onAttack"); return this; } // (🎒 a weapon: the player used it)
     damage(n) { cmd("hurt", this._s.id, +n || 0); return this; }
     clone() {
       if (this._s.kind !== "part") throw new Error("Only parts can be cloned");
@@ -329,7 +333,7 @@ function RUNTIME(send) {
     wait(secs) { return new Promise((res) => timers.push({ at: now + Math.max(0, +secs || 0), fn: res, sc: cur })); },
     onUpdate(fn) { need(fn, "onUpdate"); updates.push({ fn, sc: cur }); },
     // 🎒 a home-made weapon's script (weapons.js): runs when the player uses that weapon
-    onAttack(fn) { need(fn, "onAttack"); on(H.attack, cur ? cur.id : "", fn, "onAttack"); },
+    onAttack(fn) { need(fn, "onAttack"); on(H.attack, cur ? cur.on || cur.id : "", fn, "onAttack"); }, // (inside a weapon: that weapon; a game script: its own weapon)
     shoot(o) {
       o = o && typeof o === "object" ? o : {};
       let c = String(o.color || "purple").toLowerCase(); c = COLORS[c] || c; if (!/^#[0-9a-f]{6}$/.test(c)) c = "#a64bf4";
@@ -369,6 +373,7 @@ function RUNTIME(send) {
       else if (kind === "key") fire(H.key, id);
       else if (kind === "attack") { const a = v && typeof v === "object" ? v : {}; fire(H.attack, id, { x: +a.x || 0, y: +a.y || 0, z: +a.z || 0, dx: +a.dx || 0, dz: +a.dz || 0, target: a.t ? get(a.t) : null }); }
       else if (kind === "hit") fire(H.hit, id, +v || 0);
+      else if (kind === "equip") fire(H.equip, id);
       else if (H[kind]) fire(H[kind], id);
     }
     const due = timers.filter((t) => !t.dead && t.at <= now);

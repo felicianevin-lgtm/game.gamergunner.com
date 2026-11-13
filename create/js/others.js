@@ -57,6 +57,7 @@ export function startOthers(scene, key, me, say, server, arms) {
     else if (m.t === "look") { const o = list.get(m.id); if (o) { const keep = { at: o.at.clone(), r: o.r, seen: o.seen, c: o.c }; add(m.id, o.name, m.k); const n = list.get(m.id); if (keep.seen) state(n, { p: keep.at.toArray(), r: keep.r, c: keep.c }); } }
     else if (m.t === "s") { const o = list.get(m.id); if (o) state(o, m); }
     else if (m.t === "ev" && m.e && m.e.a === "atk") { const o = list.get(m.id); if (o) { o.atkT = 0.001; if (arms) arms.attack(m.e); } }
+    else if (m.t === "ev" && m.e && m.e.a === "fling" && m.e.to === net.id && arms && arms.flung) { const o = list.get(m.id); arms.flung(m.e.v, o ? o.name : ""); } // (💨 their weapon flung me)
     else if (m.t === "reset") { for (const id of [...list.keys()]) remove(id); count = 1; }
   };
   let net = joinLive(key, onMsg, server);
@@ -82,6 +83,7 @@ export function startOthers(scene, key, me, say, server, arms) {
       }
     },
     send(e) { net.send({ t: "ev", e }); },
+    players() { const out = []; for (const [id, o] of list) if (o.seen) out.push({ id, p: o.g.position, name: o.name }); return out; }, // (where the others are: weapon hits)
     stop() { net.close(); for (const id of [...list.keys()]) remove(id); },
   };
 }

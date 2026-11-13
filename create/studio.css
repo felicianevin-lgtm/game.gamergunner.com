@@ -537,3 +537,12 @@ body.playing .arms-btn { display: none; }
 .arm-bar button.on { border-color: #ffd25a; background: rgba(60, 46, 10, .85); }
 .arm-bar .arm-go { font-size: 20px; background: rgba(232, 38, 28, .7); }
 @media (max-width: 700px) { .arm-bar button span { display: none; } }
+/* 🎒 weapons in your game (editor.js openArms / weaponSetup) */
+.arm-rows { display: flex; flex-direction: column; gap: 6px; }
+.arm-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--edge); background: var(--panel-2); flex-wrap: wrap; }
+.arm-row .ai { font-size: 24px; }
+.arm-row > div { flex: 1; min-width: 160px; display: flex; flex-direction: column; }
+.arm-row small { color: var(--dim); font-size: 12px; }
+.ws-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 12px; }
+.ws-modes .arm-card .ai { font-size: 34px; }
+.fling-v { margin-left: 6px; color: #ffd25a; }

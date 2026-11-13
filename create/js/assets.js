@@ -6,6 +6,7 @@
 // `b` is the behavior a new copy starts with (see BEHAVIORS), `solid: false` = players walk through it.
 import * as THREE from "../vendor/three.module.js";
 import { monsterInner } from "./monster.js";
+import { worldWeaponModel } from "./weapons.js";
 
 // ---------------------------------------------------------------- materials
 const matCache = new Map();
@@ -388,6 +389,9 @@ export const ASSETS = [
   // bones. world.js buildMesh builds it; every solid piece is solid.
   { type: "mesh", label: "Mesh", icon: "🧩", cat: "Parts", hidden: true, base: [1, 1, 1], color: "#a3a8b0",
     build: () => new THREE.Group(), colliders: (size, o) => meshColliders(size, o) },
+  // 🎒 A WEAPON (weapons.js): picked in "Player starts with" or built from parts (obj.parts, like a mesh). obj.w = how it works.
+  { type: "weapon", label: "Weapon", icon: "🎒", cat: "Gameplay", hidden: true, base: [1, 1, 3], color: "#cfd6de", solid: false,
+    build: (o) => (Array.isArray(o.parts) && o.parts.length ? new THREE.Group() : worldWeaponModel(o)) },
   // (imported things: see files.js. They're added from ＋ Add > Import or the Toolbox's "My imports".)
   { type: "model", label: "Imported Model", icon: "📦", cat: "Imported", hidden: true, base: [1, 1, 1], color: "#ffffff",
     build: () => { const g = new THREE.Group(); g.userData.model = true; return g; } },
@@ -426,7 +430,7 @@ export const ASSETS = [
 ];
 
 export const BY_TYPE = Object.fromEntries(ASSETS.map((a) => [a.type, a]));
-export const NOT_IN_MESH = new Set(["mesh", "monster", "model"]); // (those can't be pieces of a mesh)
+export const NOT_IN_MESH = new Set(["mesh", "monster", "model", "weapon"]); // (those can't be pieces of a mesh)
 const _D2R = Math.PI / 180, _AX = new THREE.Vector3(1, 0, 0);
 function meshColliders(size, o) {
   if (!o || !Array.isArray(o.parts)) return [];

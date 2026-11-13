@@ -19,6 +19,7 @@ export const MAX_PARTS = 300;
 const PIECE = ["type", "name", "pos", "rot", "size", "color", "mat", "solid", "visible", "tex", "texS", "texFit", "transp", "file", "text"];
 function piece(p) { const o = {}; for (const k of PIECE) if (p[k] !== undefined) o[k] = p[k]; return o; }
 import { okTex } from "./textures.js";
+import { sanitizeWeapon } from "./weapons.js";
 
 export const SKIES = { day: "Sunny day", sunset: "Sunset", night: "Night", space: "Space", backrooms: "Backrooms (yellow fog)" };
 export const DEFAULT_SETTINGS = { sky: "day", gravity: 70, walk: 14, jump: 26 };
@@ -102,10 +103,11 @@ export function sanitize(g) {
     if (o.chase) c.chase = sanitizeChase(o.chase); // (👾 it chases players - scare.js)
     if (o.scare) c.scare = sanitizeScare(o.scare); // (😱 jump scare - scare.js)
     if (o.anims) { const an = sanitizeAnims(o.anims); if (an) c.anims = an; } // (🎞️ my animations: keyframes - keyanim.js)
-    if (o.type === "mesh") { // (🧩 a mesh: its pieces + 🦴 bones - world.js buildMesh)
+    if (o.type === "weapon") c.w = sanitizeWeapon(o.w); // (🎒 how a weapon works - weapons.js)
+    if (o.type === "mesh" || (o.type === "weapon" && Array.isArray(o.parts) && o.parts.length)) { // (🧩 a mesh: its pieces + 🦴 bones - world.js buildMesh; or a home-made 🎒 weapon)
       c.mb = [0, 1, 2].map((i) => num(o.mb && o.mb[i], 0.1, 4096, c.size[i]));
       c.parts = sanitize({ objects: (Array.isArray(o.parts) ? o.parts : []).filter((p) => p && !NOT_IN_MESH.has(p.type)).slice(0, MAX_PARTS) }).objects.map(piece);
-      if (!c.parts.length) continue;
+      if (!c.parts.length) { if (o.type === "mesh") continue; delete c.parts; delete c.mb; }
       const bones = [], seen = new Set();
       for (const b of (Array.isArray(o.bones) ? o.bones : []).slice(0, 40)) {
         if (!b || !okBone(String(b.id || "")) || seen.has(b.id)) continue;

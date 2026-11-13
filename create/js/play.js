@@ -24,7 +24,7 @@ import { playScare, scareSound, stopScare } from "./scare.js";
 import { animAt, shiftPose, applyBones, animBones, sampleAnim, LOOPS } from "./keyanim.js";
 import { sanitize, newObj } from "./game.js";
 import { startOthers, nameTag } from "./others.js";
-import { startingWeapons, weaponDef, heldModel, poseArm, shotModel } from "./weapons.js";
+import { startingWeapons, weaponDef, heldModel, poseArm, shotModel, weaponFromObject, MAX_HELD } from "./weapons.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -57,7 +57,8 @@ export function startPlay(world, game, opts) {
     if (o.anims) { e.kas = o.anims.filter((a) => a.when !== "scare"); e.kaOwnWalk = e.kas.some((a) => LOOPS[a.when]); e.kLast = { p: new THREE.Vector3(), q: new THREE.Quaternion() }; e.kBase = { s: g.scale.clone() }; }
     return e;
   }
-  const ents = game.objects.map(makeEnt);
+  const isHeldWeapon = (o) => o.type === "weapon" && !(o.w && o.w.start === false); // (🎒 the player starts holding it: not in the world)
+  const ents = game.objects.filter((o) => !isHeldWeapon(o)).map(makeEnt);
   // (switched off / hidden by a script: not shown, not solid, can't be touched)
   const solids = () => ents.filter((e) => e.boxes.length && !e.off && !(e.k === "coin" && e.done));
   let lowest = Math.min(0, ...game.objects.map((o) => o.pos[1]));
@@ -85,7 +86,7 @@ export function startPlay(world, game, opts) {
       if (e.key === "Escape") { stop(); return; }
       if (k === "e" && !e.repeat) toggleCar();
       if (k === "q") attack();
-      if (/^[1-4]$/.test(k) && !e.repeat && arms[+k - 1]) holdWeapon(+k - 1);
+      if (/^[1-6]$/.test(k) && !e.repeat && arms[+k - 1]) holdWeapon(+k - 1);
       if (host && wantKeys && !e.repeat) host.event("key", k === " " ? "space" : k);
       if (["w", "a", "s", "d", " ", "arrowleft", "arrowright", "arrowup", "arrowdown", "shift"].includes(k)) e.preventDefault();
       keys.add(k);
@@ -491,7 +492,7 @@ export function startPlay(world, game, opts) {
       want.set(fx * f - fz * s, 0, fz * f + fx * s).normalize().multiplyScalar(S.walk * (keys.has("shift") && !mods.fly ? 1.5 : 1) * (mods.speed ? 2.2 : 1) * sc.speed);
       facing += angleDiff(facing, Math.atan2(-want.x, -want.z)) * Math.min(1, dt * 12);
     }
-    const acc = grounded ? 12 : 4;
+    const acc = flungT > 0 ? 0.5 : grounded ? 12 : 4; // (just flung: you fly, steering barely works)
     vel.x += (want.x - vel.x) * Math.min(1, dt * acc); vel.z += (want.z - vel.z) * Math.min(1, dt * acc);
     if (mods.fly) { // flying: no gravity, Space up, Shift down
       const up = (keys.has(" ") ? 1 : 0) - (keys.has("shift") ? 1 : 0);
@@ -910,6 +911,7 @@ export function startPlay(world, game, opts) {
   if (scripts.length) {
     const things = ents.map((e) => ({ id: e.o.id, kind: "part", type: e.o.type, name: e.o.name, x: e.o.pos[0], y: e.o.pos[1], z: e.o.pos[2], ry: e.o.rot[1],
       sx: e.o.size[0], sy: e.o.size[1], sz: e.o.size[2], color: e.o.color, visible: true, solid: e.o.solid, text: e.o.text || "", transp: e.o.transp || 0 }))
+      .concat(game.objects.filter(isHeldWeapon).map((o) => ({ id: o.id, kind: "weapon", type: "weapon", name: o.name, x: 0, y: 0, z: 0, ry: 0, sx: o.size[0], sy: o.size[1], sz: o.size[2], color: o.color, visible: true, solid: false, text: "", transp: 0 })))
       .concat(gui.map((g) => ({ id: g.id, kind: "gui", type: g.kind, name: g.name, x: g.x, y: g.y, z: 0, ry: 0, sx: g.w || 0, sy: g.h || 0, sz: 0, color: g.color, visible: g.visible, solid: false, text: g.text, transp: g.transp || 0 })));
     host = startScripts(scripts, things, { x: pos.x, y: pos.y, z: pos.z, coins, health: 100 }, {
       apply(c) { pending.push(...c.slice(0, 4000)); if (pending.length > 8000) pending = pending.slice(-8000); },
@@ -1018,26 +1020,46 @@ export function startPlay(world, game, opts) {
   // parts) have 100 health: hits push them back, freeze them, and at 0 they're defeated (they disappear).
   // A home-made weapon runs its script's onAttack() (scripts.js), which can shoot() and damage() things itself.
   // In a live game the others see what you hold, your swings and your shots (others.js), but only you hurt your monsters.
-  const arms = startingWeapons(game);
-  let armI = 0, armT = 0, armCd = 0, held = null, armBar = null, scriptShots = 0;
+  // 🎒 Weapon things (obj.type "weapon"): "start" ones are in your hand from the start; the others lie in the world
+  // until you walk into them. Older games keep their settings.start list (weapons.js startingWeapons).
+  const arms = game.objects.filter(isHeldWeapon).map(weaponFromObject).concat(startingWeapons(game)).slice(0, MAX_HELD);
+  let armI = 0, armT = 0, armCd = 0, held = null, armBar = null, scriptShots = 0, flungT = 0;
   const shots = [], fxs = [];
+  const builtModel = (o) => buildObject(o); // (a home-made weapon's parts, world.js)
+  const defFor = (id) => { if (/^o/.test(id || "")) { const o = game.objects.find((x) => "o" + x.id === id && x.type === "weapon"); return o ? weaponFromObject(o) : null; } return weaponDef(game, id); };
   function holdWeapon(i) {
     if (held) { if (held.g.parent) held.g.parent.remove(held.g); held = null; }
     armI = i; const def = arms[i]; if (!def) return;
-    const g = heldModel(def); g.position.set(0, -1.1, -0.12);
+    const g = heldModel(def, builtModel); g.position.set(0, -1.1, -0.12);
     player.userData.limbs.armR.add(g);
     held = { def, g }; armT = 0;
     if (armBar) armBar.querySelectorAll("[data-i]").forEach((b, j) => b.classList.toggle("on", j === i));
   }
-  if (arms.length) {
+  function drawArmBar() {
+    if (armBar) armBar.remove();
     armBar = document.createElement("div"); armBar.className = "arm-bar";
-    armBar.innerHTML = arms.map((d, i) => '<button type="button" data-i="' + i + '" title="' + esc(d.name) + " (" + (i + 1) + ')"><b>' + (i + 1) + "</b>" + d.icon + "<span>" + esc(d.name) + "</span></button>").join("") +
+    armBar.innerHTML = arms.map((d, i) => '<button type="button" data-i="' + i + '" class="' + (held && held.def === d ? "on" : "") + '" title="' + esc(d.name) + " (" + (i + 1) + ')"><b>' + (i + 1) + "</b>" + d.icon + "<span>" + esc(d.name) + "</span></button>").join("") +
       '<button type="button" class="arm-go" title="Attack (click or Q)">⚔</button>';
     armBar.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => { holdWeapon(+b.dataset.i); canvas.focus(); }));
     armBar.querySelector(".arm-go").onpointerdown = (e) => { e.preventDefault(); attack(); };
     $("hud").appendChild(armBar);
-    holdWeapon(0);
+  }
+  if (arms.length) {
+    holdWeapon(0); drawArmBar();
     $("hudHelp").textContent += " · Click or Q: attack" + (arms.length > 1 ? " · 1-" + arms.length + ": switch" : "");
+    if (host) for (const d of arms) if (d.thing) host.event("equip", d.thing); // (me.onEquip in the weapons' scripts)
+  }
+  // walking into a weapon lying in the world picks it up
+  function pickUps() {
+    for (const e of ents) {
+      if (e.o.type !== "weapon" || e.done || e.off || !e.g.visible) continue;
+      if (e.g.position.distanceToSquared(pos) > 9 + e.o.size[2] * e.o.size[2] / 4) continue;
+      if (arms.length >= MAX_HELD) { if (!e.full) showMsg("Your hands are full!", 1.2); e.full = true; continue; }
+      e.done = true; e.g.visible = false;
+      const d = weaponFromObject(e.o); arms.push(d); holdWeapon(arms.length - 1); drawArmBar();
+      showMsg("🎒 You got the " + e.o.name + "!", 1.6); beep(660, 0.12, "triangle", 990);
+      if (host) host.event("equip", e.o.id);
+    }
   }
   const isFoe = (e) => !e.off && e.g.visible && !e.dead && (!!e.o.chase || e.o.type === "monster" || wantHit.has(e.o.id));
   const _ad = new THREE.Vector3(), _ab = new THREE.Vector3(), _am = new THREE.Vector3();
@@ -1061,6 +1083,7 @@ export function startPlay(world, game, opts) {
     const dir = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
     const from = pos.clone().add(new THREE.Vector3(0, 2.2, 0)).addScaledVector(dir, 1.2);
     if (others) others.send({ a: "atk", w: def.id, p: [from.x, from.y, from.z].map(r3), d: [r3(dir.x), r3(dir.z)] });
+    if (def.thing && host) { const t = aimTarget(dir, def.range || 60, 0.85); host.event("attack", def.thing, { x: r3(from.x + dir.x * 2), y: r3(from.y), z: r3(from.z + dir.z * 2), dx: r3(dir.x), dz: r3(dir.z), t: t ? t.o.id : "" }); } // (me.onAttack in its scripts)
     if (def.custom) {
       const t = aimTarget(dir, 60, 0.85);
       if (host && def.script && (game.scripts || []).some((x) => x.id === def.script)) host.event("attack", def.script, { x: r3(from.x + dir.x * 2), y: r3(from.y), z: r3(from.z + dir.z * 2), dx: r3(dir.x), dz: r3(dir.z), t: t ? t.o.id : "" });
@@ -1080,6 +1103,11 @@ export function startPlay(world, game, opts) {
           if (reach > def.range || Math.abs(_ab.y) > b.h.y + 3) continue;
           if (d > 1.2 && (_ab.x * d2.x + _ab.z * d2.z) / d < 0.35) continue;
           hurt(e, def.dmg, d2, def); n++;
+        }
+        if (def.fling > 0 && others) for (const p of others.players()) { // (💨 fling: other players get knocked back too)
+          _ab.copy(p.p).sub(pos); const d = Math.hypot(_ab.x, _ab.z);
+          if (d - 0.8 > def.range || Math.abs(_ab.y) > 4 || (d > 1.2 && (_ab.x * d2.x + _ab.z * d2.z) / d < 0.35)) continue;
+          flingPlayer(p.id, d2, def.fling); n++;
         }
         if (def.boom) boomFx(pos.clone().addScaledVector(d2, 2.5).setY(pos.y + 0.3), def.boom, def.color);
         if (n) beep(150, 0.12, "square", 80);
@@ -1116,7 +1144,10 @@ export function startPlay(world, game, opts) {
     numberFx(b.c.clone().add(new THREE.Vector3(0, b.h.y + 0.8, 0)), dmg > 0 ? "-" + Math.round(dmg) : "+" + Math.round(-dmg), dmg > 0 ? "#ffd25a" : "#7be03a");
     sparkFx(b.c, def ? def.shotColor || def.color : "#ff4f4f");
     if (def && def.freeze) e.frozenT = time + def.freeze;
-    if (dir && def && e.walker) { e.g.position.addScaledVector(dir, (def.kb || 6) * 0.12); e.want = null; refreshBoxes(e); }
+    if (dir && def && def.fling > 0) { // 💨 FLING: it flies back (and up), how far = the weapon's Fling strength
+      e.flingV = dir.clone().setY(0).normalize().multiplyScalar(6 + def.fling * 0.9); e.frozenT = Math.max(e.frozenT || 0, time + 0.4 + def.fling * 0.012);
+      if (e.walker) { e.vy = 4 + def.fling * 0.35; e.g.position.y += 0.2; }
+    } else if (dir && def && e.walker) { e.g.position.addScaledVector(dir, (def.kb || 6) * 0.12); e.want = null; refreshBoxes(e); }
     if (e.hp <= 0) { e.dead = true; setOn(e.o.id, false); boomFx(b.c, Math.max(2, b.h.length()), "#ffffff"); noise(0.35, 600, 0.25); showMsg("Defeated " + e.o.name + "!", 1.4); }
   }
   // Little effects: sparks, booms, damage numbers.
@@ -1136,7 +1167,14 @@ export function startPlay(world, game, opts) {
   function numberFx(at, text, color) { const s = nameTag(text, color); s.scale.set(2.4, 0.6, 1); s.position.copy(at); scene.add(s); fxs.push({ m: s, life: 0.9, max: 0.9, rise: 2.5 }); }
   const _sp = new THREE.Vector3(), _tmpBox = { c: new THREE.Vector3(), q: new THREE.Quaternion(), h: new THREE.Vector3() };
   function stepArms(dt) {
-    armCd = Math.max(0, armCd - dt); scriptShots = Math.max(0, scriptShots - dt * 30);
+    armCd = Math.max(0, armCd - dt); scriptShots = Math.max(0, scriptShots - dt * 30); flungT = Math.max(0, flungT - dt);
+    pickUps();
+    for (const e of ents) if (e.flingV) { // (flung things fly and slow down; walls still stop walkers)
+      const p = e.g.position; p.addScaledVector(e.flingV, dt);
+      if (e.walker) { const sz = e.o.size, r = Math.max(0.25, Math.min(6, Math.min(sz[0], sz[2]) * 0.45)); walkerSides(e, r, Math.max(0.5, sz[1] * 0.3)); }
+      e.flingV.multiplyScalar(Math.exp(-1.6 * dt)); e.want = null; refreshBoxes(e);
+      if (e.flingV.lengthSq() < 1) e.flingV = null;
+    }
     if (armT > 0) { armT += dt / (held && held.def.kind === "ranged" ? 0.18 : 0.35); if (armT >= 1) armT = 0; }
     for (let i = shots.length - 1; i >= 0; i--) {
       const s = shots[i]; s.left -= dt;
@@ -1153,6 +1191,10 @@ export function startPlay(world, game, opts) {
         if (foe) { const b = boundsBox(e.o, e.g.position, e.g.quaternion); _tmpBox.c.copy(b.c); _tmpBox.q.copy(b.q); _tmpBox.h.copy(b.h).addScalar(s.r + 0.2); if (segHitsBox(_sp, s.p, _tmpBox)) { hit = e; break; } }
         if (e.o.solid && e.k !== "coin") for (const bx of e.boxes) if (segHitsBox(_sp, s.p, bx)) { wall = true; break; }
         if (wall) break;
+      }
+      if (!hit && !wall && !s.fake && s.def.fling > 0 && others) for (const p of others.players()) { // (💨 a flinging shot knocks other players back)
+        _tmpBox.c.set(p.p.x, p.p.y + 1.6, p.p.z); _tmpBox.q.identity(); _tmpBox.h.set(0.9 + s.r, 1.7 + s.r, 0.9 + s.r);
+        if (segHitsBox(_sp, s.p, _tmpBox)) { flingPlayer(p.id, s.v.clone().setY(0).normalize(), s.def.fling); sparkFx(s.p, s.def.shotColor || s.def.color); s.left = 0; break; }
       }
       if (s.p.y < lowest - 30) s.left = 0;
       if (hit || wall || s.left <= 0) {
@@ -1171,8 +1213,15 @@ export function startPlay(world, game, opts) {
     }
   }
   // Someone else in a live game attacked: show their shots (they don't hurt your monsters).
+  function flingPlayer(id, dir, power) { if (others) others.send({ a: "fling", to: id, v: [r3(dir.x * (8 + power * 0.9)), r3(6 + power * 0.3), r3(dir.z * (8 + power * 0.9))] }); }
+  function flungBy(v, who) { // (someone's weapon flung me)
+    if (!Array.isArray(v) || driving || mods.god) return;
+    const k = (i, lim) => Math.max(-lim, Math.min(lim, +v[i] || 0));
+    vel.x += k(0, 110); vel.y = Math.max(vel.y, k(1, 50)); vel.z += k(2, 110); grounded = false; flungT = 1.2;
+    showMsg("💨 " + (who || "Someone") + " flung you!", 1.2); noise(0.25, 1200, 0.15);
+  }
   function othersAttack(e) {
-    const def = weaponDef(game, e.w);
+    const def = defFor(e.w);
     if (!def || def.kind !== "ranged" || def.custom || !Array.isArray(e.p) || !Array.isArray(e.d)) return;
     const from = new THREE.Vector3(+e.p[0] || 0, +e.p[1] || 0, +e.p[2] || 0), yaw = Math.atan2(+e.d[0] || 0, +e.d[1] || 0);
     for (let i = 0; i < (def.n || 1) && shots.length < 120; i++) {
@@ -1209,7 +1258,7 @@ export function startPlay(world, game, opts) {
   // Playing a published game: everyone else playing it right now is here too (their own copy of the game).
   const myLook = loadAvatar();
   const others = opts.live ? startOthers(scene, opts.live, () => ({ p: pos, r: facing, air: !grounded, look: myLook, c: held && !driving ? held.def.id : "" }), (t) => showMsg(t, 3), opts.server,
-    { held: (id) => { const d = weaponDef(game, id); return d ? heldModel(d) : null; }, kind: (id) => { const d = weaponDef(game, id); return d ? d.kind : ""; }, attack: othersAttack }) : null;
+    { held: (id) => { const d = defFor(id); return d ? heldModel(d, builtModel) : null; }, kind: (id) => { const d = defFor(id); return d ? d.kind : ""; }, attack: othersAttack, flung: flungBy }) : null;
   if (others) $("hud").querySelector(".hud-top").insertAdjacentHTML("afterbegin", '<span class="hud-chip" id="hudPeople" title="Players here">👥 1</span>');
   return { update, stop, pos, vel, isOn, get code() { return others ? others.code : ""; }, get health() { return sc.health; }, get lost() { return lost; }, get viewCam() { return viewCam ? viewCam.o.name : ""; }, get host() { return host; }, get coins() { return coins; }, get won() { return won; }, get driving() { return driving ? driving.o.name : ""; }, get checkpoint() { return checkpoint; } }; // (pos / vel etc. for testing)
 }

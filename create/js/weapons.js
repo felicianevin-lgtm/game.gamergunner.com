@@ -38,6 +38,42 @@ export const LOOKS = {
   slingshot: { name: "Slingshot", icon: "🪨", kind: "ranged" }, orb: { name: "Power glove", icon: "🥊", kind: "ranged" },
 };
 
+// ---------------------------------------------------------------- 🎒 WEAPON THINGS (obj.type "weapon", like a Tool)
+// Picking a weapon (or ✨ building your own) puts a weapon thing in the world: it's in the Explorer (scripts go under
+// it: me = the weapon), and its Properties set how it works. obj.w = {base: the built-in it started from ("" = home-made),
+// look, mode: "swing" / "shoot", dmg, cd (seconds between), range, sp (shot speed), shot (shot color), fling (0 = off,
+// 1-100 = how far whoever it hits flies), start (the player starts holding it; off = it lies there to pick up)}.
+// A home-made one is built from parts (obj.parts, like a 🧩 mesh, world.js buildMesh): standing up, handle at the bottom.
+export const MAX_HELD = 6;
+export function sanitizeWeapon(w) {
+  w = w && typeof w === "object" ? w : {};
+  const n = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+  const B = WEAPONS[w.base] || null;
+  const mode = w.mode === "shoot" || w.mode === "swing" ? w.mode : B ? (B.kind === "ranged" ? "shoot" : "swing") : "swing";
+  return { base: B ? w.base : "", look: /^[a-z]{2,12}$/.test(w.look || "") ? w.look : B ? B.look : "built", mode,
+    dmg: n(w.dmg, 0, 500, B ? B.dmg : 25), cd: n(w.cd, 0.05, 5, B ? B.cd : 0.5), range: n(w.range, 1, 300, B ? B.range : mode === "shoot" ? 80 : 4.6),
+    sp: n(w.sp, 5, 300, B && B.sp ? B.sp : 80), shot: /^#[0-9a-f]{6}$/i.test(w.shot || "") ? w.shot : B ? B.color : "#ffd25a",
+    fling: n(w.fling, 0, 100, 0), start: w.start !== false };
+}
+// A new weapon thing from the list (or a home-made one when id is "").
+export function weaponObjectStats(id) { const B = WEAPONS[id]; return sanitizeWeapon(B ? { base: id } : { mode: "swing" }); }
+// A weapon thing -> what play.js uses (def). o = the object (its parts, color, name).
+export function weaponFromObject(o) {
+  const w = sanitizeWeapon(o.w), B = WEAPONS[w.base] || {};
+  const kind = w.mode === "shoot" ? "ranged" : "melee";
+  const look = w.look === "built" ? "built" : (LOOKS[w.look] || WEAPONS[w.base]) ? w.look : kind === "ranged" ? "pistol" : "sword";
+  return { id: "o" + o.id, obj: o, name: o.name, icon: B.icon || (LOOKS[look] || { icon: kind === "ranged" ? "🔫" : "🗡️" }).icon, kind, look, color: o.color,
+    dmg: w.dmg, cd: w.cd, range: w.range, sp: w.sp, shotColor: w.shot, fling: w.fling, start: w.start,
+    kb: B.kb || 8, boom: B.boom || 0, freeze: B.freeze || 0, grav: kind === "ranged" ? (B.grav || 0) : 0, n: kind === "ranged" ? (B.n || 1) : 1, thing: o.id };
+}
+export function weaponStarter(name) {
+  return "// 🎒 This script is inside the weapon \"" + name + "\". Here, me means the weapon.\n\n" +
+    "// when the player gets it (at the start of the game, or picking it up)\n" +
+    "me.onEquip(function () {\n  say(\"You got the \" + me.name + \"!\")\n})\n\n" +
+    "// every time the player uses it. aim.target = what you're aiming at (or null)\n" +
+    "me.onAttack(function (aim) {\n  // shoot({ damage: 10, color: \"red\" })   // (an extra shot)\n})\n";
+}
+
 // A weapon id ("sword", or "c" + a home-made one's id) -> everything about it, or null.
 export function weaponDef(game, id) {
   if (WEAPONS[id]) return { id, ...WEAPONS[id] };
@@ -92,9 +128,27 @@ export function weaponModel(look, color) {
   }
   return g;
 }
+// A weapon thing in the world (assets.js "weapon"): lying flat, pointing forward, bottom on the ground. base = [1, 1, 3].
+export function worldWeaponModel(o) {
+  const g = new THREE.Group(), m = weaponModel(sanitizeWeapon(o.w).look, o.color);
+  m.position.set(0, 0.5, 1.4); g.add(m);
+  return g;
+}
 // The model as the hand holds it: melee straight out, ranged turned so it points forward when the arm is held up.
-export function heldModel(def) {
-  const m = weaponModel(def.look, def.color), g = new THREE.Group();
+// built(o) -> a group of a home-made weapon's parts (play.js passes world.js buildObject): built standing up, so
+// its top points forward; it's shrunk to fit in a hand if it's huge.
+export function heldModel(def, built) {
+  const g = new THREE.Group();
+  let m;
+  if (def.look === "built" && def.obj && built) {
+    const o = def.obj, b = built({ ...o, pos: [0, 0, 0], rot: [0, 0, 0] });
+    const k = Math.min(1, 4 / Math.max(0.1, ...o.size));
+    b.scale.multiplyScalar(k); b.position.y = -0.25 * k;
+    m = new THREE.Group(); m.add(b);
+    m.rotation.x = def.kind === "ranged" ? Math.PI : -Math.PI / 2;
+    g.add(m); g.userData.kind = def.kind; return g;
+  }
+  m = weaponModel(def.look, def.color);
   g.add(m);
   if (def.kind === "ranged") m.rotation.x = -Math.PI / 2;
   g.userData.kind = def.kind;
