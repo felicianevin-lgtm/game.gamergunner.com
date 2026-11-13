@@ -178,12 +178,16 @@ function raceResults(r) {
 }
 
 // ---------------------------------------------------------------- the phone
+// the Dev app on the phone: unlocked with a code (stays unlocked until you close the tab)
+const DEV_CODE = "2468";
+let devUnlocked = false;
+const devOpen = () => { if (devUnlocked) return true; try { return sessionStorage.getItem("mv_dev") === "1"; } catch { return false; } };
 function phone(view = "home") {
   SFX.phone();
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? H.fmtTime(S.best[r.id]) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
@@ -202,8 +206,33 @@ function phone(view = "home") {
   if (view === "ideas") html = `<h2>💡 IDEAS</h2>${back}<p class="sub">What should we add to Mud Valley? New cars, places, jobs, anything! Your idea goes straight to the game maker.</p>
     <textarea id="ideaTxt" maxlength="480" rows="5" placeholder="I think you should add..." style="width:100%;box-sizing:border-box;font:inherit;padding:8px;border-radius:8px"></textarea>
     <div class="btns"><button type="button" class="big" data-a="sendIdea">SEND IDEA 💡</button></div><p class="note" id="ideaNote">Please don't put your real name, address or phone number in it.</p>`;
+  if (view === "dev") {
+    if (!devOpen()) html = `<h2>🛠 DEV</h2>${back}<p class="sub">Type the dev code:</p>
+      <input id="devCode" type="password" inputmode="numeric" maxlength="8" autocomplete="off" style="font:inherit;font-size:22px;letter-spacing:6px;width:9em;padding:8px;border-radius:8px;text-align:center">
+      <div class="btns"><button type="button" class="big" data-a="devUnlock">UNLOCK</button></div><p class="note" id="devNote"></p>`;
+    else html = `<h2>🛠 DEV MENU</h2>${back}<div class="bank">${money(S.money)}</div>
+      <h3>💵 Money</h3><p class="note">Type how much money you want:</p>
+      <input id="devCash" type="number" min="0" max="999999999" step="1" value="${S.money}" style="font:inherit;font-size:18px;width:11em;padding:6px;border-radius:8px">
+      <div class="btns"><button type="button" class="mid" data-a="devSet">SET MONEY</button></div>
+      <div class="btns">${[1000, 10000, 100000, 1000000].map((n) => `<button type="button" class="small" data-a="devAdd" data-v="${n}">+${money(n)}</button>`).join("")}<button type="button" class="small" data-a="devSetN" data-v="0">Set to $0</button></div>
+      <h3>🚗 Free ride</h3><select id="devRide" style="font:inherit;padding:6px;border-radius:8px">${VEHICLES.map((v) => `<option value="${v.id}">${esc(v.name)}</option>`).join("")}</select>
+      <div class="btns"><button type="button" class="mid" data-a="devCar">GET IT FREE</button></div><p class="note">Free rides don't care if your garage is full.</p>
+      <h3>🏠 Houses</h3><div class="btns"><button type="button" class="small" data-a="devHouses">Own every house</button></div>
+      <h3>🚨 Wanted stars</h3><div class="btns">${[0, 1, 2, 3, 4, 5].map((n) => `<button type="button" class="small" data-a="devWanted" data-v="${n}">${n ? "★".repeat(n) : "Clear"}</button>`).join("")}</div>
+      <div class="btns"><button type="button" class="small" data-a="devLock">🔒 Lock the dev menu</button></div>`;
+  }
   modal(html, "phone");
+  if (view === "dev" && !devOpen()) { const i = document.getElementById("devCode"); if (i) { i.focus(); i.addEventListener("keydown", (e) => { if (e.key === "Enter") onAct("devUnlock"); }); } }
   onAct = (a, val) => {
+    if (a === "devUnlock") { const i = document.getElementById("devCode"); if (i && i.value.trim() === DEV_CODE) { try { sessionStorage.setItem("mv_dev", "1"); } catch {} devUnlocked = true; SFX.cash(); phone("dev"); } else { SFX.nope(); const n = document.getElementById("devNote"); if (n) n.textContent = "❌ Wrong code."; if (i) i.value = ""; } return; }
+    if (a === "devLock") { try { sessionStorage.removeItem("mv_dev"); } catch {} devUnlocked = false; phone("dev"); return; }
+    if (a.startsWith("dev") && !devOpen()) return;
+    if (a === "devSet") { const v = +document.getElementById("devCash").value; if (Number.isFinite(v)) { GM.devMoney(v); SFX.cash(); } phone("dev"); return; }
+    if (a === "devSetN") { GM.devMoney(+val); phone("dev"); return; }
+    if (a === "devAdd") { GM.devMoney(S.money + +val); SFX.cash(); phone("dev"); return; }
+    if (a === "devCar") { GM.devCar(document.getElementById("devRide").value); return; }
+    if (a === "devHouses") { GM.devHouses(); phone("dev"); return; }
+    if (a === "devWanted") { GM.devWanted(+val); SFX.click(); return; }
     if (a === "sendIdea") {
       const ta = document.getElementById("ideaTxt"), note = document.getElementById("ideaNote"), text = ((ta && ta.value) || "").trim();
       if (text.length < 3) { SFX.nope(); note.textContent = "Type your idea first!"; return; }

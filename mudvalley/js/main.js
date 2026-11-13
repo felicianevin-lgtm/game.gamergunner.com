@@ -516,6 +516,15 @@ export const GAME = {
     G.previewAt = R ? { x: POCKET.x + R.stage.x, y: R.stage.y, z: POCKET.z + R.stage.z, inside: true } : { x: -36, y: 1.45, z: 18 };
     m.root.position.set(G.previewAt.x, G.previewAt.y, G.previewAt.z); scene.add(m.root); G.preview = m;
   },
+  // ---- the phone's Dev app (code 2468)
+  devMoney(n) { S.money = Math.max(0, Math.min(999999999, Math.round(n))); H.bumpMoney(); save(); },
+  devCar(id) {
+    const v = vehicleById(id), s = newCar(id, uid()); s.yaw = Math.PI; const me = mapPos();
+    const f = inside() ? freeSpot(-36, 12, Math.PI, 5) : freeSpot(me.x + 6, me.z, 0, 5); s.x = f.x; s.z = f.z;
+    S.cars.push(s); spawnCar(s); SFX.buy(); H.toast("🛠 Free ride!", v.name + " is parked " + (inside() ? "outside Valley Motors." : "right next to you."), "good", 3000); save();
+  },
+  devHouses() { S.houses = ["lot", ...HOUSES.filter((h) => h.price).map((h) => h.id)]; SFX.buy(); houseSigns(); H.toast("🛠 You own every house!", "Way more garage room now.", "good"); save(); },
+  devWanted(n) { crime.setWanted(n); save(); },
   paintTrailer(u, color) { const t = G.TRS.get(u); if (!t || !t.model.body || !spend(150)) { SFX.nope(); return false; } t.s.color = color; t.model.body.color.set(color); SFX.buy(); H.bumpMoney(); save(); return true; },
   wipe() { wipe(); location.reload(); },
   get crime() { return crime; }, get fishing() { return fishing; }, get mp() { return mp; },
