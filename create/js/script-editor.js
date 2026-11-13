@@ -172,12 +172,45 @@ export function aiGuide(want, info) {
     lines.push("", "THE THINGS IN THIS GAME (name - what it is):");
     for (const t of things.slice(0, 150)) lines.push("- \"" + t.name + "\" - " + (t.kind === "gui" ? "GUI " + ({ frame: "panel", image: "picture", devmenu: "developer menu button" }[t.type] || t.type) : "part (" + t.type + ")"));
   }
+  // 🧰 Studio Tools (scripts.js addTool, editor.js runTool): what the AI must do when the kid asks for a tool or a map builder
+  lines.push("", "IF THE KID ASKS FOR A TOOL, A MAP BUILDER, OR SOMETHING THAT BUILDS WHILE THEY'RE MAKING THE GAME (not while playing):",
+    "GunnerVerse Studio has a 🧰 Tools menu at the top of the studio. A script adds buttons to it with addTool. Follow these steps:",
+    "1. It MUST be a Game Script (in the \"Game Scripts\" folder of the Explorer, not inside a part or GUI). Tools in any other script don't work: tell the kid to right-click the script and pick \"Move to Game Scripts\" if it's in the wrong place.",
+    "2. Register each tool with:  addTool(\"Tool name\", \"🗺️\", function () { ... })   (name, one emoji icon, a function). The tool's name shows in the Tools menu.",
+    "3. Inside the function, build the map with build(type, { name, x, y, z, width, height, depth, color, texture, turn, solid }) in loops. Use random(a, b) for variety. Give the parts a shared name (like \"Forest\") so another tool can find them later with findAll(\"Forest\") and .destroy() them.",
+    "4. You can also change things that are already in the game: find(\"Name\").moveTo(x, y, z), .color = \"red\", .resize(x, y, z), .destroy().",
+    "5. Finish with say(\"Built it!\") so the kid sees it worked.",
+    "6. Tell the kid: paste it into a Game Script, then click 🧰 Tools at the top of the studio and pick the tool. What it builds stays in the game (Ctrl+Z takes it back). Tools do nothing when you press Play.",
+    "- Keep builds under about 1500 parts (the whole game can have 2000). Types for build: block, ball, cylinder, wedge, plate, coin, light, lava, jumppad, crate, barrel, cone, rock, bush, tree, pine, sign, checkpoint, door, stairs, fence, wall, spinner, mover.",
+    "- Example tool:", "```javascript", "addTool(\"Build a forest\", \"🌲\", function () {", "  for (let i = 0; i < 40; i++) {", "    build(\"tree\", { name: \"Forest\", x: random(-80, 80), y: 0, z: random(-80, 80) })", "  }", "  say(\"Built a forest!\")", "})", "```");
   if (info.code && info.code.trim()) lines.push("", "THE SCRIPT SO FAR (change or add to it):", "```javascript", info.code.trim(), "```");
   lines.push("", "EXAMPLE of a correct GunnerVerse script:", "```javascript", "// When this button is clicked, open or close the panel named \"Shop\"", "me.onClick(function () {", "  find(\"Shop\").toggle()", "  sound(\"click\")", "})", "```");
   return lines.join("\n");
 }
+// 🔒 Ask an AI is locked with a code (only the owner of this studio uses it). It's a soft lock: the code is in the page.
+const AI_CODE = "2468";
+function aiUnlocked() { try { return sessionStorage.getItem("gv_ai_ok") === "1"; } catch { return false; } }
+function askCode(then) {
+  const box = document.createElement("div");
+  box.className = "se-maker";
+  box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Code"><h3>🔒 Ask an AI</h3><p>Type the code to open the script builder.</p>' +
+    '<form id="aiLock"><input id="aiCode" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="Code" style="font-size:20px;letter-spacing:.2em;text-align:center;width:140px">' +
+    '<p class="se-ai-msg" id="aiLockMsg"></p><div class="se-mk-btns"><button class="tb" type="button" id="aiLockNo">Close</button><button class="tb se-make">Open</button></div></form></div>';
+  $("scriptEd").appendChild(box);
+  const q = (id) => box.querySelector("#" + id);
+  box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") box.remove(); });
+  q("aiLockNo").onclick = () => { box.remove(); $("seTa").focus(); };
+  q("aiLock").onsubmit = (e) => {
+    e.preventDefault();
+    if (q("aiCode").value.trim() !== AI_CODE) { q("aiLockMsg").textContent = "Wrong code!"; q("aiCode").value = ""; q("aiCode").focus(); return; }
+    try { sessionStorage.setItem("gv_ai_ok", "1"); } catch {}
+    box.remove(); then();
+  };
+  q("aiCode").focus();
+}
 function openAi() {
   if (!cur) return;
+  if (!aiUnlocked()) { askCode(openAi); return; }
   const box = document.createElement("div");
   box.className = "se-maker";
   box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Ask an AI"><h3>🤖 Ask an AI</h3>' +

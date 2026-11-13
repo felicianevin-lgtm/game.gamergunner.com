@@ -33,6 +33,8 @@ export const HELP = [
     ["me.onEquip(function () {\n  \n})", "In a script inside a weapon: runs when the player gets it (at the start, or picking it up)"],
     ["me.onAttack(function (aim) {\n  \n})", "In a script inside a weapon: runs every time the player uses it"],
     ["me.damage(25)", "Hurt a monster (it has 100 health; 0 = defeated)"], ["me.onHit(function (damage) {\n  \n})", "Do something when a weapon hits this"]]],
+  ["Studio tools 🧰", [
+    ["addTool(\"Build a maze\", \"🗺️\", function () {\n  \n})", "Only in a Game Script: adds a button to the 🧰 Tools menu at the top of the studio. Clicking it runs this while you build, and what it builds stays in your game"]]],
   ["Finding things", [
     ["find(\"Door\")", "Get a part or GUI by its name (the name in the Explorer)"], ["findAll(\"Coin\")", "Get every thing with that name"],
     ["build(\"block\", { x: 0, y: 0, z: 0, width: 4, height: 6, depth: 1, color: \"#ff0000\" })", "Build a new part while the game runs (also: texture, textureSize, stretch, material, solid, name, turn). Types: block, ball, cylinder, wedge, coin, light, lava, crate..."]]],
@@ -174,7 +176,41 @@ every(0.5, function () {
 })
 `;
 
+// (🧰 the Studio Tools example: a map builder in the Tools menu)
+export const MAP_TOOL_CODE = `// 🧰 MAP BUILDER TOOL
+// This script adds buttons to the 🧰 Tools menu at the top of the studio.
+// Click one and it builds right now, while you're building (not when you Play).
+// Tools only work when this script is in GAME SCRIPTS.
+
+// a field of trees and rocks around the middle of the map
+addTool("Build a forest", "🌲", function () {
+  for (let i = 0; i < 40; i++) {
+    const x = random(-80, 80), z = random(-80, 80)
+    if (Math.abs(x) < 12 && Math.abs(z) < 12) continue   // (keep the spawn clear)
+    build(random(0, 3) === 0 ? "rock" : "tree", { name: "Forest", x: x, y: 0, z: z, turn: random(0, 359) })
+  }
+  say("Built a forest! (Ctrl+Z takes it back)")
+})
+
+// a walled arena with a platform in the middle
+addTool("Build an arena", "🏟️", function () {
+  const SIZE = 60, HIGH = 6
+  build("block", { name: "Arena Wall", x: 0, y: 0, z: -SIZE / 2, width: SIZE, height: HIGH, depth: 2, color: "gray" })
+  build("block", { name: "Arena Wall", x: 0, y: 0, z: SIZE / 2, width: SIZE, height: HIGH, depth: 2, color: "gray" })
+  build("block", { name: "Arena Wall", x: -SIZE / 2, y: 0, z: 0, width: 2, height: HIGH, depth: SIZE, color: "gray" })
+  build("block", { name: "Arena Wall", x: SIZE / 2, y: 0, z: 0, width: 2, height: HIGH, depth: SIZE, color: "gray" })
+  build("block", { name: "Arena Middle", x: 0, y: 0, z: 0, width: 10, height: 2, depth: 10, color: "orange" })
+  say("Built an arena!")
+})
+
+// take away everything the forest tool made
+addTool("Clear the forest", "🧹", function () {
+  for (const t of findAll("Forest")) t.destroy()
+})
+`;
+
 export const EXAMPLES = [
+  { name: "🧰 Map builder tool (Tools menu)", for: "game", code: MAP_TOOL_CODE },
   { name: "Backrooms maze builder", for: "game", code: BACKROOMS_CODE },
   { name: "Open / close a panel", for: "gui", code: '// When this button is clicked, open (or close) the panel named "Shop".\n// (Change "Shop" to the name of YOUR panel.)\nme.onClick(function () {\n  find("Shop").toggle()\n  sound("click")\n})\n' },
   { name: "Click to open a door", for: "part", code: '// Click this part to open and close the part named "Door".\nconst door = find("Door")\n\nme.onClick(function () {\n  door.toggle()   // hidden = open, showing = closed\n  sound("door")\n})\n' },
@@ -195,7 +231,7 @@ export const EXAMPLES = [
 function RUNTIME(send) {
   "use strict";
   const things = new Map();
-  const H = { click: new Map(), touch: new Map(), untouch: new Map(), key: new Map(), attack: new Map(), hit: new Map(), equip: new Map() };
+  const H = { click: new Map(), touch: new Map(), untouch: new Map(), key: new Map(), attack: new Map(), hit: new Map(), equip: new Map(), tool: new Map() };
   const updates = [], timers = [], follows = new Map(), spins = new Map(), errs = new Map();
   let out = [], now = 0, cur = null, nclone = 1, nbuild = 1, ended = false;
   const P = { x: 0, y: 0, z: 0, ry: 0, coins: 0, health: 100, speed: 1, jump: 1 };
@@ -319,7 +355,7 @@ function RUNTIME(send) {
       o = o && typeof o === "object" ? o : {};
       const n = (v, d) => (Number.isFinite(+v) && v !== null && v !== "" ? +v : d);
       const s = { id: "b" + nbuild++, kind: "part", type: String(type || "block"), name: String(o.name || type || "Part").slice(0, 40), x: n(o.x, P.x), y: n(o.y, 0), z: n(o.z, P.z), ry: n(o.turn, 0),
-        sx: n(o.width, 4), sy: n(o.height, 1), sz: n(o.depth, 4), color: String(o.color || ""), visible: o.visible !== false, solid: o.solid !== false, text: String(o.text || "") };
+        sx: n(o.width, 4), sy: n(o.height, 1), sz: n(o.depth, 4), color: COLORS[String(o.color || "").toLowerCase()] || String(o.color || ""), visible: o.visible !== false, solid: o.solid !== false, text: String(o.text || "") };
       things.set(s.id, s);
       cmd("build", s.id, { type: s.type, name: s.name, pos: [s.x, s.y, s.z], ry: s.ry, size: [s.sx, s.sy, s.sz], color: s.color, tex: String(o.texture || ""), texS: n(o.textureSize, 0),
         fit: o.stretch ? "stretch" : "", mat: String(o.material || ""), solid: s.solid, visible: s.visible, text: s.text });
@@ -338,6 +374,16 @@ function RUNTIME(send) {
       o = o && typeof o === "object" ? o : {};
       let c = String(o.color || "purple").toLowerCase(); c = COLORS[c] || c; if (!/^#[0-9a-f]{6}$/.test(c)) c = "#a64bf4";
       cmd("shoot", { dmg: +o.damage || 0, sp: +o.speed || 80, color: c, size: +o.size || 0.25, drop: +o.drop || 0, freeze: +o.freeze || 0, boom: +o.boom || 0, spread: +o.spread || 0, n: +o.count || 1 });
+    },
+    // 🧰 STUDIO TOOLS: a Game Script can add buttons to the studio's 🧰 Tools menu (editor.js runTool). Clicking one runs
+    // its function while you BUILD: what it builds (build(), destroy(), moveTo...) stays in the game. In Play it does nothing.
+    addTool(name, icon, fn) {
+      if (typeof icon === "function") { fn = icon; icon = "🧰"; }
+      need(fn, "addTool");
+      if (cur && cur.on) throw new Error("addTool only works in a Game Script. Right-click this script in the Explorer and pick \"Move to Game Scripts\".");
+      name = String(name || "Tool").slice(0, 40);
+      if (!H.tool.has(name)) H.tool.set(name, []);
+      H.tool.get(name).push({ fn, sc: cur });
     },
     onKey(key, fn) { need(fn, "onKey"); key = String(key).toLowerCase(); on(H.key, key === " " ? "space" : key, fn, "onKey"); cmd("want", "keys", ""); },
     sound(name) { cmd("sound", String(name).slice(0, 12)); },
@@ -374,6 +420,7 @@ function RUNTIME(send) {
       else if (kind === "attack") { const a = v && typeof v === "object" ? v : {}; fire(H.attack, id, { x: +a.x || 0, y: +a.y || 0, z: +a.z || 0, dx: +a.dx || 0, dz: +a.dz || 0, target: a.t ? get(a.t) : null }); }
       else if (kind === "hit") fire(H.hit, id, +v || 0);
       else if (kind === "equip") fire(H.equip, id);
+      else if (kind === "tool") fire(H.tool, id);
       else if (H[kind]) fire(H[kind], id);
     }
     const due = timers.filter((t) => !t.dead && t.at <= now);

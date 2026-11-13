@@ -22,6 +22,7 @@ import { openPublish, uploadFiles } from "./publish.js";
 import { GUI_KINDS, GUI_SPOTS, BUTTON_ACTIONS, GUI_SIZES, NEEDS_TARGET, MAX_GUI, newGui, renderGui } from "./gui.js";
 import { ACCEPT, importFile, listFiles, deleteFile, useFiles, noteFile, loadPictures, fileUrl, startSize, animationNames, updateMixers, clearMixers, isModel } from "./files.js";
 import { openScript, closeScript, scriptOpen, starterCode, flushScript } from "./script-editor.js";
+import { startScripts, MAP_TOOL_CODE } from "./scripts.js";
 import { api, account, RELAY } from "./net.js";
 import { connectStudio, shareStudio, inviteTo, removeFrom, stopSharing, myStudios, SHARE_ERR as STUDIO_ERR } from "./collab.js";
 import { GAITS, IDLES, WHEN, motionOf, sanitizeMotion, animateThing, animateRig, limbCount, LIMBS } from "./motion.js";
@@ -134,6 +135,7 @@ function changed(skipTree) {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, 1200);
   if (!skipTree) drawTree();
+  drawToolsBtn();
   if (collab) collabPush();
 }
 function saveNow(force) {
@@ -636,6 +638,7 @@ function scriptMenu(id, x, y) {
   showMenu(x, y, [
     { icon: "📜", label: "Open", fn: () => editScript(id) },
     { icon: "⧉", label: "Duplicate", fn: () => { if (game.scripts.length >= MAX_SCRIPTS) return; pushUndo(); game.scripts.push({ ...sc, id: uid(), name: sc.name + " copy" }); changed(); drawProps(); } },
+    ...(sc.on ? [{ icon: "📜", label: "Move to Game Scripts", fn: () => moveToGameScripts(id) }] : []),
     "-", { icon: "🗑️", label: "Delete script", danger: true, fn: () => removeScript(id) },
   ]);
 }
@@ -1515,7 +1518,7 @@ function openGame(g) {
   $("savedNote").textContent = "Saved ✓";
   try { localStorage.setItem("gv_studio_last", game.id); } catch {}
   if (migrateArms()) { rebuildAll(); drawTree(); changed(true); }
-  drawArmsBtn();
+  drawArmsBtn(); drawToolsBtn();
   if (game.shared) startCollab();
 }
 
@@ -1557,6 +1560,7 @@ function startCollab() {
         else { drawTree(); if (selected && (r.ids.includes(selected) || r.scripts) && !transform.dragging) drawProps(); }
         if (r.base.includes("gui")) drawGui();
       }
+      if (r.scripts) drawToolsBtn();
       dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 1200); // (this browser's copy too)
     },
     onPeople: drawPeople,
@@ -1592,8 +1596,9 @@ function drawPeople(list, meta) {
   if (list) peopleNow = list;
   const bar = $("collabBar");
   meta = meta || (collab && collab.meta);
-  if (!collab || !meta) { bar.classList.add("hidden"); bar.innerHTML = ""; $("chatBox").classList.add("hidden"); return; }
-  $("chatBox").classList.remove("hidden");
+  if (!collab || !meta) { bar.classList.add("hidden"); bar.innerHTML = ""; $("chatBox").classList.add("hidden"); $("btnChat").classList.add("hidden"); return; }
+  $("chatBox").classList.remove("hidden"); $("btnChat").classList.remove("hidden"); // (💬 shown only when the Chat button is on)
+  $("chatBox").classList.toggle("off", !chatOpen); $("btnChat").classList.toggle("on", chatOpen);
   const me = account(), mine = me ? me.u.toLowerCase() : "";
   const everyone = [{ u: meta.owner, n: meta.ownerU, owner: true }, ...meta.members].filter((p) => p.u !== mine);
   const chips = everyone.map((p) => {
@@ -1615,11 +1620,12 @@ function drawChat(lines, fresh) {
     const row = document.createElement("p");
     row.innerHTML = '<b style="color:' + esc(l.c || "#fff") + '">' + esc(l.n || l.u) + ":</b> " + esc(l.m);
     list.appendChild(row);
-    if (!fresh && l.u !== mine && $("chatBox").classList.contains("closed")) chatUnread++;
+    if (!fresh && l.u !== mine && ($("chatBox").classList.contains("closed") || !chatOpen)) chatUnread++;
   }
   while (list.children.length > 60) list.firstChild.remove();
   list.scrollTop = list.scrollHeight;
   $("chatNew").textContent = chatUnread; $("chatNew").classList.toggle("hidden", !chatUnread);
+  $("chatDot").textContent = chatUnread; $("chatDot").classList.toggle("hidden", !chatUnread || chatOpen);
   if (fresh && !lines.length) list.innerHTML = '<p class="chat-empty">Say hi to the people building with you!</p>';
   else { const e = list.querySelector(".chat-empty"); if (e) e.remove(); }
 }
@@ -1898,6 +1904,124 @@ function wireWeaponProps(o) {
   $("pwScript").onclick = () => addWeaponScript(o);
 }
 $("btnArms").onclick = () => openArms();
+
+// ---------------------------------------------------------------- 🧰 Studio Tools (scripts.js addTool)
+// A Game Script can add buttons to the 🧰 Tools menu at the top: addTool("Build a forest", "🌲", function () { ... }).
+// The button shows up as soon as the script has addTool in it. Clicking a tool runs that script in the same locked box
+// as Play (scripts.js), fires just that tool, and what it builds / moves / deletes is put into the game for real
+// (one Ctrl+Z takes it all back). Tools only work in Game Scripts: one inside a part gets a "move it" hint here.
+const TOOL_RE = /addTool\(\s*(["'`])((?:(?!\1).){1,40})\1(?:\s*,\s*(["'`])((?:(?!\3).){1,8})\3)?/g;
+function toolsIn(sc) { return [...String(sc.code || "").matchAll(TOOL_RE)].map((m) => ({ name: m[2], icon: m[4] || "🧰" })); }
+function drawToolsBtn() {
+  if (!game) return;
+  const good = (game.scripts || []).filter((x) => !x.on && toolsIn(x).length), lost = (game.scripts || []).filter((x) => x.on && toolsIn(x).length);
+  $("toolsWrap").classList.toggle("hidden", !good.length && !lost.length);
+  $("btnTools").classList.toggle("warn", !good.length && !!lost.length);
+}
+function openToolsMenu() {
+  const m = $("toolsMenu");
+  if (!m.classList.contains("hidden")) { m.classList.add("hidden"); return; }
+  const items = [];
+  for (const sc of game.scripts.filter((x) => !x.on)) for (const t of toolsIn(sc)) items.push({ html: '<span class="mi">' + esc(t.icon) + "</span>" + esc(t.name) + '<small class="tool-from">' + esc(sc.name) + "</small>", fn: () => runTool(sc, t.name) });
+  for (const sc of game.scripts.filter((x) => x.on && toolsIn(x).length)) {
+    items.push({ html: '<span class="mi">⚠️</span><span class="tool-warn">"' + esc(sc.name) + '" is inside ' + esc(thingName(sc.on) || "a thing") + ". Tools only work in <b>Game Scripts</b>. Click to move it there.</span>", fn: () => moveToGameScripts(sc.id) });
+  }
+  items.push({ html: '<span class="mi">＋</span>New tool script (map builder example)', fn: addToolScript });
+  m.innerHTML = items.map((it, i) => (i === items.length - 1 ? '<div class="menu-sec"></div>' : "") + '<button type="button" data-i="' + i + '">' + it.html + "</button>").join("");
+  m.querySelectorAll("button").forEach((b) => (b.onclick = () => { m.classList.add("hidden"); items[+b.dataset.i].fn(); }));
+  m.classList.remove("hidden");
+}
+document.addEventListener("pointerdown", (e) => { if (!$("toolsWrap").contains(e.target)) $("toolsMenu").classList.add("hidden"); }, true);
+function addToolScript() {
+  if (game.scripts.length >= MAX_SCRIPTS) { alert("You can have up to " + MAX_SCRIPTS + " scripts."); return; }
+  pushUndo();
+  const sc = { id: uid(), name: "Map Tools", on: "", code: MAP_TOOL_CODE };
+  game.scripts.push(sc); changed(); editScript(sc.id);
+  toast("🧰 Your tools are in the Tools menu at the top. Change the script to make your own!", 5);
+}
+function moveToGameScripts(id) {
+  const sc = game.scripts.find((x) => x.id === id);
+  if (!sc || !sc.on) return;
+  pushUndo(); sc.on = ""; changed(); drawProps();
+  if (scriptOpen() === id) editScript(id);
+  toast('📜 "' + sc.name + '" is in Game Scripts now.' + (toolsIn(sc).length ? " Its tools are in the 🧰 Tools menu." : ""), 4);
+}
+let toolRunning = false;
+function runTool(sc, name) {
+  if (playing || toolRunning) return;
+  flushScript();
+  sc = game.scripts.find((x) => x.id === sc.id) || sc;
+  toolRunning = true; $("btnTools").classList.add("busy");
+  toast("🧰 " + name + "…", 30);
+  const things = game.objects.map((o) => ({ id: o.id, kind: "part", type: o.type, name: o.name, x: o.pos[0], y: o.pos[1], z: o.pos[2], ry: o.rot[1],
+    sx: o.size[0], sy: o.size[1], sz: o.size[2], color: o.color, visible: o.visible, solid: o.solid, text: o.text || "", transp: o.transp || 0 }));
+  const sp = game.objects.find((o) => o.b.k === "spawn"), cmds = [];
+  let fatal = "", outs = 0; // (outs: answers from the script box; the 1st is its start, the 2nd has the tool)
+  const host = startScripts([{ id: sc.id, name: sc.name, on: "", code: sc.code }], things, { x: sp ? sp.pos[0] : 0, y: sp ? sp.pos[1] + 3 : 3, z: sp ? sp.pos[2] : 0, coins: 0, health: 100 },
+    { apply(c) { outs++; if (cmds.length < 20000) cmds.push(...c.slice(0, 20000 - cmds.length)); }, fatal(t) { fatal = t; } });
+  host.event("tool", name);
+  let n = 0, quiet = 0, last = 0;
+  const timer = setInterval(() => {
+    host.tick(0.05, { x: 0, y: 0, z: 0, ry: 0, coins: 0, health: 100 }, []);
+    n++; if (cmds.length === last && outs >= 2) quiet++; else quiet = 0; last = cmds.length;
+    if (fatal || quiet > 8 || n > 200) { // (done: nothing new for a moment, or 10 s at most)
+      clearInterval(timer); host.stop(); toolRunning = false; $("btnTools").classList.remove("busy");
+      if (fatal) { toast(fatal, 5); output("err", fatal, { id: sc.id }); return; }
+      applyTool(cmds, sc, name);
+    }
+  }, 50);
+}
+// What a tool's script did -> the real game (cleaned like a saved game; build ids from the box get real ids).
+function applyTool(cmds, sc, name) {
+  const ids = new Map(), objOf = (a) => obj(ids.get(a) || a);
+  let made = 0, changedN = 0, gone = 0, msg = "";
+  const NUM = (v, lo, hi) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : null);
+  const hasWork = cmds.some((c) => Array.isArray(c) && /^(build|destroy|pos|rot|size|color|vis|solid|transp|text|clone)$/.test(c[0]));
+  if (hasWork) pushUndo();
+  for (const c of cmds) {
+    if (!Array.isArray(c)) continue;
+    const [k, a, b, cc, d] = c;
+    if (k === "build" && b && typeof b === "object" && game.objects.length < 2000) {
+      const t = BY_TYPE[b.type] && !BY_TYPE[b.type].hidden ? b.type : "block";
+      const raw = { id: uid(), type: t, name: b.name, pos: b.pos, rot: [0, b.ry || 0, 0], size: b.size, solid: b.solid, visible: b.visible, mat: b.mat || undefined, tex: b.tex, texS: b.texS, texFit: b.fit, text: b.text || undefined };
+      raw.b = newObj(t).b;
+      if (/^#[0-9a-f]{6}$/i.test(b.color || "")) raw.color = b.color; else if (b.tex) raw.color = "#ffffff";
+      const o = sanitize({ objects: [raw] }).objects[0]; if (!o) continue;
+      if (!b.size || (b.size[0] === 4 && b.size[1] === 1 && b.size[2] === 4 && t !== "block")) o.size = BY_TYPE[t].base.slice(); // (trees, rocks... at their own size unless the script said)
+      game.objects.push(o); ids.set(a, o.id); made++;
+    } else if (k === "clone") { const o = objOf(a); if (o && game.objects.length < 2000) { const n2 = JSON.parse(JSON.stringify(o)); n2.id = uid(); game.objects.push(n2); ids.set(b, n2.id); made++; } }
+    else if (k === "destroy") { const o = objOf(a); if (o) { game.objects = game.objects.filter((x) => x !== o); game.scripts = game.scripts.filter((x) => x.on !== o.id); gone++; } }
+    else if (k === "pos") { const o = objOf(a), x = NUM(b, -5000, 5000), y = NUM(cc, -5000, 5000), z = NUM(d, -5000, 5000); if (o && x != null && y != null && z != null) { o.pos = [x, y, z].map(r2); changedN++; } }
+    else if (k === "rot") { const o = objOf(a), r = NUM(b, -1e6, 1e6); if (o && r != null) { o.rot[1] = r2(r % 360); changedN++; } }
+    else if (k === "size") { const o = objOf(a), v = [b, cc, d].map((x) => NUM(x, 0.1, 1024)); if (o && !v.includes(null)) { o.size = v.map(r2); changedN++; } }
+    else if (k === "color") { const o = objOf(a); if (o && /^#[0-9a-f]{6}$/i.test(b)) { o.color = b; changedN++; } }
+    else if (k === "vis") { const o = objOf(a); if (o) { o.visible = !!b; changedN++; } }
+    else if (k === "solid") { const o = objOf(a); if (o) { o.solid = !!b; changedN++; } }
+    else if (k === "transp") { const o = objOf(a), v = NUM(b, 0, 100); if (o && v != null) { if (v > 0) o.transp = v; else delete o.transp; changedN++; } }
+    else if (k === "text") { const o = objOf(a); if (o) { o.text = String(b).slice(0, 120); changedN++; } }
+    else if (k === "msg") msg = String(a).slice(0, 200);
+    else if (k === "print") output("print", String(a).slice(0, 500));
+    else if (k === "err") output("err", "📜 " + String(a).slice(0, 40) + (b ? " (line " + b + ")" : "") + ": " + String(cc).slice(0, 300), { id: String(d || ""), line: +b || 0 });
+  }
+  if (hasWork) { rebuildAll(); drawTree(); drawProps(); changed(true); }
+  const did = [made && "built " + made, changedN && "changed " + changedN, gone && "deleted " + gone].filter(Boolean).join(", ");
+  toast(msg || ("🧰 " + name + ": " + (did || "nothing to do") + (did ? " (Ctrl+Z takes it back)" : "")), 4);
+}
+$("btnTools").onclick = openToolsMenu;
+
+// ---------------------------------------------------------------- 💬 the chat button (top right)
+// The chat with the people in a shared game is optional: the 💬 Chat button shows or hides it (remembered on this
+// computer). New messages while it's hidden show as a number on the button.
+let chatOpen = false;
+try { chatOpen = localStorage.getItem("gv_studio_chat") === "1"; } catch {}
+function showChat(on) {
+  chatOpen = on;
+  try { localStorage.setItem("gv_studio_chat", on ? "1" : "0"); } catch {}
+  $("chatBox").classList.toggle("off", !on);
+  $("btnChat").classList.toggle("on", on);
+  if (on) { chatUnread = 0; $("chatNew").classList.add("hidden"); $("chatDot").classList.add("hidden"); $("chatBox").classList.remove("closed"); $("chatIn").focus(); }
+}
+$("btnChat").onclick = () => showChat(!chatOpen);
 
 // ---------------------------------------------------------------- the Output box (script errors and print())
 function clearOutput() { $("outList").innerHTML = ""; $("output").classList.add("hidden"); lastErr.clear(); }

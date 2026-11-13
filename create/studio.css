@@ -546,3 +546,13 @@ body.playing .arms-btn { display: none; }
 .ws-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 12px; }
 .ws-modes .arm-card .ai { font-size: 34px; }
 .fling-v { margin-left: 6px; color: #ffd25a; }
+/* 🧰 Studio Tools menu + 💬 chat button (editor.js) */
+.tools-btn.warn b { filter: grayscale(1); }
+.tools-btn.busy { opacity: .6; pointer-events: none; }
+.tools-menu { width: 300px; left: auto; right: 0; }
+.tools-menu .tool-from { margin-left: auto; color: var(--dim); font-size: 11px; }
+.tools-menu .tool-warn { white-space: normal; font-size: 12px; line-height: 1.35; text-align: left; }
+#btnChat { position: relative; }
+#btnChat.on { background: rgba(31, 174, 69, .25); border-color: var(--green); }
+.chat-dot { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: #e8261c; color: #fff; font: 700 10px/16px Inter, sans-serif; font-style: normal; }
+.chat-box.off { display: none; }
