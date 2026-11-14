@@ -11,6 +11,7 @@ import { RELAY } from "/create/js/net.js";
 import { GEAR, BLASTERS, RANKS, rankOf, nextRank, lootCap, BOOK_PAY } from "./crime.js";
 import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } from "./fishing.js";
 import { QUICK } from "./mp.js";
+import { CAMP_ITEMS, campItem, CAMP_MAX, TENT_COLORS } from "./camp.js";
 import { itemById, packCap } from "./npcs.js";
 import { PARTS, partById, KINDS, SHIP_FEE, have } from "./parts.js";
 import * as IN from "./input.js";
@@ -18,7 +19,7 @@ import * as IN from "./input.js";
 const $ = (id) => document.getElementById(id);
 let GM = null;
 const ICON = { drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
-ICON.atv = "🛵";
+ICON.atv = "🛵"; Object.assign(ICON, { bike125f: "🏍️", dual250: "🏍️", ebike: "🚲", efat: "🚲", mudmower: "🚜", racemower: "🚜", camper: "🚐" });
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const bars = (st) => `<div class="stats"><span>Speed</span><div class="bar"><i style="width:${st.speed * 100}%"></i></div><span>Acceleration</span><div class="bar"><i style="width:${st.accel * 100}%"></i></div><span>Off-road</span><div class="bar g"><i style="width:${st.offroad * 100}%"></i></div><span>Handling</span><div class="bar b"><i style="width:${st.handling * 100}%"></i></div></div>`;
@@ -89,11 +90,11 @@ function dealer() {
   side(`<h2>VALLEY MOTORS</h2><div class="bank">${money(S.money)}</div> <span class="note">Garage: ${S.cars.length} / ${slots()} rides</span>
     <div class="tabs"><button type="button" data-a="tab" data-v="rides" class="${dTab === "rides" ? "on" : ""}">🚗 Rides</button><button type="button" data-a="tab" data-v="trailers" class="${dTab === "trailers" ? "on" : ""}">🚛 Trailers</button><button type="button" data-a="tab" data-v="winners" class="${dTab === "winners" ? "on" : ""}">🏆 Winners</button></div>
     <h3>${ICON[it.id] || "🚗"} ${esc(it.name)}</h3><p class="sub">${esc(it.desc)}</p>
-    ${st ? bars(st) + `<p class="note">Top speed: <b>${mph(tune({ id: v.id, tires: "street", engine: 0, limit: 1, lift: 0 }).top)} mph</b> on the road. ${v.tow >= 2 ? "Can pull any trailer." : v.tow === 1 ? "Can pull the small trailer." : "Can't pull trailers."} ${v.size <= 2 ? "Fits on a trailer." : ""}</p><p class="note"><b>Pick your color:</b></p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === (rColor ?? v.color) ? "on" : ""}" style="background:${hex(p)}" data-a="rcol" data-v="${p}"></button>`).join("")}</div>` : `<p class="note">Room for <b>${T.cap}</b> small rides${T.maxSize > 1 ? " (a car takes 2)" : ""}.</p>${T.enclosed ? `<p class="note"><b>Pick your color:</b></p>${swatches(tColor, "tcol")}<p class="note">Walk or drive up to the back and press E to open the door. T closes it.</p>` : ""}`}
+    ${st ? bars(st) + `<p class="note">Top speed: <b>${mph(tune({ id: v.id, tires: "street", engine: 0, limit: 1, lift: 0 }).top)} mph</b> on the road. ${v.tow >= 2 ? "Can pull any trailer." : v.tow === 1 ? "Can pull the small trailer." : "Can't pull trailers."} ${v.size <= 2 ? "Fits on a trailer." : ""}</p><p class="note"><b>Pick your color:</b></p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === (rColor ?? v.color) ? "on" : ""}" style="background:${hex(p)}" data-a="rcol" data-v="${p}"></button>`).join("")}</div>` : (T.rv ? `<p class="note">You can live in it! Tow it anywhere (any truck that can pull the big trailers), unhitch it and walk in the side door.</p>` : `<p class="note">Room for <b>${T.cap}</b> small rides${T.maxSize > 1 ? " (a car takes 2)" : ""}.</p>`) + (T.paintable ? `<p class="note"><b>Pick your color${T.rv ? " (the stripes + awning)" : ""}:</b></p>${swatches(tColor, "tcol")}${T.enclosed ? `<p class="note">Walk or drive up to the back and press E to open the door. T closes it.</p>` : ""}` : "")}
     <div class="btns"><button type="button" class="big" data-a="buy" ${canBuy ? "" : "disabled"}>${it.price ? "BUY " + money(it.price) : "FREE"}</button>
     ${full ? `<span class="note">Garage full! Buy a bigger house.</span>` : S.money < it.price ? `<span class="note">You need ${money(it.price - S.money)} more. Do jobs!</span>` : ""}</div>
     <div class="list">${list.map((x) => `<button type="button" class="item ${x.id === dSel ? "sel" : ""}" data-a="sel" data-v="${x.id}"><span class="ico">${ICON[x.id] || "🚗"}</span><span class="nm"><b>${esc(x.name)}${!T && own(x.id) ? `<span class="tag">OWNED${own(x.id) > 1 ? " x" + own(x.id) : ""}</span>` : ""}</b><small>${esc(x.desc).slice(0, 70)}...</small></span><span class="pr">${x.price ? money(x.price) : "FREE"}</span></button>`).join("")}</div>`, "dealer");
-  GM.showroom(it.id, T ? (T.enclosed ? tColor : undefined) : rColor ?? undefined);
+  GM.showroom(it.id, T ? (T.paintable ? tColor : undefined) : rColor ?? undefined);
   onAct = (a, val) => {
     if (a === "tab") { dTab = val; dSel = val === "rides" ? "atv" : "utility"; SFX.click(); dealer(); }
     if (a === "sel") { dSel = val; rColor = null; SFX.click(); dealer(); }
@@ -218,7 +219,7 @@ function house(h) {
       <div class="btns">${S.home !== h.id ? `<button type="button" class="small" data-a="home">⭐ Make this my home</button>` : ""}<button type="button" class="small" data-a="builder">🔧 Build a ride from parts</button>${h.price ? `<button type="button" class="small" data-a="sellHouse">💲 Sell this house for ${money(Math.round(h.price * 0.6))}</button>` : ""}</div>
       <h3>Your rides</h3><div class="list">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid), d = C ? Math.round(Math.hypot(C.b.x - h.garage.x, C.b.z - h.garage.z)) : 0, onTr = C && C.on; return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(rideName(c))}${c.built ? '<span class="tag">BUILT</span>' : ""}</b><small>${onTr ? "On a trailer" : d < 25 ? "Parked here" : d + " m away"}${C === GM.mine() ? " · you're driving it" : ""}</small></span>
         <span class="btns" style="margin:0"><button type="button" class="small" data-a="drive" data-v="${c.uid}">Drive</button>${c.built ? (c.entered ? `<span class="tag">🏆 ENTERED</span>` : `<button type="button" class="small" data-a="contest" data-v="${c.uid}">🏆 Enter contest</button>`) : ""}${d >= 25 || onTr ? `<button type="button" class="small" data-a="bring" data-v="${c.uid}">Bring here${d > 60 ? " $25" : ""}</button>` : ""}${S.cars.length > 1 && vehicleById(c.id).price ? `<button type="button" class="small" data-a="sell" data-v="${c.uid}">Sell ${money(vehicleById(c.id).price / 2)}</button>` : ""}</span></div>`; }).join("")}</div>
-      ${S.trailers.length ? `<h3>Your trailers</h3><div class="list">${S.trailers.map((t) => { const T = GM.G.TRS.get(t.uid), d = Math.round(Math.hypot(T.x - h.garage.x, T.z - h.garage.z)); return `<div class="item"><span class="ico">${ICON[t.type]}</span><span class="nm"><b>${esc(trailerById(t.type).name)}</b><small>${T.hitched ? "Hitched to a truck" : d < 25 ? "Parked here" : d + " m away"} · ${T.loaded.length ? T.loaded.length + " ride(s) on it" : "empty"}</small></span>${d >= 25 ? `<button type="button" class="small" data-a="bringT" data-v="${t.uid}">Bring here</button>` : ""}</div>${t.type === "enclosed" ? `<p class="note">Repaint it ($150):</p>` + swatches(t.color, "tpaint").replace(/data-v="(\d+)"/g, 'data-v="${t.uid}:$1"') : ""}`; }).join("")}</div>` : ""}`;
+      ${S.trailers.length ? `<h3>Your trailers</h3><div class="list">${S.trailers.map((t) => { const T = GM.G.TRS.get(t.uid), d = Math.round(Math.hypot(T.x - h.garage.x, T.z - h.garage.z)); return `<div class="item"><span class="ico">${ICON[t.type]}</span><span class="nm"><b>${esc(trailerById(t.type).name)}</b><small>${T.hitched ? "Hitched to a truck" : d < 25 ? "Parked here" : d + " m away"} · ${T.loaded.length ? T.loaded.length + " ride(s) on it" : "empty"}</small></span>${d >= 25 ? `<button type="button" class="small" data-a="bringT" data-v="${t.uid}">Bring here</button>` : ""}</div>${trailerById(t.type).paintable ? `<p class="note">Repaint it ($150):</p>` + swatches(t.color, "tpaint").replace(/data-v="(\d+)"/g, 'data-v="${t.uid}:$1"') : ""}`; }).join("")}</div>` : ""}`;
   }
   side(html, "house");
   onAct = (a, val) => {
@@ -304,7 +305,7 @@ function phone(view = "home") {
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["camp", "⛺", "Camp"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? (r.drift ? S.best[r.id].toLocaleString() + " pts" : H.fmtTime(S.best[r.id])) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
@@ -329,6 +330,7 @@ function phone(view = "home") {
   if (view === "messages") { GM.mp.unread = 0; html = messagesHtml(back); }
   phoneView = view;
   if (view === "fishlog") html = fishLogHtml(back);
+  if (view === "camp") html = campHtml(back);
   if (view === "backpack") html = `<h2>🎒 BACKPACK</h2>${back}<p class="sub">${S.backpack.length} / ${packCap()} things · worth about ${money(packValue())} at a Pawn Shop${S.gear.duffel ? "" : " (a Big Duffel Bag from the Tool Barn makes it bigger)"}</p>${packList(false)}<div class="btns"><button type="button" class="small" data-a="gpsPawn">📍 Nearest Pawn Shop</button></div>`;
   if (view === "ideas") html = `<h2>💡 IDEAS</h2>${back}<p class="sub">What should we add to Mud Valley? New cars, places, jobs, anything! Your idea goes straight to the game maker.</p>
     <textarea id="ideaTxt" maxlength="480" rows="5" placeholder="I think you should add..." style="width:100%;box-sizing:border-box;font:inherit;padding:8px;border-radius:8px"></textarea>
@@ -395,6 +397,10 @@ function phone(view = "home") {
     if (a === "gpsPawn") { const me = GM.mePos(); let best = null; for (const [id, p] of Object.entries(PLACES)) if (id.startsWith("pawn") && (!best || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(best.x - me.x, best.z - me.z))) best = p; GM.setWaypoint({ x: best.x, z: best.z, name: best.name }); close(); }
     if (a === "gpsCar") { const C = GM.G.CARS.get(+val); const p = C.on ? C.on : C.b; GM.setWaypoint({ x: p.x, z: p.z, name: "your " + vehicleById(C.s.id).name }); close(); }
     if (a === "gpsPlace") { const p = PLACES[val]; GM.setWaypoint({ x: p.x, z: p.z, name: p.name }); close(); }
+    if (a === "campSet") { if (GM.setUpCamp(val)) close(); else phone("camp"); }
+    if (a === "campPack") { GM.packCamp(+val); phone("camp"); }
+    if (a === "campPackNear") { const me = GM.mePos(); for (const it of S.camp.set.slice()) if (Math.hypot(it.x - me.x, it.z - me.z) < 40) GM.packCamp(it.u); phone("camp"); }
+    if (a === "campGps") { const it = S.camp.set.find((x) => x.u === +val); if (it) { GM.setWaypoint({ x: it.x, z: it.z, name: "your " + campItem(it.id).name }); close(); } }
     if (a === "gpsHouse") { const h = HOUSES.find((x) => x.id === val); GM.setWaypoint({ x: h.garage.x, z: h.garage.z, name: h.name }); close(); }
     if (a === "mute") { GM.muted(!S.muted); phone("settings"); }
     if (a === "wipe") { if (confirm("Really start over? Everything will be deleted!") && confirm("Are you SURE? This can't be undone.")) GM.wipe(); }
@@ -406,6 +412,7 @@ function phone(view = "home") {
     if (a === "mpLeave") { GM.mp.leave(); phone("friends"); }
     if (a === "mpKick") { if (confirm("Remove this player from your lobby?")) GM.mp.kick(+val); }
     if (a === "mpMute") { const p = GM.mp.players.get(+val); if (p) { p.mutedByMe = !p.mutedByMe; GM.mp.mute(+val, p.mutedByMe); phone("friends"); } }
+    if (a === "mpCops") { GM.mp.setCops(GM.mp.copsOn === false); return; }
     if (a === "mpChatRoom") { GM.mp.setChatRoom(!GM.mp.chatRoom); GM.mp.chatRoom = !GM.mp.chatRoom; phone("friends"); }
     if (a === "qt") { GM.mp.quick(+val); SFX.phone(); }
     if (a === "pin") { GM.mp.sendPin(); SFX.phone(); }
@@ -427,7 +434,7 @@ function lobbyHtml(back) {
   const host = M.host === M.id;
   return `<h2>👥 LOBBY</h2>${back}<div class="bank" style="font-size:28px;letter-spacing:3px">${esc(M.code)}</div><p class="note">Tell your friends this code! You are <b>${esc(M.name)}</b>${host ? " (host)" : ""}.</p>
     <div class="list"><div class="item"><span class="ico">🙂</span><span class="nm"><b>${esc(M.name)} (you)</b></span></div>${[...M.players.values()].map((p) => `<div class="item"><span class="ico">${p.v ? "🚗" : "🚶"}</span><span class="nm"><b>${esc(p.n)}${p.id === M.host ? '<span class="tag">HOST</span>' : ""}</b><small>${p.away ? "Reconnecting..." : p.v ? "Driving a " + esc((p.v.split("|")[1] || "ride")) : "On foot"}</small></span>${host ? `<button type="button" class="small" data-a="mpMute" data-v="${p.id}">${p.mutedByMe ? "Unmute" : "Mute"}</button><button type="button" class="small" data-a="mpKick" data-v="${p.id}">Remove</button>` : ""}</div>`).join("")}</div>
-    <div class="btns">${host ? `<button type="button" class="small" data-a="mpChatRoom">${M.chatRoom ? "Turn texting OFF for everyone" : "Turn texting ON"}</button>` : ""}<button type="button" class="small" data-a="view" data-v="messages">💬 Messages</button><button type="button" class="small" data-a="mpLeave">Leave lobby</button></div>`;
+    <p class="note">🚓 Cops: <b>${M.copsOn === false ? "OFF (nobody gets chased)" : "ON"}</b>${host ? "" : " (the host decides)"}</p><div class="btns">${host ? `<button type="button" class="small" data-a="mpChatRoom">${M.chatRoom ? "Turn texting OFF for everyone" : "Turn texting ON"}</button>` : ""}${host ? `<button type="button" class="small" data-a="mpCops">${M.copsOn === false ? "🚓 Turn the cops back ON" : "🚫 Turn the cops OFF"}</button>` : ""}<button type="button" class="small" data-a="view" data-v="messages">💬 Messages</button><button type="button" class="small" data-a="mpLeave">Leave lobby</button></div>`;
 }
 function messagesHtml(back) {
   const M = GM.mp;
@@ -487,6 +494,32 @@ function bait() {
     <p class="note">🐟 Lily Pond has perch, Golden Carp and Crystal Koi. The river has trout and pike. Legends say a Mud Monster Catfish lives in both...</p>`;
   side(html, "shop");
   onAct = (a, val) => { if (a === "sell") { GM.sellFish(); bait(); } if (a === "rod") { GM.buyRod(RODS.find((r) => r.id === val)); bait(); } };
+}
+// ---------------------------------------------------------------- the Camp Store (camp.js): tents, camp stuff + the RV
+let campColor = null;
+const campSw = (cur, act) => `<div class="swatches" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${TENT_COLORS.map((c) => `<button type="button" data-a="${act}" data-v="${c}" title="color" style="width:30px;height:30px;border-radius:50%;background:${hex(c)};border:3px solid ${c === cur ? "#ffd23a" : "rgba(255,255,255,0.5)"};cursor:pointer"></button>`).join("")}</div>`;
+function campShop() {
+  if (campColor == null) campColor = S.camp.color ?? TENT_COLORS[0];
+  const rv = trailerById("camper"), haveRV = S.trailers.some((t) => t.type === "camper");
+  const html = `<h2>🏕️ CAMP STORE</h2><div class="bank">${money(S.money)}</div><p class="sub">“Howdy, camper! Buy what you need, then set up your camp ANYWHERE: 📱 Phone → ⛺ Camp → Set up here.”</p>
+    <p class="note"><b>Tent + chair color:</b></p>${campSw(campColor, "ccol")}
+    <div class="list">${CAMP_ITEMS.map((it) => { const n = S.camp.have[it.id] || 0, out = S.camp.set.filter((x) => x.id === it.id).length; return `<div class="item"><span class="ico">${it.icon}</span><span class="nm"><b>${esc(it.name)}${n + out ? `<span class="tag">HAVE ${n + out}</span>` : ""}</b><small>${esc(it.desc)}</small></span><button type="button" class="mid" data-a="buy" data-v="${it.id}" ${S.money >= it.price ? "" : "disabled"}>${money(it.price)}</button></div>`; }).join("")}</div>
+    <h3>🚐 ${esc(rv.name)}</h3><p class="note">${esc(rv.desc)}${haveRV ? " <b>(You have one!)</b>" : ""}</p><p class="note"><b>Stripe color:</b></p>${swatches(tColor, "rcol")}
+    <div class="btns"><button type="button" class="big" data-a="rv" ${S.money >= rv.price ? "" : "disabled"}>BUY THE RV ${money(rv.price)}</button></div><p class="note">It gets parked right outside. Hitch it to a truck with T and tow it anywhere!</p>`;
+  side(html, "shop");
+  onAct = (a, val) => {
+    if (a === "ccol") { campColor = +val; S.camp.color = campColor; save(); SFX.click(); campShop(); }
+    if (a === "rcol") { tColor = +val; SFX.click(); campShop(); }
+    if (a === "buy") { if (GM.buyCamp(val, campColor)) H.toast(campItem(val).icon + " Bought a " + campItem(val).name + "!", "Set it up anywhere: 📱 Phone → ⛺ Camp.", "good", 3000); campShop(); }
+    if (a === "rv") { if (GM.buyTrailer("camper", tColor, { x: 300, z: 128, yaw: Math.PI / 2, name: "by the Campground" })) close(); }
+  };
+}
+function campHtml(back) {
+  const me = GM.mePos(), have = CAMP_ITEMS.filter((it) => S.camp.have[it.id] > 0), set = S.camp.set.map((it) => ({ it, d: Math.round(Math.hypot(it.x - me.x, it.z - me.z)) })).sort((a, b) => a.d - b.d);
+  return `<h2>⛺ CAMP</h2>${back}<p class="sub">Set up your camp anywhere! It goes right in front of you. (${S.camp.set.length} / ${CAMP_MAX} set up)</p>
+    <h3>In your bag</h3>${have.length ? `<div class="list">${have.map((it) => `<div class="item"><span class="ico">${it.icon}</span><span class="nm"><b>${esc(it.name)} ×${S.camp.have[it.id]}</b></span><button type="button" class="mid" data-a="campSet" data-v="${it.id}">Set up here</button></div>`).join("")}</div>` : `<p class="note">Nothing yet. Buy tents and camp stuff at the Camp Store (by the Campground).</p><div class="btns"><button type="button" class="small" data-a="gpsPlace" data-v="campstore">📍 GPS to the Camp Store</button></div>`}
+    <h3>Set up</h3>${set.length ? `<div class="list">${set.map(({ it, d }) => `<div class="item"><span class="ico">${campItem(it.id).icon}</span><span class="nm"><b>${esc(campItem(it.id).name)}</b><small>${d < 15 ? "Right here" : d + " m away"}</small></span><button type="button" class="small" data-a="campGps" data-v="${it.u}">📍</button><button type="button" class="small" data-a="campPack" data-v="${it.u}">Pack up</button></div>`).join("")}</div>
+      <div class="btns"><button type="button" class="small" data-a="campPackNear">Pack up everything near me</button></div>` : `<p class="note">Nothing set up yet.</p>`}`;
 }
 // ---------------------------------------------------------------- pawn shops + your backpack (npcs.js)
 const packList = (sell) => S.backpack.length ? `<div class="list">${S.backpack.map((it, i) => { const I = itemById(it.id); return `<div class="item"><span class="ico">${I.icon}</span><span class="nm"><b>${esc(I.name)}</b></span><span class="pr">${money(it.v)}</span>${sell ? `<button type="button" class="small" data-a="sell" data-v="${i}">Sell</button>` : ""}</div>`; }).join("")}</div>` : `<p class="note">Your backpack is empty. Knock people out (they drop their stuff) and pick up their backpacks with E.</p>`;
@@ -573,7 +606,7 @@ function intro() {
   onAct = (a) => { if (a === "go") { S.intro = true; save(); close(); GM.setWaypoint({ x: PLACES.jobs.x, z: PLACES.jobs.z, name: "the Job Center" }); H.banner("MUD VALLEY", "Follow the purple arrow to the Job Center!"); } };
 }
 
-export const UI = { close, dealer, customs, house, parts, builder, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged, pawn };
+export const UI = { camp: campShop, close, dealer, customs, house, parts, builder, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged, pawn };
 export function initMenus(game) {
   GM = game; wire();
   $("mapClose").addEventListener("click", () => { SFX.click(); closeMap(); });

@@ -11,7 +11,7 @@ import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
 import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
-import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor } from "./trailer.js";
+import { buildTrailer, trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor, RV_DOOR } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
 import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js";
 import { Fishing, rodById } from "./fishing.js";
@@ -19,8 +19,9 @@ import { Heist } from "./heist.js";
 import { NPCs } from "./npcs.js";
 import { Drops, PARTS, partById, addPart, have, SHIP_FEE } from "./parts.js";
 import { RELAY, account } from "/create/js/net.js";
-import { Interiors, buildingById, JAIL_SPOT, POCKET } from "./interiors.js";
+import { Interiors, buildingById, JAIL_SPOT, POCKET, rvBuilding } from "./interiors.js";
 import { MP } from "./mp.js";
+import { Camp, campItem, campModel } from "./camp.js";
 import { FX } from "./fx.js";
 import { SFX, audio, setMuted, engine } from "./sfx.js";
 import { S, save, uid, slots, pay, spend, money, wipe } from "./save.js";
@@ -63,12 +64,12 @@ const G = {
   // fast travel to your home (from the phone)
   goHome(h) { if (crime.noTeleport()) return; const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
 };
-let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs, drops;
+let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs, drops, camp;
 const cam = { yaw: Math.PI, pitch: 0.3, zoom: 1, x: 0, y: 5, z: 0, tx: 0, ty: 0, tz: 0, snap: true };
 
 // ---------------------------------------------------------------- your vehicles + trailers in the world
 function spawnCar(s) {
-  const m = buildCar(s); scene.add(m.root);
+  const m = buildCar(s); scene.add(m.root); if (m.rider) m.rider.root.visible = false; // (nobody sits in a parked ride)
   const b = makeBody(s, m);
   const c = { s, m, b, on: null };
   settle(b);
@@ -127,7 +128,7 @@ function goOutside() {
 }
 // where you are on the map (inside a building = at its front door)
 function mapPos() { const c = mine(), b = c ? c.b : G.me.w; if (inside()) { const bd = interiors.cur.bd; return { x: bd.dx, y: groundAt(bd.dx, bd.dz), z: bd.dz, vx: 0, vz: 0, yaw: bd.out }; } return b; }
-const MENUS = { pawn: () => UI.pawn(), dealer: () => UI.dealer(), jobs: () => UI.jobs(), gear: () => UI.gear(), blasters: () => UI.blasters(), bait: () => UI.bait(), police: () => UI.police(), hideout: () => UI.hideout() };
+const MENUS = { camp: () => UI.camp(), pawn: () => UI.pawn(), dealer: () => UI.dealer(), jobs: () => UI.jobs(), gear: () => UI.gear(), blasters: () => UI.blasters(), bait: () => UI.bait(), police: () => UI.police(), hideout: () => UI.hideout() };
 function insideActions(out) {
   const R = interiors.cur, w = G.me.w, l = interiors.local(w), bd = R.bd;
   if (itemsOwned().includes("blaster")) out.Q = { text: "Shoot", fn: useItem };
@@ -136,14 +137,15 @@ function insideActions(out) {
   if (out.E) return out;
   for (const sp of R.spots) {
     if (Math.hypot(sp.x - l.x, sp.z - l.z) > sp.r) continue;
-    if (sp.act === "menu") out.E = { text: { dealer: "Talk to the sales clerk (buy rides)", jobs: "Look at the Job Board", gear: "Shop for robber gear", blasters: "Shop for guns", bait: "Buy rods + sell your fish", police: "Talk to the desk sergeant", pawn: "Sell stuff to the pawn broker 💰", hideout: "Look at the secret map (stash loot)" }[bd.menu] || "Talk", fn: MENUS[bd.menu] };
+    if (sp.act === "menu") out.E = { text: { dealer: "Talk to the sales clerk (buy rides)", jobs: "Look at the Job Board", gear: "Shop for robber gear", blasters: "Shop for guns", bait: "Buy rods + sell your fish", police: "Talk to the desk sergeant", pawn: "Sell stuff to the pawn broker 💰", camp: "Shop for tents + camping gear ⛺", hideout: "Look at the secret map (stash loot)" }[bd.menu] || "Talk", fn: MENUS[bd.menu] };
     else if (sp.act === "chat") out.E = { text: "Say hi to the " + (bd.keeper || "neighbor").toLowerCase(), fn: () => { SFX.phone(); H.toast("“" + (sp.say || "Hi there! Welcome to " + bd.name + "!") + "”", bd.keeper || "", "", 3200); } };
     else if (sp.act === "snack") out.E = { text: "Buy a snack ($5)", fn: () => { if (spend(5)) { SFX.cash(); H.bumpMoney(); H.toast("Yum! 🍪", "That hit the spot.", "good", 1800); save(); } else SFX.nope(); } };
-    else if (sp.act === "sleep") out.E = { text: S.houses.includes(bd.house.id) ? "Take a nap" : "Test the bed", fn: () => { H.flash("#000"); SFX.phone(); H.toast("Zzz... good morning!", "Nothing beats a nap.", "good", 2400); } };
+    else if (sp.act === "snack") out.E = { text: "Grab a snack from the fridge", fn: () => { SFX.phone(); H.toast(["🥪 Yum, a sandwich!", "🧃 A juice box!", "🍎 A crunchy apple!", "🌭 A cold hot dog... still good!"][Math.floor(Math.random() * 4)], "", "good", 2000); } };
+    else if (sp.act === "sleep") out.E = { text: !bd.house || S.houses.includes(bd.house.id) ? "Take a nap" : "Test the bed", fn: () => { H.flash("#000"); SFX.phone(); H.toast("Zzz... good morning!", "Nothing beats a nap.", "good", 2400); } };
     else if (sp.act === "tour") out.E = { text: "Buy this house (" + money(bd.house.price) + ")", fn: () => UI.house(bd.house) };
     if (out.E) break;
   }
-  if (!out.E && bd.kind === "home" && !S.houses.includes(bd.house.id)) G.hint = G.hint || null;
+  if (!out.E && bd.kind === "home" && bd.house && !S.houses.includes(bd.house.id)) G.hint = G.hint || null;
   return out;
 }
 // ---------------- things you hold (X switches: empty hands -> blaster -> fishing rod -> spike strips)
@@ -402,6 +404,8 @@ function actions() {
   // E: robbing, cuffing, booking (hold E)
   const cme = { x: me.x, z: me.z, inCar: !!c };
   if (!out.E) out.E = crime.bookAction(cme) || crime.cuffAction(cme) || (c ? null : crime.robAction(cme) || npcs.bagAction(cme));
+  if (!out.E && !c && camp) { const e = camp.near(me.x, me.z); if (e) out.E = campAction(e); }
+  if (!out.E && !c) { const rv = rvNear(me); if (rv) out.E = { text: "Go inside your RV", fn: () => goInside(rvDoorBd(rv)) }; }
   if (!out.E && !c) { const bd = interiors.doorNear(me.x, me.z); if (bd) out.E = { text: (bd.kind === "home" ? (S.houses.includes(bd.house.id) ? "Go inside your house" : "Take a tour: " + bd.name) : "Go inside " + bd.name), fn: () => goInside(bd) }; }
   // E: places
   if (!out.E) {
@@ -427,6 +431,20 @@ function actions() {
 }
 // trailers: you DRIVE your ride up the ramp to load it (the big box trailer's door has to be open). Lined up behind the
 // trailer, it lets you through; once you're past the back edge, the ride parks on the deck and you hop out.
+// your camp (camp.js): sleep in your tent, roast marshmallows...
+function campAction(e) {
+  const id = e.it.id, t = (title, sub) => () => { SFX.phone(); H.toast(title, sub || "", "good", 2600); };
+  if (campItem(id).tent) return { text: "Sleep in your tent", fn: () => { H.flash("#000"); SFX.phone(); H.toast("Zzz... good morning, camper! ⛺", "Nothing beats sleeping outside.", "good", 2600); } };
+  if (id === "fire") return { text: "Roast a marshmallow 🔥", fn: () => { fx.sparks(e.it.x, groundAt(e.it.x, e.it.z) + 0.9, e.it.z, 10); t(["🔥 Perfectly golden!", "🔥 Oops, it caught on fire! Still yummy.", "🔥 S’mores time!"][Math.floor(Math.random() * 3)])(); } };
+  if (id === "grill") return { text: "Grill a burger 🍔", fn: t("🍔 Sizzle sizzle... delicious!") };
+  if (id === "chairs") return { text: "Sit and relax", fn: t("😌 Ahh, the great outdoors.") };
+  if (id === "table") return { text: "Have a picnic 🧺", fn: t("🧺 Sandwiches, chips and lemonade!") };
+  return { text: "Look at the lantern", fn: t("🏮 It’s glowing nicely.") };
+}
+// your RV camper's side door (in the world) + the "building" you walk into
+function rvDoorAt(t, out = 0) { const c = Math.cos(t.yaw), s = Math.sin(t.yaw), lx = RV_DOOR.x - out, lz = RV_DOOR.z; return { x: t.x + lx * c + lz * s, z: t.z - lx * s + lz * c }; }
+function rvNear(me) { for (const t of G.TRS.values()) if (t.T.rv) { const p = rvDoorAt(t, 0.6); if (Math.hypot(p.x - me.x, p.z - me.z) < 2.2) return t; } return null; }
+function rvDoorBd(t) { const p = rvDoorAt(t, 0.4); return rvBuilding(p.x, p.z, Math.atan2(-Math.cos(t.yaw), Math.sin(t.yaw))); }
 const deckBack = (t) => ({ utility: -1.7, flatbed: -4.8, enclosed: -3.6 })[t.T.id] ?? -2;
 const deckFront = (t) => ({ utility: 2.0, flatbed: 4.6, enclosed: 3.0 })[t.T.id] ?? 2;
 const rampLen = (t) => ({ utility: 1.3, flatbed: 1.8, enclosed: 2.9 })[t.T.id] ?? 1.5;
@@ -434,7 +452,7 @@ const rampLen = (t) => ({ utility: 1.3, flatbed: 1.8, enclosed: 2.9 })[t.T.id] ?
 function deckAt(x, z) {
   let best = -Infinity;
   for (const t of G.TRS.values()) {
-    if (Math.abs(x - t.x) > 10 || Math.abs(z - t.z) > 10) continue;
+    if (t.T.rv || Math.abs(x - t.x) > 10 || Math.abs(z - t.z) > 10) continue;
     const p = trailerLocal(t, x, z); if (Math.abs(p.lx) > 1.3) continue;
     const back = deckBack(t), top = t.y + t.T.deckY;
     if (p.lz >= back && p.lz <= deckFront(t)) best = Math.max(best, top);
@@ -567,14 +585,15 @@ export const GAME = {
     enterCar(c); SFX.buy(); H.bumpMoney(); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 60);
     H.banner("NEW RIDE!", v.name); save(); return true;
   },
-  buyTrailer(type, color) {
+  buyTrailer(type, color, at) {
     const T = trailerById(type);
     if (!spend(T.price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
     const s = { uid: uid(), type, x: -60, z: -16, yaw: 0, hitched: null };
-    if (T.enclosed) { s.color = color ?? 0x1a1a1e; s.open = false; }
-    const f = freeSpot(-60, 14, 0, T.len * 2); s.x = f.x; s.z = f.z;
+    if (T.paintable) s.color = color ?? (T.rv ? 0x2a7ad0 : 0x1a1a1e);
+    if (T.enclosed) s.open = false;
+    const p = at || { x: -60, z: 14, yaw: 0 }, f = freeSpot(p.x, p.z, p.yaw, T.len * 2); s.x = f.x; s.z = f.z; s.yaw = p.yaw;
     S.trailers.push(s); spawnTrailer(s); SFX.buy(); H.bumpMoney();
-    H.toast(T.name + " bought!", "It's parked by the dealership. Back your truck up to it and press T.", "good", 5000); save(); return true;
+    H.toast(T.name + " bought!", "It's parked " + (at ? at.name || "outside" : "by the dealership") + ". Back your truck up to it and press T." + (T.rv ? " Walk up to its side door and press E to go inside!" : ""), "good", 5500); save(); return true;
   },
   sellCar(u) {
     const c = G.CARS.get(u); if (!c || S.cars.length <= 1) return false;
@@ -609,6 +628,16 @@ export const GAME = {
     H.banner("NEW HOME!", h.name + " · garage room: " + slots() + " rides"); save(); return true;
   },
   setHome(id) { S.home = id; houseSigns(); save(); },
+  // ---- camping (camp.js): buy at the Camp Store, set up anywhere from the phone
+  buyCamp(id, color) { const it = campItem(id); if (!it || !spend(it.price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } camp.buy(id, color); SFX.cash(); H.bumpMoney(); return true; },
+  setUpCamp(id) {
+    if (inside()) { SFX.nope(); H.toast("Go outside first!", "You can set up your camp anywhere outside.", "warn"); return false; }
+    if (mine()) { SFX.nope(); H.toast("Get out of your ride first", "", "warn"); return false; }
+    const why = camp.setUp(id, G.me.w); if (why) { SFX.nope(); H.toast("Can’t set it up", why, "warn"); return false; }
+    SFX.load(); fx.dust(G.me.w.x, G.me.w.y, G.me.w.z, 6); H.toast(campItem(id).icon + " " + campItem(id).name + " is set up!", campItem(id).tent ? "Walk up to it and press E to sleep in it." : "", "good", 2600); return true;
+  },
+  packCamp(u) { camp.packUp(u); SFX.load(); },
+  get camp() { return camp; },
   // sell a house back for 60% of what it cost (you need room left for all your rides)
   sellHouse(h) {
     if (!S.houses.includes(h.id) || !h.price) return false;
@@ -897,8 +926,8 @@ function carVsStuff(b) {
   for (const t of G.TRS.values()) {
     if (t.hitched === b) continue;
     if (me && me.b === b && (canDriveIn(t, me) || onDeckZone(t, me))) continue; // (lined up behind it / up on it: let the ride drive up the ramp)
-    const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : t.T.enclosed ? 3.2 : 1.8;
-    for (const a of carCircles(b)) for (const s of [-half, 0, half]) {
+    const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : t.T.enclosed ? 3.2 : t.T.rv ? 3.4 : 1.8;
+    for (const a of carCircles(b)) for (const s of t.T.rv ? [-3.4, -1.7, 0, 1.7, 3.4] : [-half, 0, half]) {
       const kx = t.x + fx * s, kz = t.z + fz * s, dx = a.x - kx, dz = a.z - kz, d = Math.hypot(dx, dz), m = a.r + 1.3;
       if (d >= m || d < 1e-4) continue;
       const nx = dx / d, nz = dz / d; b.x += nx * (m - d); b.z += nz * (m - d);
@@ -1037,7 +1066,7 @@ function draw(dt) {
     else if (G.aimT > 0) p.pose("aim", G.time);
     else p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
   }
-  crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
+  crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); camp.draw(G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
   if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
   if (G.tow && G.tow.towCar.smoke) { G.tow.towCar.smoke.children.forEach((s, i) => { s.position.y = 1 + ((G.time * 0.8 + i * 0.4) % 1.6); s.scale.setScalar(0.6 + ((G.time * 0.8 + i * 0.4) % 1.6) * 0.6); }); }
@@ -1129,7 +1158,7 @@ async function boot() {
     exitCar: () => { if (mine()) exitCar(); }, teleport: (x, z, yaw) => teleportMe(x, z, yaw), lockWalk: (v) => { G.lockWalk = v; }, roleChanged, policeCar, mySiren: () => G.siren && !!mine() && mine().police, shake: (k) => { G.shake = Math.max(G.shake, k); },
     indoors: () => inside(), roomId: () => (inside() ? interiors.cur.bd.id : null), openVault: () => heist.openVault(),
     civilians: () => npcs.targets(), knockCiv: (c, role) => npcs.knock(c, role), alarm: (x, z, r) => npcs.alarm(x, z, r), dropMine: (x, z) => npcs.dropMine(x, z), confiscate: () => npcs.confiscate(),
-    racing: () => !!G.race, onRoad: () => !!mine() && (mine().b.surf === SURF.ROAD || mine().b.surf === SURF.TOWN),
+    racing: () => !!G.race, copsOff: () => !!(mp && mp.copsOff), onRoad: () => !!mine() && (mine().b.surf === SURF.ROAD || mine().b.surf === SURF.TOWN),
     friends: () => (mp && mp.on ? mp.list() : []), zap: (id, k) => mp.zap(id, k), shared: (x, y, z, tx, ty, tz, w) => mp.shot([x, y, z], [tx, ty, tz], w),
   });
   fishing = new Fishing({ scene, fx, toast: H.toast, banner: H.banner, me: () => G.me.w, person: () => G.me.p, rodModel: () => (S.equip === "rod" ? G.me.p.item && G.me.p.item.userData.bend ? G.me.p.item : itemModels["r" + S.rod] : null) });
@@ -1140,10 +1169,20 @@ async function boot() {
   npcs = new NPCs({ scene, me: () => crime.api.me(), toast: H.toast, bumpMoney: H.bumpMoney, crime, quality: () => quality });
   heist = new Heist({ scene, crime, interiors, me: () => G.me.w, toast: H.toast, banner: H.banner, bumpMoney: H.bumpMoney,
     aim() { G.aimT = 0.3; const w = G.me.w; if (w.moving < 0.5) w.yaw = heist.aimYaw(); } });
+  camp = new Camp(scene);
   G.pins = [];
   mp = new MP({
     scene, toast: H.toast, look: () => lookFor(S.role, S.gear.mask),
     me() { const c = mine(), p = mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint } : null }; },
+    // what you have out near you, so friends see it too: parked rides, trailers, your camp (closest first)
+    parked() {
+      const me = mapPos(), my = mine(), out = [], d = (x, z) => Math.hypot(x - me.x, z - me.z);
+      if (inside()) return [];
+      for (const c of G.CARS.values()) if (c !== my && !c.on && !c.s.bed && d(c.b.x, c.b.z) < 250) out.push([d(c.b.x, c.b.z), "c", c.s.id, c.s.paint, c.b.x, c.b.z, c.b.yaw, 0]);
+      for (const t of G.TRS.values()) { const h = !!(my && t.hitched === my.b); if (h || (!t.hitched && d(t.x, t.z) < 250)) out.push([h ? -1 : d(t.x, t.z), "t", t.T.id, t.s.color ?? 0x4a4e58, t.x, t.z, t.yaw, h]); }
+      for (const it of S.camp.set) if (d(it.x, it.z) < 250) out.push([d(it.x, it.z), "p", it.id, it.c ?? 0xff6a3a, it.x, it.z, it.yaw || 0, 0]);
+      return out.sort((a, b) => a[0] - b[0]).map((q) => q.slice(1));
+    },
     pin(who, x, z) { G.pins.push({ x, z, name: who }); if (G.pins.length > 5) G.pins.shift(); GAME.setWaypoint({ x, z, name: who + "’s pin 📍" }); },
     changed() { UI.mpChanged && UI.mpChanged(); $("bPhone").classList.toggle("dot", mp.unread > 0); },
     zapped: (p, k) => crime.zappedBy(p, k), shot: (p, x, w) => crime.friendShot(p, x, w),

@@ -585,6 +585,19 @@ export function baitShop(scene, b) {
   bsign(scene, b, "BAIT & TACKLE", 7, 1.3, 0, 4.9, 3.15, { bg: "#3a8ad0", fg: "#ffffff" });
   b.add(new THREE.TorusGeometry(0.6, 0.15, 6, 12, Math.PI * 1.5), 0xff7aa8, 3.2, 4.2, 3.2, 0, 0, 0.6); // a giant worm
 }
+// the Camp Store: a log cabin shop with a green roof, a porch, a canoe on top and a tent out front
+export function campStore(scene, b) {
+  for (let y = 0; y < 3.6; y += 0.4) for (const z of [3.5, -3.5]) b.add(new THREE.CylinderGeometry(0.22, 0.22, 10.6, 7), y % 0.8 < 0.38 ? 0x9a6a3a : 0x8a5a30, 0, y + 0.2, z, 0, 0, Math.PI / 2);
+  b.box(10, 3.6, 7, 0, 0, 0, 0x7a4e28).solid(0, 0, 5, 3.5); b.roof(11.4, 2.4, 8.6, 0, 3.6, 0, 0x2f6a3a);
+  b.box(10, 0.3, 2.4, 0, 0, 4.7, 0xa07040); for (const x of [-4.8, 4.8]) b.cyl(0.16, 3.4, x, 0, 5.8, 0x8a5a30, 6);
+  b.add(prismGeo(10.6, 0.9, 2.8), 0x2f6a3a, 0, 3.2, 4.8, 0, 0, 0, "solid", 1, 1, 1);
+  b.box(1.6, 2.8, 0.12, 0, 0, 3.56, 0x5a3a1a); for (const x of [-3, 3]) { b.box(1.8, 1.2, 0.1, x, 1.2, 3.57, 0xffe9a8, "glow"); b.box(2, 0.12, 0.12, x, 2.4, 3.6, 0x5a3a1a); }
+  b.add(new THREE.CylinderGeometry(0.45, 0.2, 5.4, 8), 0xe0402a, 0, 6.2, 0, 0, 0, Math.PI / 2); // a canoe on the roof
+  b.add(prismGeo(2.6, 1.8, 3), 0xff8a1a, -4.2, 0, 7.6, 0, 0.3, 0); b.add(prismGeo(2.2, 1.5, 2.6), 0x3a9aff, 4.2, 0, 7.6, 0, -0.3, 0); // display tents
+  b.box(1.2, 0.8, 0.6, 3.2, 0.3, 5.0, 0x3a8ad0); b.box(1.2, 0.2, 0.6, 3.2, 1.1, 5.0, 0xffffff); // a cooler
+  for (let i = 0; i < 4; i++) b.add(new THREE.CylinderGeometry(0.16, 0.16, 1.1, 6), 0xb08050, -3.4, 0.45 + i * 0.05, 5.1 + (i - 1.5) * 0.3, 0, 0, Math.PI / 2); // firewood
+  bsign(scene, b, "CAMP STORE", 7.5, 1.3, 0, 4.4, 3.9, { bg: "#2f6a3a", fg: "#ffe9a8" });
+}
 export function longDock(scene, b, len = 16) {
   for (let i = 0; i < len / 1.15; i++) b.box(3, 0.2, 1.1, 0, 0.5, i * 1.15, 0xa07848);
   for (let i = 0; i < len / 1.15; i += 3) for (const x of [-1.4, 1.4]) b.cyl(0.15, 3.5, x, -2.8, i * 1.15, 0x7a5a30, 6);

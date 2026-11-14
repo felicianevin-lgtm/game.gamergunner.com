@@ -31,6 +31,7 @@ export const BUILDINGS = [
   ...[[-40, -80, 0], [42, -80, 0], [-90, 80, Math.PI], [-40, 80, Math.PI], [-18, 80, Math.PI], [18, 80, Math.PI], [40, 80, Math.PI], [90, 80, Math.PI]].map(([x, z, yaw], k) => T("town" + k, "A neighbor’s house", "neighbor", x, z, yaw, [(11 + (k % 3)) / 2 - 2, 5.1], 11, 8)),
   T("lumber", "Lumber Yard Office", "office", -304, -10, 0, [14, -2.4], 8, 6, { keeper: "Foreman" }),
   T("ranger", "Ranger Station", "office", -300, 289, 0, [10, 3.6], 8, 6, { keeper: "Ranger" }),
+  T("campstore", "Camp Store", "shop", 283, 140, Math.PI / 2, [0, 4.3], 14, 10, { menu: "camp", keeper: "Camp ranger", goods: "camp" }),
   T("bait", "Bait & Tackle", "shop", 404, 132, Math.PI / 2, [0, 3.8], 9, 7, { menu: "bait", keeper: "Old fisher", goods: "fish" }),
   T("hideout", "Robber Hideout", "hideout", -462, -262, Math.PI / 2, [0, 4.1], 10, 8, { menu: "hideout" }),
   T("barn", "The Big Red Barn", "barn", 66, 254, Math.PI, [0, 7.6], 16, 12),
@@ -57,6 +58,9 @@ for (const b of BUILDINGS) {
   b.dx = b.x + lx * c + lz * s; b.dz = b.z - lx * s + lz * c; b.out = b.yaw;
 }
 export const buildingById = (id) => BUILDINGS.find((b) => b.id === id);
+// the inside of your RV camper (trailer.js): a "building" made on the spot, with its door wherever the RV is parked.
+// door = the door step in the world, out = which way is outside
+export function rvBuilding(x, z, out) { return { id: "rv", name: "Your RV", kind: "rv", w: 7.6, d: 3.4, h: 2.7, door: [0, 1.7], dx: x, dz: z, out, yaw: 0 }; }
 
 // the robbery spots that are INSIDE buildings (room coordinates: 0, 0 = the middle of the room, the door is at +z)
 export const INSIDE_SPOTS = {
@@ -76,8 +80,8 @@ export const HOLDUP = {
 export const JAIL_SPOT = { x: -7.2, z: -4.6 }; // inside the police station: the first jail cell
 
 // ---------------------------------------------------------------- building a room
-const WALL = { showroom: 0xf8f9fb, shop: 0xf2ece0, garage: 0xb8bcc4, diner: 0xffe9c8, gas: 0xf4f0e8, office: 0xe8e2d4, school: 0xffe2b0, neighbor: 0xd8ecf8, hideout: 0x7a6a50, barn: 0xb84a2a, bank: 0xe8e2d4, jewelry: 0xf4e4f8, police: 0xdfe6f4, hospital: 0xf4fbff, cafe: 0xf2e0c8, home: 0xf4ead8 };
-const FLOOR = { showroom: 0xe4e7ec, shop: 0xc8b090, garage: 0x6a6e78, diner: 0xd8d0c0, gas: 0xd0d0d0, office: 0x9a6a3a, school: 0xb08a5a, neighbor: 0xa8784a, hideout: 0x5a4a3a, barn: 0xc8a050, bank: 0xd8d0c0, jewelry: 0xe0d8f0, police: 0x9aa0aa, hospital: 0xd8e8f0, cafe: 0x9a6a3a, home: 0xa8784a };
+const WALL = { showroom: 0xf8f9fb, shop: 0xf2ece0, garage: 0xb8bcc4, diner: 0xffe9c8, gas: 0xf4f0e8, office: 0xe8e2d4, school: 0xffe2b0, neighbor: 0xd8ecf8, hideout: 0x7a6a50, barn: 0xb84a2a, bank: 0xe8e2d4, jewelry: 0xf4e4f8, police: 0xdfe6f4, hospital: 0xf4fbff, cafe: 0xf2e0c8, home: 0xf4ead8, rv: 0xf2ece0 };
+const FLOOR = { showroom: 0xe4e7ec, shop: 0xc8b090, garage: 0x6a6e78, diner: 0xd8d0c0, gas: 0xd0d0d0, office: 0x9a6a3a, school: 0xb08a5a, neighbor: 0xa8784a, hideout: 0x5a4a3a, barn: 0xc8a050, bank: 0xd8d0c0, jewelry: 0xe0d8f0, police: 0x9aa0aa, hospital: 0xd8e8f0, cafe: 0x9a6a3a, home: 0xa8784a, rv: 0x8a6a4a };
 function room(B, w, d, kind) {
   const b = new Batch(); b.at(0, 0, 0);
   const wall = WALL[kind] || 0xeeeeee, H = ROOM_H;
@@ -108,7 +112,7 @@ function counter(b, C, x, z, len, color = 0x8a5a30, top = 0xe8e2d4) { b.box(len,
 function shelf(b, C, x, z, len, goods, rot = 0) {
   const sx = rot ? 0.5 : len, sz = rot ? len : 0.5;
   b.box(sx, 2.4, sz, x, 0, z, 0x9a7a52); for (const y of [0.5, 1.2, 1.9]) b.box(sx + 0.05, 0.06, sz + 0.05, x, y, z, 0x7a5a32);
-  const cols = { tools: [0xff8a1a, 0x3a7ad0, 0xc8ccd2, 0xffd23a], blasters: [0x2a2c30, 0x3a3d42, 0x6a4426, 0x141416], fish: [0x3a8ad0, 0xff7aa8, 0xc8a060, 0x2aa04a], toys: [0xff3a3a, 0x3aa0ff, 0xffd23a, 0x4adf6a], boxes: [0xb08a5a, 0x9a7448, 0xc8a070], papers: [0xffffff, 0xf4f0c8], cars: [0xe0203a, 0x2a7ad0, 0xffd23a], pawn: [0xffd23a, 0xc8ccd2, 0x2a2a2a, 0x8a4ad8, 0xe0203a] }[goods] || [0xd04030, 0x3a7ad0, 0xf0c030, 0x40a050];
+  const cols = { tools: [0xff8a1a, 0x3a7ad0, 0xc8ccd2, 0xffd23a], blasters: [0x2a2c30, 0x3a3d42, 0x6a4426, 0x141416], fish: [0x3a8ad0, 0xff7aa8, 0xc8a060, 0x2aa04a], toys: [0xff3a3a, 0x3aa0ff, 0xffd23a, 0x4adf6a], boxes: [0xb08a5a, 0x9a7448, 0xc8a070], papers: [0xffffff, 0xf4f0c8], cars: [0xe0203a, 0x2a7ad0, 0xffd23a], pawn: [0xffd23a, 0xc8ccd2, 0x2a2a2a, 0x8a4ad8, 0xe0203a], camp: [0xff6a3a, 0x3a9aff, 0x4adf6a, 0xffd23a, 0x8a5a30] }[goods] || [0xd04030, 0x3a7ad0, 0xf0c030, 0x40a050];
   for (const y of [0.56, 1.26, 1.96]) for (let i = 0; i < 5; i++) { const t = -0.4 + i * 0.2; b.box(rot ? 0.3 : 0.3, 0.38, rot ? 0.3 : 0.3, x + (rot ? 0 : t * len), y, z + (rot ? t * len : 0), cols[(i + Math.round(y * 3)) % cols.length]); }
   solid(C, x, z, sx / 2, sz / 2);
 }
@@ -240,6 +244,18 @@ function furnish(bd, b, C) {
     for (let i = 0; i < 8; i++) { b.add(new THREE.CylinderGeometry(0.75, 0.75, 1.3, 10), 0xe6c35a, -w / 2 + 1.2 + (i % 4) * 1.5, 0.75 + Math.floor(i / 4) * 1.5, back + 1.2, Math.PI / 2); } solid(C, -w / 2 + 3.4, back + 1.2, 3, 0.8);
     for (let i = 0; i < 3; i++) { b.box(0.15, 1.2, 3, w / 2 - 3 - i * 2.4, 0, back + 2, 0x8a5a30); solid(C, w / 2 - 3 - i * 2.4, back + 2, 0.1, 1.5); }
     b.box(1.2, 0.8, 0.8, 0, 0, 0, 0xc8ccd2); solid(C, 0, 0, 0.6, 0.4);
+  } else if (k === "rv") {
+    // a little camper: a bed at one end, a kitchen along the back, a dinette table at the other end, a TV
+    b.box(w, 0.3, d, 0, 2.7, 0, 0xf6f4ee); // (a low ceiling)
+    bed(b, C, w / 2 - 1.05, back + 1.3, 0x3a8ad0);
+    counter(b, C, -0.4, back + 0.45, 2.6, 0xc8b090, 0x9aa0aa); b.box(0.6, 0.06, 0.4, -0.9, 1.1, back + 0.45, 0x6a7078); b.cyl(0.03, 0.3, -0.9, 1.1, back + 0.25, 0xc8ccd2, 6); // sink + tap
+    b.box(0.5, 0.06, 0.4, 0.4, 1.1, back + 0.45, 0x222222); // stove top
+    b.box(0.8, 2.0, 0.7, -w / 2 + 0.5, 0, back + 0.4, 0xe8e8ec); b.box(0.04, 0.4, 0.04, -w / 2 + 0.85, 1.1, back + 0.78, 0x9aa0aa); solid(C, -w / 2 + 0.5, back + 0.4, 0.4, 0.35); // fridge
+    table(b, C, -w / 2 + 1.0, 0.75, 0.75, 0xa0703a, 0); for (const z of [-0.05, 1.45]) { b.box(1.3, 0.45, 0.5, -w / 2 + 1.0, 0, z, 0x3a6ec8); } // dinette benches
+    b.box(1.1, 0.65, 0.08, w / 2 - 2.4, 1.5, back + 0.05, 0x111111); b.box(1.0, 0.55, 0.05, w / 2 - 2.4, 1.52, back + 0.1, 0x3a6ad0, "glow"); // TV
+    rug(b, 0.6, 0.6, 2.2, 1.2, 0xd86a3a);
+    for (let x = -w / 2 + 1; x < w / 2; x += 2.4) b.box(1, 0.06, 0.6, x, 2.54, 0, 0xfff6d8, "glow"); // lights
+    spots.push({ x: w / 2 - 1.05, z: back + 3.0, r: 1.3, act: "sleep" }, { x: -w / 2 + 0.6, z: back + 1.3, r: 1.0, act: "snack" });
   } else if (k === "home" || k === "neighbor") {
     const big = w >= 14;
     sofa(b, C, -w / 4, 0.8, k === "home" ? 0x3a6ec8 : 0x6aa04a); b.box(2.2, 1.3, 0.12, -w / 4, 0.9, back + 0.2, 0x111111); b.box(2, 1.1, 0.05, -w / 4, 1.0, back + 0.27, 0x3a6ad0, "glow"); b.box(2.4, 0.5, 0.5, -w / 4, 0, back + 0.4, 0x6a4a2a); solid(C, -w / 4, back + 0.4, 1.2, 0.3); // a TV
@@ -327,7 +343,7 @@ export class Interiors {
     p.moving = Math.hypot(p.vx, p.vz); p.t += dt;
   }
   // keep the camera inside the walls
-  clampCam(px, py, pz) { const c = this.cur, w = c.bd.w, d = c.bd.d; return [clamp(px - POCKET.x, -w / 2 + 0.3, w / 2 - 0.3) + POCKET.x, clamp(py, 0.6, ROOM_H - 0.3), clamp(pz - POCKET.z, -d / 2 + 0.3, d / 2 - 0.3) + POCKET.z]; }
+  clampCam(px, py, pz) { const c = this.cur, w = c.bd.w, d = c.bd.d; return [clamp(px - POCKET.x, -w / 2 + 0.3, w / 2 - 0.3) + POCKET.x, clamp(py, 0.6, (c.bd.h || ROOM_H) - 0.3), clamp(pz - POCKET.z, -d / 2 + 0.3, d / 2 - 0.3) + POCKET.z]; }
   draw(time, me) {
     const c = this.cur; if (!c || !c.keeper || c.busy) return; // (busy: heist.js is moving them)
     const k = c.keeper, d = Math.hypot(me.x - k.root.position.x, me.z - k.root.position.z);

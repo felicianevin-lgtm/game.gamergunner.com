@@ -37,7 +37,7 @@ export const FLATS = [
   { x: -290, z: 300, hx: 15, hz: 15, y: null, b: 14 }, // Thunder Peak summit (lookout + Ranger Station)
   { x: 147, z: 128, hx: 16, hz: 14, y: null, b: 14 }, // camper spot
   { x: -150, z: 60, hx: 45, hz: 36, y: 1.2, b: 22 }, // Pine Street (houses)
-  { x: 300, z: 150, hx: 12, hz: 10, y: null, b: 12 }, // campground
+  { x: 293, z: 148, hx: 21, hz: 15, y: null, b: 12 }, // campground + the Camp Store
   { x: 400, z: -318, hx: 108, hz: 52, y: 3, b: 30 }, // Copper Creek (the second town)
   { x: 452, z: 140, hx: 52, hz: 50, y: 2, b: 24 }, // Lily Pond
   { x: -458, z: -262, hx: 16, hz: 14, y: null, b: 14 }, // robber hideout in the woods
@@ -114,6 +114,7 @@ export const ROADS = [
   { pts: [[80, 700], [160, 690], [228, 680]], w: 10 }, // to the drift park
   ...SPOKES.map((s, i) => ({ pts: s, w: 11, name: "spoke" + i })),
   { pts: [[1282, -220], [1420, -120], [1500, 60], [1560, 260]], w: 9, name: "desertrd" }, // into the Red Rock Desert
+  { pts: [[-330, -184], [-352, -181], [-385, -179], [-415, -182], [-433, -186]], w: 7, name: "peakdrive" }, // the Mega Mansion's driveway, out to the Valley Loop
 ];
 export const TRAILS = [
   { pts: spiral, w: 7, name: "mountain" },
@@ -142,6 +143,7 @@ export const TRAILS = [
   { pts: [[-1291, -150], [-1330, -240], [-1340, -300]], w: 7 },
   { pts: [[-1291, -150], [-1500, 60], [-1560, 300], [-1440, 520], [-1240, 640], [-1050, 700]], w: 7, name: "woods2" },
   { pts: [[80, 880], [-120, 900], [-300, 880], [-430, 880]], w: 8, name: "lake" }, // to Big Bass Lake
+  { pts: [[80, 520], [50, 514], [15, 508], [-25, 522], [-52, 556], [-66, 596], [-44, 630], [0, 632], [44, 626], [68, 602], [76, 566], [80, 550]], w: 8, name: "bog" }, // Mud Bog Park
   { pts: loopAround(700, 1080, 200, 150, 14, 0.2, 7), w: 8, loop: true, name: "bayou" }, // Bayou Bog (mud everywhere!)
   { pts: [[80, 1000], [300, 1040], [500, 1080]], w: 8 },
   // Big Woods Single Track: a skinny, twisty dirt bike trail right through the trees
@@ -159,6 +161,12 @@ export const MUDS = [
   { x: 470, z: 458, r: 11 }, { x: 384, z: 500, r: 8 }, { x: 330, z: 444, r: 9 }, { x: 410, z: 440, r: 14 }, // Canyon Run
   // Bayou Bog: the muddiest place in the world
   { x: 700, z: 1080, r: 26 }, { x: 560, z: 1000, r: 12 }, { x: 840, z: 1010, r: 13 }, { x: 880, z: 1140, r: 11 }, { x: 610, z: 1190, r: 14 }, { x: 760, z: 1200, r: 10 }, { x: 520, z: 1100, r: 9 },
+  // Mud Bog Park (south of the valley): a DEEP hole, a big pit, the Mud Lane (one long mud bog) and the Bog Bowl
+  { x: 20, z: 540, r: 13, deep: 1.7 }, { x: -18, z: 560, r: 9, deep: 1.2 }, { x: 54, z: 548, r: 8, deep: 1.1 },
+  ...[0, 1, 2, 3, 4, 5, 6].map((i) => ({ x: -18 + i * 11, z: 616 + (i % 2) * 2, r: 6.8, deep: 1.25 })),
+  { x: -48, z: 592, r: 14, deep: 1.4 },
+  // more mud on the trails
+  { x: 252, z: 300, r: 8, deep: 1.2 }, { x: 360, z: 480, r: 7 }, { x: -430, z: -300, r: 8 }, { x: 1150, z: 520, r: 9 },
   // Big Woods
   { x: -1500, z: -450, r: 15 }, { x: -1680, z: -420, r: 9 }, { x: -1420, z: -660, r: 10 }, { x: -1330, z: -300, r: 8 }, { x: -1520, z: 140, r: 9 },
 ];
@@ -207,8 +215,10 @@ export const PLACES = {
   lumber: { name: "Lumber Yard", x: -284, z: -10, icon: "🪵", color: "#a8703a" },
   build: { name: "Construction Site", x: 92, z: -160, icon: "🏗️", color: "#ffb020" },
   camp: { name: "Campground", x: 300, z: 142, icon: "⛺", color: "#5aa0ff" },
+  campstore: { name: "Camp Store (tents + RVs)", x: 290, z: 140, icon: "🏕️", color: "#3a8a4a" },
   dock: { name: "River Fishing Dock", x: 150, z: -40, icon: "🎣", color: "#4ac0e0" },
   mudbowl: { name: "Mud Bowl", x: 270, z: 228, icon: "🟤", color: "#7a5030" },
+  mudpark: { name: "Mud Bog Park", x: 10, z: 570, icon: "🟫", color: "#6a4020" },
   // Copper Creek
   copper: { name: "Copper Creek", x: 452, z: -318, icon: "🏙️", color: "#e08a4a" },
   police: { name: "Police Station", x: 440, z: -332, icon: "👮", color: "#3a6aff", r: 6 },

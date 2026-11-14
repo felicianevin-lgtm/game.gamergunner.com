@@ -15,6 +15,12 @@ export const VEHICLES = [
   { id: "bigquad", name: "Big Muddy Quad", price: 4800, top: 24, acc: 12, grip: 8, turn: 2.3, off: { dirt: 1, grass: 1, mud: 0.95 }, size: 1, tow: 1, color: 0x4a6a2a, engine: 110, open: true, quad: true, crawl: 0.97, desc: "A big 4x4 quad with racks and huge mud tires. Nothing stops it." },
   { id: "bike450", name: "Thumper 450", price: 4200, top: 33, acc: 17, grip: 7.2, turn: 2.6, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 1, tow: 0, color: 0x2a7ad0, engine: 175, open: true, bike: true, crawl: 0.9, desc: "A race dirt bike. Faster than the Dirt Rocket and SUPER good at wheelies." },
   { id: "pitbike", name: "Pit Rat 110 Pit Bike", price: 900, top: 19, acc: 11, grip: 7, turn: 2.9, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xffd23a, engine: 230, open: true, bike: true, crawl: 0.85, desc: "A little 110cc pit bike. Small, light and SO much fun in the dirt." },
+  { id: "bike125f", name: "Trail Thumper 125F (4-stroke)", price: 1700, top: 23, acc: 12, grip: 7.2, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 1, tow: 0, color: 0x3a6ad0, engine: 150, open: true, bike: true, crawl: 0.88, desc: "A 4-stroke 125 dirt bike. Smooth and torquey (it goes brap instead of ring-ding-ding), easy to ride, great for trails." },
+  { id: "dual250", name: "Ranger 250 Dual-Sport (street legal)", price: 5200, top: 34, acc: 14, grip: 7.8, turn: 2.6, off: { dirt: 0.95, grass: 0.9, mud: 0.66 }, size: 1, tow: 0, color: 0xe0203a, engine: 165, open: true, bike: true, street: true, crawl: 0.86, desc: "A street-legal 4-stroke 250 dirt bike: headlight, mirrors, turn signals and a license plate. Ride the trails AND the highway!" },
+  { id: "ebike", name: "Volt Trail E-Bike", price: 1100, top: 14, acc: 11, grip: 7, turn: 2.9, off: { dirt: 0.95, grass: 0.9, mud: 0.55 }, size: 1, tow: 0, color: 0x2ac0a0, engine: 420, open: true, bike: true, electric: true, crawl: 0.8, desc: "An electric mountain bike with a battery and a motor. Super quiet, zippy on trails, and it never needs gas!" },
+  { id: "efat", name: "Fat Tire E-Bike", price: 1600, top: 13, acc: 10, grip: 7.5, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.75 }, size: 1, tow: 0, color: 0xff7a1a, engine: 380, open: true, bike: true, electric: true, crawl: 0.88, desc: "An electric bike with HUGE fat tires. Rolls right over sand, snow and even some mud." },
+  { id: "mudmower", name: "Mud Mower", price: 2200, top: 16, acc: 10, grip: 7.5, turn: 2.6, off: { dirt: 1, grass: 1, mud: 0.95 }, size: 1, tow: 1, color: 0x3aa04a, engine: 140, open: true, crawl: 0.92, desc: "A riding lawn mower, lifted, with giant mud tires. Mow the lawn? Nah. Go MUDDING! Pulls the small trailer too." },
+  { id: "racemower", name: "Turbo Mud Mower", price: 4500, top: 24, acc: 13, grip: 7.5, turn: 2.6, off: { dirt: 1, grass: 1, mud: 0.97 }, size: 1, tow: 1, color: 0xffd23a, engine: 175, open: true, crawl: 0.95, desc: "A race-built mud mower: way more lift, a snorkel, a light bar and a roll bar. The fastest lawn mower in the world!" },
   { id: "bike125", name: "Scrambler 125 Dirt Bike", price: 1400, top: 24, acc: 13, grip: 7, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xe0203a, engine: 200, open: true, bike: true, crawl: 0.87, desc: "A 125cc two-stroke dirt bike. Between a pit bike and a full-size bike: light, snappy, great on trails." },
   { id: "sport300", name: "Viper 300 Sport Bike", price: 6500, top: 42, acc: 16, grip: 8.5, turn: 2.5, off: { dirt: 0.45, grass: 0.4, mud: 0.2 }, size: 1, tow: 0, color: 0x3ac04a, engine: 215, open: true, bike: true, crawl: 0.3, desc: "A real street sport bike with a full fairing. Quick and nimble on roads... NOT for mud!" },
   { id: "super1000", name: "Thunder 1000 Superbike", price: 19000, top: 60, acc: 22, grip: 9.2, turn: 2.4, off: { dirt: 0.35, grass: 0.3, mud: 0.15 }, size: 1, tow: 0, color: 0x1a4ad0, engine: 240, open: true, bike: true, crawl: 0.25, desc: "A 1000cc superbike. The fastest thing on two wheels. Hold on tight!" },
@@ -118,7 +124,7 @@ export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
-  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null, ...(id === "drift" ? { camber: 2, ownCamber: [0, 2], offset: 2, ownOffset: [1, 2], rims: "black" } : {}) };
+  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "mudmower" || id === "racemower" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null, ...(id === "drift" ? { camber: 2, ownCamber: [0, 2], offset: 2, ownOffset: [1, 2], rims: "black" } : {}) };
 }
 // final driving numbers after upgrades
 export function tune(car) {
@@ -677,6 +683,8 @@ const BUILD = {
   // a pit bike + a 125: the real dirt bike, smaller
   pitbike(C) { if (BIKE) return realBike(C, 0.72); BUILD.bike(C); },
   bike125(C) { if (BIKE) return realBike(C, 0.86); BUILD.bike(C); },
+  bike125f(C) { if (BIKE) return realBike(C, 0.88); BUILD.bike(C); },
+  dual250(C) { if (BIKE) realBike(C, 0.97); else BUILD.bike(C); streetKit(C); },
   sport300(C) { sportBike(C, 1.2, false); },
   super1000(C) { sportBike(C, 1.27, true); },
   // a sport side-by-side (UTV): molded hood + fenders, two bucket seats, half doors, a roll cage with a roof,
@@ -884,6 +892,63 @@ function police(C, fast) {
   C.pipes.push(V3(0.45, 0.34, -2.46));
   for (const [x, z, f] of [[0.86, 1.5, 1], [-0.86, 1.5, 1], [0.86, -1.45, 0], [-0.86, -1.45, 0]]) wheel(C, x, z, r, 0.32, f);
 }
+// the street-legal kit for a dirt bike: a headlight, 2 mirrors, turn signals, a tail light + a license plate
+function streetKit(C) {
+  const b = C.body, w = C.wheels, fz = Math.max(...w.map((q) => q.z)), rz = Math.min(...w.map((q) => q.z)), r = w[0].r0, L = C.len;
+  bx(b, 0.2, 0.16, 0.08, 0, r + L * 0.3, fz + 0.12, M.light); bx(b, 0.24, 0.2, 0.06, 0, r + L * 0.3, fz + 0.08, M.dark); // headlight
+  for (const s of [-1, 1]) { tube(b, V3(s * 0.26, r + L * 0.37, fz - 0.42), V3(s * 0.32, r + L * 0.45, fz - 0.44), 0.012, M.dark); bx(b, 0.12, 0.08, 0.02, s * 0.33, r + L * 0.46, fz - 0.44, M.chrome); } // mirrors
+  for (const s of [-1, 1]) { bx(b, 0.07, 0.05, 0.05, s * 0.16, r + L * 0.28, fz + 0.1, M.yellowL || M.light); bx(b, 0.07, 0.05, 0.05, s * 0.13, r + L * 0.2, rz - 0.22, M.tail); } // turn signals
+  bx(b, 0.24, 0.15, 0.02, 0, r + L * 0.13, rz - 0.3, M.white); bx(b, 0.2, 0.03, 0.025, 0, r + L * 0.15, rz - 0.3, M.dark); bx(b, 0.12, 0.05, 0.05, 0, r + L * 0.2, rz - 0.26, M.tail); // plate + tail light
+}
+// an electric mountain bike (fat = the fat-tire one): a thin frame, a battery on the down tube, a hub motor in the back wheel
+function ebike(C, fat) {
+  const b = C.body, P = C.paint, r = fat ? 0.37 : 0.35, tw = fat ? 0.2 : 0.07, fz = 0.6, rz = -0.55;
+  C.len = 1.9; C.wid = 0.7; C.seat.set(0, 0.93, -0.27); C.hitch = null; C.hood = null;
+  const fork = new THREE.Group(); fork.position.set(0, 0, fz); b.add(fork); C.forks = [fork];
+  for (const s of [-1, 1]) tube(fork, V3(s * (tw / 2 + 0.03), r, 0), V3(s * 0.04, 0.98, -0.1), 0.022, M.chrome);
+  tube(fork, V3(0, 0.98, -0.1), V3(0, 1.13, -0.16), 0.025, M.dark); tube(fork, V3(-0.33, 1.13, -0.17), V3(0.33, 1.13, -0.17), 0.022, M.dark);
+  for (const s of [-1, 1]) bx(fork, 0.09, 0.04, 0.04, s * 0.3, 1.13, -0.17, M.seat);
+  bx(fork, 0.11, 0.08, 0.07, 0, 0.98, 0.0, M.light); bx(fork, 0.09, 0.05, 0.02, 0.1, 1.15, -0.15, M.glow); // headlight + a little screen
+  const H = V3(0, 0.98, fz - 0.1), BB = V3(0, 0.36, -0.04), ST = V3(0, 0.88, -0.2);
+  tube(b, H, ST, 0.03, P); tube(b, V3(0, 0.88, fz - 0.06), BB, 0.04, P); tube(b, BB, ST, 0.03, P);
+  for (const s of [-1, 1]) { tube(b, BB, V3(s * (tw / 2 + 0.03), r, rz), 0.018, P); tube(b, ST, V3(s * (tw / 2 + 0.03), r, rz), 0.016, P); }
+  const bat = bx(b, 0.13, 0.13, 0.5, 0, 0.66, 0.26, M.dark, -0.66); bx(bat, 0.135, 0.02, 0.2, 0, 0.06, 0.08, M.glow); // the battery (with a charge light)
+  cy(b, 0.1, tw + 0.06, 0, r, rz, M.engine, 12, 0, Math.PI / 2); // the hub motor
+  tube(b, ST, V3(0, 0.92, -0.24), 0.02, M.chrome); bx(b, 0.15, 0.06, 0.3, 0, 0.94, -0.26, M.seat);
+  bx(b, 0.42, 0.03, 0.04, 0, 0.36, -0.04, M.dark); for (const s of [-1, 1]) bx(b, 0.1, 0.03, 0.08, s * 0.24, 0.36 - s * 0.12, -0.04 + s * 0.05, M.dark); // cranks + pedals
+  bx(b, 0.2, 0.025, 0.42, 0, r * 2 + 0.06, rz - 0.04, M.dark); bx(b, 0.08, 0.04, 0.02, 0, r * 2 + 0.06, rz - 0.26, M.tail); // rack + tail light
+  if (fat) { bx(b, tw + 0.08, 0.025, 0.5, 0, r * 2 + 0.03, rz + 0.05, P, 0.15); bx(fork, tw + 0.08, 0.025, 0.4, 0, r * 2 + 0.04, 0.02, P, -0.2); } // fenders
+  wheel(C, 0, fz, r, tw, 1, { bike: true }); wheel(C, 0, rz, r, tw, 0, { bike: true });
+}
+// a riding lawn mower built for MUD: lifted, giant back tires, a mower deck underneath (turbo = more lift + a roll bar)
+function mower(C, turbo) {
+  const b = C.body, P = C.paint, up = turbo ? 0.26 : 0.1, y = (v) => v + up, rf = turbo ? 0.34 : 0.3, rr = turbo ? 0.5 : 0.44;
+  C.len = 2.2; C.wid = 1.4; C.seat.set(0, y(0.86), -0.32); C.hitch = V3(0, 0.55, -1.05); C.hood = null;
+  bx(b, 0.62, 0.14, 1.7, 0, y(0.42), 0.1, M.dark); // frame
+  bx(b, 1.15, 0.16, 0.78, 0, y(0.24), 0.12, M.trim); bx(b, 1.2, 0.04, 0.82, 0, y(0.32), 0.12, P); // the mower deck
+  bx(b, 0.74, 0.34, 0.72, 0, y(0.66), 0.62, P); bx(b, 0.72, 0.2, 0.3, 0, y(0.6), 1.03, P, 0.5); // hood
+  bx(b, 0.52, 0.24, 0.04, 0, y(0.62), 1.0, M.dark); for (const s of [-1, 1]) bx(b, 0.13, 0.07, 0.04, s * 0.24, y(0.76), 0.99, M.light);
+  bx(b, 0.95, 0.05, 0.55, 0, y(0.5), 0.0, M.dark); // the footboard
+  bx(b, 1.0, 0.32, 0.62, 0, y(0.62), -0.55, P); // the back of the body
+  for (const s of [-1, 1]) { bx(b, 0.34, 0.05, 0.92, s * 0.62, rr * 2 + 0.1, -0.5, P); bx(b, 0.05, 0.3, 0.6, s * 0.79, rr * 2 - 0.05, -0.5, P); } // fenders over the big tires
+  bx(b, 0.52, 0.12, 0.44, 0, y(0.82), -0.36, M.seat); bx(b, 0.52, 0.42, 0.1, 0, y(1.06), -0.6, M.seat, -0.15);
+  tube(b, V3(0, y(0.82), 0.36), V3(0, y(1.12), 0.18), 0.03, M.dark);
+  const sw = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 6, 14), M.dark); sw.position.set(0, y(1.13), 0.17); sw.rotation.x = -1.1; b.add(sw);
+  bx(b, 0.18, 0.08, 0.04, -0.28, y(0.82), 0.25, M.red); // the "blades" lever
+  if (turbo) {
+    for (const s of [-1, 1]) tube(b, V3(s * 0.45, y(0.78), -0.78), V3(s * 0.42, y(1.75), -0.74), 0.035, M.dark);
+    tube(b, V3(-0.42, y(1.75), -0.74), V3(0.42, y(1.75), -0.74), 0.035, M.dark);
+    bx(b, 0.8, 0.1, 0.12, 0, y(1.82), -0.72, M.dark); for (let i = 0; i < 4; i++) bx(b, 0.14, 0.07, 0.03, -0.27 + i * 0.18, y(1.82), -0.65, M.light);
+    tube(b, V3(0.32, y(0.8), 0.45), V3(0.32, y(1.45), 0.4), 0.05, M.dark); // snorkel
+    bx(b, 0.5, 0.06, 0.2, 0, y(0.84), 0.62, M.dark); // hood scoop
+  }
+  C.pipes.push(V3(0.3, y(0.62), -0.88));
+  for (const s of [-1, 1]) { wheel(C, s * 0.5, 0.74, rf, 0.24, 1); wheel(C, s * 0.64, -0.5, rr, turbo ? 0.4 : 0.36, 0); }
+}
+BUILD.ebike = (C) => ebike(C, false);
+BUILD.efat = (C) => ebike(C, true);
+BUILD.mudmower = (C) => mower(C, false);
+BUILD.racemower = (C) => mower(C, true);
 BUILD.cruiser = (C) => police(C, false);
 BUILD.interceptor = (C) => police(C, true);
 

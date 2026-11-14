@@ -2,7 +2,7 @@
 // and the glowing circles you drive into to do things.
 import * as THREE from "/create/vendor/three.module.js";
 import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, LAKE, ATMS, PAWNS } from "./layout.js";
-import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform, roadNet, groundAt, LIMIT_TOWN, LIMIT_HWY, biome, desertAt, merge } from "./terrain.js";
+import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform, roadNet, groundAt, LIMIT_TOWN, LIMIT_HWY, biome, desertAt, merge, mudPits } from "./terrain.js";
 import * as B from "./build.js";
 import { addCircle } from "./colliders.js";
 import { bakeGroup, buildCar, vehicleById } from "./vehicles.js";
@@ -77,6 +77,13 @@ function town(scene) {
   b.finish(scene);
 }
 
+// shiny wet mud on top of every mud pit (the rides sink into it a bit)
+function mudSurfaces(scene) {
+  const geos = mudPits().map((m, i) => { const g = new THREE.CircleGeometry(m.r * 0.93, 26); g.rotateX(-Math.PI / 2); g.translate(m.x, m.y - 0.22 * (m.deep || 1) + (i % 3) * 0.01, m.z); return g; });
+  if (!geos.length) return;
+  const mesh = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshPhongMaterial({ color: 0x4a301c, shininess: 70, specular: 0x5a4a3a }));
+  mesh.receiveShadow = true; scene.add(mesh);
+}
 // ---------------------------------------------------------------- the rest of the valley
 function placeAt(scene, fn, x, z, yaw, ...a) { const b = new B.Batch(); b.at(x, hAt(x, z), z, yaw); fn(scene, b, ...a); b.finish(scene); return b; }
 function houses(scene) {
@@ -107,6 +114,7 @@ function outskirts(scene) {
   placeAt(scene, B.rangerStation, -300, 289, 0);
   placeAt(scene, B.lookout, -280, 312, Math.PI);
   placeAt(scene, B.campground, 300, 158, 0);
+  placeAt(scene, B.campStore, 283, 140, Math.PI / 2);
   { const x = riverX(-40) - RIVER_W - 7; const bt = placeAt(scene, B.dock, x, -40, Math.PI / 2); addPlatform(x + 4.6, -40, 1.5, 5.2, Math.PI / 2, bt.fy + 0.8); }
   copperCreek(scene);
   // Lily Pond: the bait shop and a long dock out over the water
@@ -349,6 +357,7 @@ function speedSigns(scene) {
 export function buildWorld(scene) {
   buildGround();
   const ground = buildGroundMeshes(scene);
+  mudSurfaces(scene);
   town(scene);
   const signs = houses(scene);
   outskirts(scene);

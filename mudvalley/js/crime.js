@@ -152,6 +152,8 @@ export class Crime {
   // ------------------------------------------------------------ wanted level + cops
   setWanted(n) {
     n = clamp(Math.round(n), 0, 5);
+    // the lobby host turned the cops off: nobody gets wanted stars (robbing still pays!)
+    if (n > S.wanted && this.api.copsOff && this.api.copsOff()) { if (!this.noCopsT || this.t - this.noCopsT > 20) { this.noCopsT = this.t; this.api.toast("🚫🚓 No cops in this lobby!", "The host turned the cops off. Nobody is chasing you.", "good", 3000); } return; }
     const was = S.wanted; S.wanted = n; this.evadeT = 0;
     if (n > was && this.api.indoors()) this.alarmAt = this.api.roomId(); // (you can't hide in the place you just robbed)
     if (n === 0) this.alarmAt = null;
@@ -555,6 +557,11 @@ export class Crime {
   // ------------------------------------------------------------ every step
   update(dt) {
     this.t += dt; this.fireT -= dt; this.warnT -= dt;
+    // cops turned off in this lobby: send every police car home and clear your stars
+    if (this.api.copsOff && this.api.copsOff() && (S.wanted > 0 || this.cops.length || this.patrols.length)) {
+      for (const c of this.cops.slice()) this.removeCop(c); for (const c of this.patrols.slice()) this.removePatrol(c); this.pull = null; this.air.clear();
+      if (S.wanted > 0) { S.wanted = 0; this.evadeT = 0; this.alarmAt = null; this.api.toast("🚫🚓 Cops are off!", "Your wanted stars are gone.", "good", 3000); }
+    }
     if (this.carHits && (this.carHitT -= dt) <= 0) this.carHits = 0;
     const me = this.api.me();
     // jail
@@ -713,7 +720,7 @@ export class Crime {
   removePatrol(c) { this.scene.remove(c.m.root); this.patrols.splice(this.patrols.indexOf(c), 1); if (this.pull && this.pull.c === c) this.pull = null; }
   updatePatrols(dt, me) {
     this.ticketCool -= dt;
-    const off = S.role === "cop" || this.jail || this.api.racing();
+    const off = S.role === "cop" || this.jail || this.api.racing() || (this.api.copsOff && this.api.copsOff());
     // wanted: the patrol cars join the chase
     if (S.wanted > 0) { for (const c of this.patrols.slice()) { this.patrols.splice(this.patrols.indexOf(c), 1); c.mode = "chase"; this.cops.push(c); } this.pull = null; return; }
     this.patrolT -= dt;

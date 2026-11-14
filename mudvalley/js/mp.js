@@ -12,6 +12,8 @@ import { makePerson } from "./character.js";
 import { buildCar, animateCar, vehicleById } from "./vehicles.js";
 import { groundAt } from "./terrain.js";
 import { S, save } from "./save.js";
+import { buildTrailer, trailerById, trailerBack } from "./trailer.js";
+import { campModel, campItem } from "./camp.js";
 
 export const QUICK = ["Meet me here!", "Race me!", "Need a tow!", "Cops are coming!", "Let’s go fishing!", "Follow me!", "Nice ride!", "Be right back!"];
 const ERRORS = { notfound: "Nobody is in a lobby with that code.", taken: "That code is taken. Try again!", full: "That lobby is full (8 players).", otherroom: "That code is for a different game.", banned: "You can’t join that lobby.", locked: "That lobby is locked.", badmode: "Something went wrong.", expired: "You were gone too long. Join again!", gbanned: "You can’t play online right now.", slowdown: "Too many tries. Wait a minute!" };
@@ -19,6 +21,15 @@ const hex = (c) => c.toString(16).padStart(6, "0");
 const unhex = (s) => parseInt(s || "888888", 16);
 const newCode = () => String(10000000 + Math.floor(Math.random() * 89999999));
 const ROLES = ["civ", "robber", "cop"];
+// your parked rides / trailers / camp near you, as short text (the relay's "mvpark", 12 at most): kind|id|color|x|z|yaw|towing
+// kind: c = a ride, t = a trailer, p = camp stuff. towing = 1: that trailer is hooked to the ride you're driving
+const parkText = (k, id, c, x, z, yaw, h) => [k, id, hex(c ?? 0x888888), Math.round(x * 10) / 10, Math.round(z * 10) / 10, (Math.round(Math.atan2(Math.sin(yaw), Math.cos(yaw)) * 100) / 100), h ? 1 : 0].join("|");
+function parkModel(it) {
+  if (it.k === "c") { if (vehicleById(it.id).id !== it.id) return null; const m = buildCar({ id: it.id, paint: it.c, rims: "chrome", tires: "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0 }); if (m.rider) m.rider.root.visible = false; return m.root; }
+  if (it.k === "t") { if (!trailerById(it.id)) return null; const m = buildTrailer(it.id, it.c); if (m.awning) m.awning.visible = !it.h; return m.root; }
+  if (it.k === "p") return campItem(it.id) ? campModel(it.id, it.c) : null;
+  return null;
+}
 const tagText = (p) => (p.role === "cop" ? "👮 " : p.role === "robber" ? "🦹 " : "") + p.n + (p.role === "robber" && p.wanted ? " " + "★".repeat(p.wanted) : "");
 
 // a floating name tag
@@ -38,6 +49,8 @@ export class MP {
     this.players = new Map(); this.msgs = []; this.unread = 0; this.sendT = 0; this.lastCar = null; this.rt = ""; this.closing = false; this.muted = false; this.chatRoom = true;
   }
   get on() { return this.status === "in"; }
+  get copsOff() { return this.on && this.copsOn === false; }
+  setCops(on) { this.send({ t: "mvcops", c: on ? 1 : 0 }); }
   create() { this.connect(newCode(), "create"); }
   join(code) { code = String(code || "").replace(/\D/g, ""); if (!/^(\d{6}|\d{8})$/.test(code)) { this.api.toast("Type the 8-digit code", "", "warn"); return; } this.connect(code, "join"); }
   connect(code, mode) {
@@ -68,10 +81,12 @@ export class MP {
     const A = this.api;
     switch (m.t) {
       case "welcome":
-        this.id = m.id; this.name = m.n; this.host = m.h; this.rt = m.rt || ""; this.status = "in"; this.chatRoom = m.cr !== 0;
+        this.id = m.id; this.name = m.n; this.host = m.h; this.rt = m.rt || ""; this.status = "in"; this.chatRoom = m.cr !== 0; this.copsOn = m.co !== 0; this.parkSent = ""; this.parkT = 0.3;
         if (!m.re) { this.clearPlayers(); for (const p of m.players || []) this.addPlayer(p); this.say("", "You joined lobby " + this.code + " as " + m.n + ".", "sys"); }
         this.sendLook(); this.sendRole(true); this.lastCar = null; A.changed(); break;
-      case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; break;
+      case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; this.parkSent = ""; this.parkT = 0.6; break;
+      case "mvpark": { const p = this.players.get(m.id); if (p && Array.isArray(m.l)) this.setPark(p, m.l); break; }
+      case "mvcops": { const was = this.copsOn; this.copsOn = !!m.c; if (was !== this.copsOn) { this.say("", m.c ? "🚓 The host turned the cops ON." : "🚫🚓 The host turned the cops OFF. No police in this lobby!", "sys"); A.toast(m.c ? "🚓 Cops are ON" : "🚫 Cops are OFF", m.c ? "" : "Nobody gets chased in this lobby.", m.c ? "warn" : "good", 3000); A.changed(); } break; }
       case "mvrole": { const p = this.players.get(m.id); if (p) { const r = ROLES[m.r] || "civ", w = m.w | 0; if (p.role !== r || p.wanted !== w) { p.role = r; p.wanted = w; this.retag(p); } } break; }
       case "mvzap": { const p = this.players.get(m.id); if (p) A.zapped(p, m.k); break; }
       case "mvbump": { const p = this.players.get(m.id); if (p && Array.isArray(m.v) && A.bumped) A.bumped(p, +m.v[0] || 0, +m.v[1] || 0); break; }
@@ -97,9 +112,24 @@ export class MP {
     const P = { id: p.id, n: p.n, k: p.k, v: p.v || "", away: !!p.a, model: null, car: null, tag: null, role: "civ", wanted: 0 };
     this.players.set(p.id, P); this.rebuild(P); this.api.changed();
   }
-  removePlayer(id) { const p = this.players.get(id); if (!p) return; this.dispose(p); this.players.delete(id); this.api.changed(); }
-  clearPlayers() { for (const p of this.players.values()) this.dispose(p); this.players.clear(); }
+  removePlayer(id) { const p = this.players.get(id); if (!p) return; this.dispose(p); this.disposePark(p); this.players.delete(id); this.api.changed(); }
+  clearPlayers() { for (const p of this.players.values()) { this.dispose(p); this.disposePark(p); } this.players.clear(); }
   dispose(p) { const sc = this.api.scene; if (p.model) sc.remove(p.model.root); if (p.car) sc.remove(p.car.root); if (p.tag) sc.remove(p.tag); p.model = p.car = p.tag = null; }
+  disposePark(p) { for (const e of p.parkM || []) if (e) this.api.scene.remove(e.root); p.parkM = []; }
+  // a friend's parked rides, trailers and camp (only rebuilds the ones that changed)
+  setPark(p, list) {
+    const items = list.slice(0, 14).map((t) => { const a = String(t).split("|"); return a.length === 7 ? { k: a[0], id: a[1], c: unhex(a[2]), x: +a[3], z: +a[4], yaw: +a[5], h: a[6] === "1", key: a[0] + a[1] + a[2] + a[6] } : null; }).filter((it) => it && Number.isFinite(it.x) && Number.isFinite(it.z));
+    p.parkM = p.parkM || [];
+    for (let i = 0; i < Math.max(items.length, p.parkM.length); i++) {
+      const it = items[i], e = p.parkM[i];
+      if (e && (!it || e.key !== it.key)) { this.api.scene.remove(e.root); p.parkM[i] = null; }
+      if (!it) continue;
+      if (!p.parkM[i]) { const root = parkModel(it); if (!root) continue; this.api.scene.add(root); p.parkM[i] = { key: it.key, root, it }; }
+      const E = p.parkM[i]; E.it = it;
+      if (!it.h) { E.root.position.set(it.x, groundAt(it.x, it.z) + (it.k === "p" ? 0 : 0.05), it.z); E.root.rotation.set(0, it.yaw, 0); }
+    }
+    p.parkM.length = items.length;
+  }
   // (re)build a friend's person + ride from their look and car messages
   rebuild(p) {
     this.dispose(p);
@@ -150,6 +180,13 @@ export class MP {
     const v = me.car ? "w|" + me.car.id + "|" + hex(me.car.paint) : "";
     if (v !== this.lastCar) { this.lastCar = v; this.send({ t: "car", v }); }
     this.roleT = (this.roleT || 0) - dt; this.sendRole(this.roleT <= 0);
+    // your parked stuff: when it changes (checked every second), and again every 10 s for anyone who missed it
+    this.parkT = (this.parkT ?? 0) - dt; this.parkAge = (this.parkAge || 0) + dt;
+    if (this.parkT <= 0 && this.api.parked) {
+      this.parkT = 1;
+      const l = this.api.parked().slice(0, 10).map((q) => parkText(...q)), str = l.join(";");
+      if (str !== this.parkSent || this.parkAge > 10) { this.parkSent = str; this.parkAge = 0; this.send({ t: "mvpark", l }); }
+    }
   }
   draw(dt, time) {
     for (const p of this.players.values()) {
@@ -160,6 +197,10 @@ export class MP {
       if (p.car) { p.car.root.position.set(p.x, p.y + 0.06, p.z); p.car.root.rotation.set(0, p.r, 0); animateCar(p.car, { speed: p.walk ? 8 : 0, steer: 0 }, dt); p.tag.position.set(p.x, p.y + 3.4, p.z); }
       else { const g = Math.max(p.y, groundAt(p.x, p.z) - 0.2); p.model.root.position.set(p.x, g, p.z); p.model.root.rotation.y = p.r; p.model.pose(p.walk ? "walk" : "stand", time); p.tag.position.set(p.x, g + 2.5, p.z); }
       p.tag.material.opacity = p.away ? 0.4 : 1;
+      for (const e of p.parkM || []) if (e && e.it.h) { // (the trailer they're towing rides along behind their truck)
+        const T = trailerById(e.it.id), back = (p.car ? p.car.len / 2 + 0.5 : 3) + (T ? T.len : 5), x = p.x - Math.sin(p.r) * back, z = p.z - Math.cos(p.r) * back;
+        e.root.visible = !!p.car; e.root.position.set(x, groundAt(x, z) + 0.05, z); e.root.rotation.set(0, p.r, 0);
+      }
     }
   }
   dots() { const out = []; for (const p of this.players.values()) if (p.x !== undefined) out.push({ x: p.x, z: p.z, n: p.n, role: p.role }); return out; }

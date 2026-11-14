@@ -9,12 +9,17 @@ export const TRAILERS = [
     slots: [{ x: 0.68, z: 0.2 }, { x: -0.68, z: 0.2 }], deckY: 0.7 },
   { id: "flatbed", name: "Big Flatbed Trailer", price: 3500, cap: 4, len: 8.6, need: 2, maxSize: 2, desc: "A long car hauler. Carries 2 cars, or a car + 2 small rides. Needs a truck.",
     slots: [{ x: 0, z: 2.9 }, { x: 0, z: 0.55 }, { x: 0, z: -1.8 }, { x: 0, z: -4.15 }], deckY: 1.0 },
-  { id: "enclosed", name: "Big Enclosed Trailer", price: 6500, cap: 2, len: 7.6, need: 2, maxSize: 2, enclosed: true, desc: "A giant closed-up box trailer in YOUR color. Fits one car (or 2 small rides). The back door opens into a ramp.",
+  { id: "enclosed", name: "Big Enclosed Trailer", price: 6500, cap: 2, len: 7.6, need: 2, maxSize: 2, enclosed: true, paintable: true, desc: "A giant closed-up box trailer in YOUR color. Fits one car (or 2 small rides). The back door opens into a ramp.",
     slots: [{ x: 0, z: 0.9 }, { x: 0, z: -1.5 }], deckY: 0.9 },
+  // a real travel trailer (an RV you tow): park it anywhere, walk up to the side door and press E to go inside
+  { id: "camper", name: "Lazy Days RV Camper", price: 12000, cap: 0, len: 8.4, need: 2, maxSize: 0, rv: true, paintable: true, desc: "A real RV camper you can tow ANYWHERE! Park it, walk up to the side door and press E to go inside: a bed, a kitchen, a couch and a TV. The stripes come in YOUR color. Needs a truck.",
+    slots: [], deckY: 0.8 },
 ];
+// where the RV's side door is (trailer space: x = sideways, z = forward) and which way is "out"
+export const RV_DOOR = { x: -1.3, z: -1.2 };
 export const ENCLOSED_COLORS = [0x1a1a1e, 0xf4f4f4, 0xe0203a, 0x2a7ad0, 0x3aa04a, 0xffd23a, 0xff7a1a, 0x6a3ad0, 0xff5ad8, 0x9aa0aa, 0x7a4a2a, 0x2ac0a0];
 // how far behind the axle the back end is, and how high the coupler sits
-export const trailerBack = (T) => (T.id === "flatbed" ? 5.6 : T.id === "enclosed" ? 6.6 : 2.4);
+export const trailerBack = (T) => (T.id === "flatbed" ? 5.6 : T.id === "enclosed" ? 6.6 : T.rv ? 3.8 : 2.4);
 export const trailerById = (id) => TRAILERS.find((t) => t.id === id);
 
 const mat = {};
@@ -71,6 +76,47 @@ export function buildTrailer(type, color = 0x1a1a1e) {
     door = new THREE.Group(); door.position.set(0, y0, zb - 0.06); deck.add(door);
     bx(door, 2.5, H - 0.05, 0.08, 0, (H - 0.05) / 2, 0, body); for (let y = 0.4; y < H; y += 0.6) bx(door, 2.3, 0.05, 0.1, 0, y, -0.02, mat.grate);
     for (const z of [-0.6, 0.6]) { wheel(1.55, z, 0.42); wheel(-1.55, z, 0.42); }
+  } else if (type === "camper") {
+    // a tall rounded white box with stripes in your color, windows, a side door with steps, an awning (out when it's
+    // parked), an A/C on the roof, propane tanks on the tongue
+    body = new THREE.MeshLambertMaterial({ color });
+    const white = new THREE.MeshLambertMaterial({ color: 0xf6f4ee }), cream = new THREE.MeshLambertMaterial({ color: 0xe4ddcc }), glass = new THREE.MeshLambertMaterial({ color: 0x24323e });
+    const H = 2.75, y0 = 0.72, zb = -3.6, zf = 3.4, W = 2.5;
+    const sh = new THREE.Shape();
+    sh.moveTo(zb + 0.2, y0); sh.lineTo(zf - 0.25, y0); sh.quadraticCurveTo(zf, y0, zf, y0 + 0.3); sh.lineTo(zf, y0 + H - 0.8); sh.quadraticCurveTo(zf, y0 + H, zf - 0.8, y0 + H);
+    sh.lineTo(zb + 0.45, y0 + H); sh.quadraticCurveTo(zb, y0 + H, zb, y0 + H - 0.45); sh.lineTo(zb, y0 + 0.2); sh.quadraticCurveTo(zb, y0, zb + 0.2, y0);
+    const box = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: W, bevelEnabled: false, curveSegments: 8 }), white);
+    box.rotation.y = -Math.PI / 2; box.position.x = W / 2; deck.add(box);
+    // stripes down both sides + across the front
+    bx(deck, W + 0.03, 0.2, zf - zb - 0.5, 0, y0 + 0.85, (zf + zb) / 2 - 0.1, body); bx(deck, W + 0.03, 0.08, zf - zb - 0.7, 0, y0 + 1.1, (zf + zb) / 2 - 0.1, body);
+    bx(deck, W - 0.2, 0.2, 0.06, 0, y0 + 0.85, zf + 0.01, body); bx(deck, W + 0.03, 0.12, zf - zb - 0.3, 0, y0 + 0.08, (zf + zb) / 2, cream);
+    // windows (both sides), a wide front window and a back window
+    for (const z of [2.2, 0.4, -2.6]) bx(deck, W + 0.04, 0.62, z === 0.4 ? 1.3 : 1.0, 0, y0 + 1.75, z, glass);
+    bx(deck, 1.9, 0.5, 0.06, 0, y0 + 1.6, zf + 0.02, glass); bx(deck, 1.2, 0.45, 0.06, 0, y0 + 1.75, zb - 0.02, glass);
+    // the side door (on the curb side: -x), a little window in it, a handle, and fold-down steps
+    const dx = -W / 2 - 0.03;
+    bx(deck, 0.05, 2.0, 0.78, dx, y0 + 1.02, RV_DOOR.z, cream); bx(deck, 0.06, 0.4, 0.4, dx - 0.01, y0 + 1.6, RV_DOOR.z, glass); bx(deck, 0.08, 0.05, 0.12, dx - 0.03, y0 + 1.0, RV_DOOR.z + 0.28, mat.rim);
+    bx(deck, 0.36, 0.08, 0.7, dx - 0.2, 0.5, RV_DOOR.z, mat.grate); bx(deck, 0.36, 0.08, 0.7, dx - 0.5, 0.25, RV_DOOR.z, mat.grate);
+    // the awning (rolled up while towing, out when parked)
+    bx(deck, 0.18, 0.18, 4.6, dx - 0.08, y0 + 2.45, 0.1, body);
+    const awning = new THREE.Group(); deck.add(awning);
+    const aw = bx(awning, 2.2, 0.05, 4.6, dx - 1.1, y0 + 2.28, 0.1, body); aw.rotation.z = 0.12;
+    for (let i = 0; i < 5; i++) bx(awning, 2.2, 0.055, 0.35, dx - 1.1, y0 + 2.285, -1.9 + i * 1.0, white).rotation.z = 0.12;
+    for (const z of [-2.1, 2.3]) bx(awning, 0.05, y0 + 2.1, 0.05, dx - 2.15, (y0 + 2.1) / 2, z, mat.rim);
+    // roof: an A/C unit + a vent; back: a bumper, tail lights and a spare tire
+    bx(deck, 0.85, 0.32, 0.95, 0, y0 + H + 0.16, 0.7, white); bx(deck, 0.5, 0.12, 0.5, 0, y0 + H + 0.06, -2.1, cream);
+    bx(deck, W - 0.2, 0.14, 0.14, 0, 0.62, zb - 0.1, mat.steel);
+    for (const s of [-1, 1]) bx(deck, 0.18, 0.28, 0.06, s * 1.0, y0 + 0.45, zb - 0.02, mat.light);
+    { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.2, 14), mat.tire); t.rotation.x = Math.PI / 2; t.position.set(0, y0 + 0.75, zb - 0.12); deck.add(t); }
+    for (const s of [-1, 1]) { bx(deck, 0.14, 0.14, 0.14, s * 1.2, y0 + H - 0.1, zb + 0.15, mat.light); bx(deck, 0.14, 0.14, 0.14, s * 1.2, y0 + H - 0.1, zf - 0.6, mat.yellow); }
+    // the tongue: an A-frame + a center bar, two propane tanks, a jack stand, the coupler
+    const tz0 = zf - 0.2, tz1 = T.len - 0.2;
+    bx(deck, 0.24, 0.24, tz1 - tz0, 0, 0.8, (tz0 + tz1) / 2, mat.steel);
+    for (const s of [-1, 1]) { const a = bx(deck, 0.16, 0.16, Math.hypot(tz1 - tz0, 1.1), s * 0.55, 0.78, (tz0 + tz1) / 2, mat.steel); a.rotation.y = -s * Math.atan2(1.1, tz1 - tz0); }
+    for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.7, 10), white); p.position.set(s * 0.26, 1.25, zf + 0.75); deck.add(p); }
+    bx(deck, 0.32, 0.22, 0.5, 0, 0.82, T.len - 0.1, mat.steel); bx(deck, 0.1, 0.6, 0.1, 0.3, 0.45, zf + 1.5, mat.steel);
+    for (const z of [-0.55, 0.55]) { wheel(1.32, z, 0.4); wheel(-1.32, z, 0.4); }
+    return finish({ root, deck, wheels, T, door, body, awning });
   } else {
     bx(deck, 2.7, 0.18, 9.4, 0, 0.92, 0, mat.steel); for (let z = -4.4; z <= 4.4; z += 0.6) bx(deck, 2.66, 0.04, 0.4, 0, 1.02, z, mat.grate);
     for (const s of [-1, 1]) { bx(deck, 0.14, 0.26, 9.4, s * 1.36, 0.92, 0, mat.yellow); for (const z of [-4.4, -1.5, 1.5, 4.4]) bx(deck, 0.14, 0.1, 0.1, s * 1.42, 0.92, z, mat.light); }
@@ -81,9 +127,9 @@ export function buildTrailer(type, color = 0x1a1a1e) {
     for (const z of [-0.65, 0.65]) { wheel(1.45, z, 0.42); wheel(-1.45, z, 0.42); }
     for (const s of [-1, 1]) bx(deck, 0.5, 0.12, 2.4, s * 1.45, 0.98, 0, mat.steel);
   }
-  root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return { root, deck, wheels, T, door, body };
+  return finish({ root, deck, wheels, T, door, body });
 }
+function finish(m) { m.root.traverse((o) => { if (o.isMesh) o.castShadow = true; }); return m; }
 
 // a trailer in the world
 export function makeTrailer(save, scene) {
@@ -104,6 +150,7 @@ export function couplerPoint(tr) { const L = tr.T ? tr.T.len : tr.len; return { 
 
 // follow the truck
 export function stepTrailer(tr, dt) {
+  if (tr.model.awning) tr.model.awning.visible = !tr.hitched; // (the RV's awning rolls out when it's parked)
   if (!tr.hitched) { tr.y = groundAt(tr.x, tr.z); place(tr); return; }
   const b = tr.hitched, H = hitchPoint(b), L = tr.T ? tr.T.len : tr.len;
   let dx = tr.x - H.x, dz = tr.z - H.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;

@@ -303,7 +303,7 @@ function dig(m) { // a mud pit: flatten a little circle, then scoop out the midd
     if (d > m.r + 7) continue;
     const k = j * V + i;
     H[k] = lerp(H[k], m.y, 1 - smooth(m.r, m.r + 7, d));
-    if (d < m.r) H[k] -= 0.7 * (1 - (d / m.r) ** 2);
+    if (d < m.r) H[k] -= 0.9 * (m.deep || 1) * (1 - (d / m.r) ** 2); // (deep = a deeper hole)
   }
 }
 
