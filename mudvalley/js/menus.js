@@ -17,7 +17,7 @@ import * as IN from "./input.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { crew: "🛻", foxhatch: "🏎️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵";
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -109,14 +109,15 @@ function customs() {
   const c = GM.mine(); if (!c) return;
   if (GM.G.panel !== "customs") { const b = c.b; b.x = 36; b.z = -40; b.yaw = 0; b.vx = b.vz = 0; b.flipped = false; } // (onto the turntable in the bay)
   const s = c.s, v = vehicleById(s.id), t = tune(s);
-  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ["lift", "⬆️ Lift"], ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
-  const maxLift = v.bike ? 1 : LIFT_COST.length - 1; // (bikes only get the first lift: any more looks silly)
+  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", "⬆️ Lift"]]), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
+  if (v.bike && cTab === "lift") cTab = "paint";
+  const maxLift = v.bike ? 0 : LIFT_COST.length - 1; // (dirt bikes don't get lift kits)
   if (s.lift > maxLift) s.lift = maxLift;
   let body = "";
   if (cTab === "paint") body = `<p class="note">Paint job: <b>${money(PRICES.paint)}</b> each</p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === s.paint ? "on" : ""}" style="background:${hex(p)}" data-a="paint" data-v="${p}"></button>`).join("")}</div>`;
   if (cTab === "wheels") body = `<h3>Tires</h3><div class="opts">${TIRES.map((x) => `<button type="button" class="opt ${s.tires === x.id ? "on" : ""}" data-a="tires" data-v="${x.id}"><span>${x.name}<small>${x.desc}</small></span><em>${s.tires === x.id ? "✓" : x.price ? money(x.price) : "FREE"}</em></button>`).join("")}</div>
     <h3>Rims (${money(PRICES.rims)})</h3><div class="swatches">${RIMS.map((r) => `<button type="button" class="sw ${s.rims === r.id ? "on" : ""}" style="background:${hex(r.c)}" title="${r.name}" data-a="rims" data-v="${r.id}"></button>`).join("")}</div>`;
-  if (cTab === "engine") body = `<p class="note">Faster engines = more top speed and quicker starts. Want it slower? Pick a lower level any time for free!</p><div class="opts">${ENGINE_COST.map((cost, i) => `<button type="button" class="opt ${s.engine === i ? "on" : ""}" data-a="engine" data-v="${i}"><span>${["Stock engine", "Stage 1 Turbo", "Stage 2 Turbo", "Stage 3 Super", "Stage 4 MONSTER (flames!)"][i]}<small>${i ? "+" + i * 6 + "% top speed, +" + i * 10 + "% acceleration" : "The engine it came with"}${i >= 2 ? " · hood scoop" : ""}${i >= 3 ? " · big exhausts" : ""}</small></span><em>${s.engine === i ? "✓" : i <= (s.maxEngine || s.engine) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
+  if (cTab === "engine") body = `<p class="note">Faster engines = more top speed and quicker starts. Want it slower? Pick a lower level any time for free!</p><div class="opts">${ENGINE_COST.map((cost, i) => `<button type="button" class="opt ${s.engine === i ? "on" : ""}" data-a="engine" data-v="${i}"><span>${(v.bike ? ["Stock motor", "Stage 1", "Stage 2", "Stage 3", "Stage 4 RACE"] : ["Stock engine", "Stage 1 Turbo", "Stage 2 Turbo", "Stage 3 Super", "Stage 4 MONSTER (flames!)"])[i]}<small>${i ? "+" + i * 6 + "% top speed, +" + i * 10 + "% acceleration" : "The engine it came with"}${!v.bike && i >= 2 ? " · hood scoop" : ""}${!v.bike && i >= 3 ? " · big exhausts" : ""}</small></span><em>${s.engine === i ? "✓" : i <= (s.maxEngine || s.engine) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
   if (cTab === "speed") body = `<p class="note">The speed limiter makes your ride slower. Great for tricky trails, towing, or learning to drive. Free!</p>
     <h3>Top speed: <span id="limLbl">${mph(t.top)} mph</span> (${Math.round(s.limit * 100)}%)</h3><input type="range" min="30" max="100" step="5" value="${Math.round(s.limit * 100)}" data-a="limit">`;
   if (cTab === "lift") body = `<p class="note">A lift kit raises your ride: better off-road, a bit wobblier on the road.</p><div class="opts">${LIFT_COST.slice(0, maxLift + 1).map((cost, i) => `<button type="button" class="opt ${s.lift === i ? "on" : ""}" data-a="lift" data-v="${i}"><span>${["Stock height", "Lift 1 (+15 cm)", "Lift 2 (+30 cm)", "Lift 3 (+45 cm)"][i]}</span><em>${s.lift === i ? "✓" : i <= (s.maxLift || s.lift) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
@@ -168,7 +169,7 @@ function builder(h) {
     <h3>5. Rims</h3><div class="swatches">${RIMS.map((r) => `<button type="button" class="sw ${bSel.rims === r.id ? "on" : ""}" style="background:${hex(r.c)}" title="${r.name}" data-a="bRims" data-v="${r.id}"></button>`).join("")}</div>
     <h3>6. Underglow</h3><div class="swatches">${NEONS.map((n, i) => `<button type="button" class="sw ${bSel.neon === i ? "on" : ""}" style="background:${n === null ? "repeating-linear-gradient(45deg,#333 0 6px,#555 6px 12px)" : hex(n)}" data-a="bNeon" data-v="${i}" title="${n === null ? "No neon" : ""}"></button>`).join("")}</div>
     <h3>7. Name it</h3><input id="bName" maxlength="24" placeholder="${esc(v ? "My " + v.name : "My Build")}" value="${esc(bSel.name)}" style="font:inherit;font-size:16px;width:100%;max-width:18em;padding:6px;border-radius:8px">
-    ${have("p_lift") ? `<div class="btns"><button type="button" class="small" data-a="bLift">${bSel.lift ? "✓ Use a lift kit" : "Add a lift kit"}</button></div>` : ""}
+    ${have("p_lift") && !(v && v.bike) ? `<div class="btns"><button type="button" class="small" data-a="bLift">${bSel.lift ? "✓ Use a lift kit" : "Add a lift kit"}</button></div>` : ""}
     <h3>Checklist</h3><p style="font:700 16px monospace">[${bar}] ${done}/${checks.length}</p><p class="note">${checks.map(([n, ok]) => (ok ? "✅ " : "❌ ") + n).join("<br>")}</p>
     <div class="btns"><button type="button" class="big" data-a="build" ${ready ? "" : "disabled"}>🔧 BUILD IT!</button><span class="note">${S.cars.length}/${slots()} rides in your garage</span></div>
     <div class="btns"><button type="button" class="small" data-a="back">← Back to the garage</button></div>`, "house");

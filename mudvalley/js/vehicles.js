@@ -24,6 +24,8 @@ export const VEHICLES = [
   { id: "prerunner", name: "Desert Runner Trophy Truck", price: 28000, top: 42, acc: 14, grip: 7, turn: 2.1, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 2, tow: 0, color: 0xff7a1a, engine: 105, air: 0.85, crawl: 0.82, desc: "A race truck with long springs. Flies over bumps and jumps at full speed." },
   { id: "swamp", name: "Swamp Crawler 6x6", price: 32000, top: 28, acc: 9, grip: 8, turn: 1.6, off: { dirt: 1, grass: 1, mud: 1 }, size: 9, tow: 2, color: 0x4a5a3a, engine: 55, crawl: 1, desc: "A giant 6-wheel-drive army-style truck. Mud, rivers, mountains... nothing stops it." },
   { id: "hauler", name: "Big Bertha Hauler", price: 15000, top: 30, acc: 6.5, grip: 7, turn: 1.5, off: { dirt: 0.72, grass: 0.62, mud: 0.42 }, size: 9, tow: 2, color: 0x6a3ad0, engine: 50, crawl: 0.35, desc: "A giant semi truck. Slow to start, but pulls the big flatbed full of cars." },
+  { id: "crew", name: "Ridgeback 1500 Crew Cab", price: 14000, top: 38, acc: 11, grip: 8, turn: 1.9, off: { dirt: 0.85, grass: 0.78, mud: 0.58 }, size: 2, tow: 2, color: 0x9aa0aa, engine: 78, crawl: 0.62, desc: "A big, modern full-size crew cab pickup. Chrome grille, four doors, tows anything." },
+  { id: "foxhatch", name: "Street Fox 5.0 Hatch", price: 11000, top: 46, acc: 15, grip: 8.5, turn: 2.2, off: { dirt: 0.45, grass: 0.38, mud: 0.22 }, size: 2, tow: 0, color: 0xe0203a, engine: 105, crawl: 0.3, desc: "A boxy 80s V8 hatchback. Light, loud and fast. Burnouts all day!" },
   { id: "monster", name: "Stomper Monster Truck", price: 22000, top: 33, acc: 11, grip: 7.5, turn: 1.8, off: { dirt: 1, grass: 1, mud: 0.93 }, size: 9, tow: 2, color: 0x2ac0a0, engine: 60, crawl: 1, desc: "HUGE wheels. Climbs anything, crushes mud, does big jumps." },
   // police cars (you get these when you join the police; they never show up at the dealership)
   { id: "cruiser", name: "Police Cruiser", price: 0, police: true, top: 40, acc: 13, grip: 8.5, turn: 2.1, off: { dirt: 0.7, grass: 0.62, mud: 0.45 }, size: 2, tow: 0, color: 0xf4f4f4, engine: 95, crawl: 0.45, desc: "A sturdy police car with a light bar and a siren (G)." },
@@ -44,7 +46,7 @@ export const ENGINE_COST = [0, 600, 1500, 3500, 7000];
 export const LIFT_COST = [0, 400, 800, 1200];
 export const NEONS = [null, 0x3ad0ff, 0xff3ad8, 0x6aff3a, 0xffd23a, 0xff3a3a, 0xffffff];
 // trucks with a bed a dirt bike or quad can ride in (bed floor height + the middle of the bed, in the truck's own space)
-export const BEDS = { pickup: { y: 0.91, z: -1.4 }, minitruck: { y: 0.79, z: -0.75 }, ranch: { y: 1.04, z: -1.95 }, trailboss: { y: 1.46, z: -1.65 } };
+export const BEDS = { crew: { y: 0.98, z: -2.2 }, pickup: { y: 0.91, z: -1.4 }, minitruck: { y: 0.79, z: -0.75 }, ranch: { y: 1.04, z: -1.95 }, trailboss: { y: 1.46, z: -1.65 } };
 export const PRICES = { paint: 150, rims: 200, neon: 500 };
 
 // how rusty it is (0 = shiny, 1 = crusty). The Rusty Pickup comes rusty.
@@ -135,6 +137,19 @@ function bikeModel(C) {
     C.root.add(pivot);
     C.wheels.push({ pivot, spin, knobs, x: w.x, z: w.z, r0: w.r, r: w.r, front: k === "front", side: 1, bike: true, model: true });
   }
+}
+
+// a car body from its side shape: pts = [z, y] going around the outline (arch: ["arch", z, r] = a wheel arch cut out
+// of the bottom edge). w = how wide. Rounded edges (bevel) so it looks like a real car instead of boxes.
+function profile(p, pts, w, mat, x = 0, bev = 0.05) {
+  const s = new THREE.Shape(); let first = true;
+  for (const q of pts) {
+    if (q[0] === "arch") { const [, z, r, y0] = q; s.lineTo(z - r, y0); s.absarc(z, y0, r, Math.PI, 0, true); continue; }
+    if (first) { s.moveTo(q[0], q[1]); first = false; } else s.lineTo(q[0], q[1]);
+  }
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: Math.max(0.01, w - bev * 2), bevelEnabled: bev > 0, bevelThickness: bev, bevelSize: bev, bevelSegments: 2, curveSegments: 10 });
+  const m = new THREE.Mesh(g, mat); m.rotation.y = -Math.PI / 2; m.position.x = x + w / 2 - bev; p.add(m); return m;
 }
 
 // a wheel: steer pivot -> spinning part -> tire + rim
@@ -229,7 +244,7 @@ export function applyLook(C, car) {
     if (w.model) continue;
     w.r = w.r0 * tk; w.spin.scale.set(car.tires === "mud" ? 1.15 : 1, tk, tk); w.knobs.visible = car.tires !== "street";
   }
-  C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? Math.min(1, car.lift) : car.lift) * 0.17; // (bikes: one lift level max)
+  C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? 0 : car.lift) * 0.17; // (dirt bikes don't get lifted)
   C.liftY = C.lift.position.y;
   C.scoop.visible = car.engine >= 2; const bl = C.scoop.getObjectByName("blower"); if (bl) bl.visible = car.engine >= 4;
   C.body.traverse((o) => { if (o.name === "pipe") o.visible = car.engine >= 3; });
@@ -254,30 +269,36 @@ export function animateCar(C, st, dt) {
 // ---------------------------------------------------------------- each vehicle's shape
 const BUILD = {
   pickup(C) {
-    const b = C.body, P = C.paint;
-    C.len = 5.2; C.wid = 2.1; C.seat.set(0.42, 0.95, 0.3); C.hitch.set(0, 0.62, -2.62); C.hood = V3(0, 1.32, 1.75);
-    bx(b, 1.7, 0.3, 4.9, 0, 0.62, 0, M.dark);
-    bx(b, 2.0, 0.72, 1.55, 0, 1.0, 1.75, P); bx(b, 2.0, 0.78, 1.7, 0, 1.03, 0.2, P); // hood + cab bottom
-    bx(b, 1.86, 0.66, 1.5, 0, 1.7, 0.15, M.glass); bx(b, 1.92, 0.1, 1.45, 0, 2.06, 0.1, P);
-    for (const s of [-1, 1]) { bx(b, 0.08, 0.66, 0.1, s * 0.94, 1.7, 0.88, P); bx(b, 0.08, 0.66, 0.1, s * 0.94, 1.7, -0.58, P); }
-    bx(b, 1.96, 0.1, 0.12, 0, 1.38, 0.95, P);
-    // the bed
-    bx(b, 1.8, 0.12, 2.1, 0, 0.85, -1.4, M.trim);
-    for (const s of [-1, 1]) bx(b, 0.12, 0.58, 2.2, s * 0.94, 1.08, -1.4, P);
-    bx(b, 2.0, 0.58, 0.12, 0, 1.08, -2.47, P); bx(b, 2.0, 0.58, 0.1, 0, 1.08, -0.35, P);
-    // bumpers, grille, lights
-    bx(b, 2.1, 0.26, 0.24, 0, 0.72, 2.6, M.chrome); bx(b, 2.1, 0.22, 0.2, 0, 0.72, -2.58, M.chrome);
-    bx(b, 1.3, 0.42, 0.06, 0, 1.06, 2.53, M.dark); for (const s of [-1, 1]) { bx(b, 0.32, 0.22, 0.06, s * 0.78, 1.14, 2.54, M.light); bx(b, 0.2, 0.3, 0.06, s * 0.88, 1.12, -2.54, M.tail); }
+    // an old square-body pickup: real body shape with wheel arches, a chrome grille + bumpers... and rust
+    const b = C.body, P = C.paint, W = 2.0;
+    C.len = 5.2; C.wid = 2.1; C.seat.set(0.42, 0.95, 0.3); C.hitch.set(0, 0.62, -2.62); C.hood = V3(0, 1.48, 1.75);
+    bx(b, 1.6, 0.26, 4.9, 0, 0.52, 0, M.dark); // frame
+    profile(b, [[-0.36, 0.62], ["arch", 1.6, 0.54, 0.55], [2.55, 0.6], [2.58, 1.36], [2.5, 1.43], [1.05, 1.45], [0.9, 1.49], [0.64, 2.05], [-0.28, 2.06], [-0.36, 2.0]], W, P);
+    profile(b, [[0.95, 1.5], [0.69, 2.01], [-0.27, 2.02], [-0.3, 1.5]], W + 0.03, M.glass, 0, 0.02);
+    for (const s of [-1, 1]) {
+      bx(b, 0.02, 0.85, 0.03, s * (W / 2 + 0.02), 0.68, 0.88, M.dark); bx(b, 0.05, 0.05, 0.2, s * (W / 2 + 0.03), 1.32, -0.05, M.chrome);
+      bx(b, 0.06, 0.24, 0.2, s * (W / 2 + 0.12), 1.6, 0.85, M.chrome); // old chrome mirrors
+      profile(b, [[-0.4, 0.62], ["arch", -1.55, 0.54, 0.55], [-2.55, 0.62], [-2.55, 1.4], [-0.4, 1.4]], 0.1, P, s * (W / 2 - 0.05), 0.02); // bed sides
+    }
+    bx(b, W - 0.1, 0.08, 2.1, 0, 0.85, -1.45, M.trim); bx(b, W - 0.05, 0.55, 0.1, 0, 0.9, -0.42, P); bx(b, W, 0.62, 0.1, 0, 0.82, -2.52, P);
+    bx(b, W + 0.02, 0.05, 2.15, 0, 1.41, -1.45, M.trim);
+    // grille (a big chrome rectangle with bars), square headlights, chrome bumpers
+    bx(b, 1.7, 0.5, 0.06, 0, 1.02, 2.57, M.chrome); bx(b, 1.56, 0.38, 0.07, 0, 1.02, 2.58, M.dark);
+    for (let i = -2; i <= 2; i++) bx(b, 0.04, 0.38, 0.08, i * 0.3, 1.02, 2.59, M.chrome); bx(b, 1.56, 0.04, 0.08, 0, 1.02, 2.59, M.chrome);
+    for (const s of [-1, 1]) { bx(b, 0.24, 0.22, 0.05, s * 0.68, 1.03, 2.61, M.light); bx(b, 0.14, 0.34, 0.06, s * 0.93, 1.05, -2.58, M.tail); }
+    bx(b, 2.12, 0.26, 0.24, 0, 0.66, 2.66, M.chrome); bx(b, 2.08, 0.22, 0.2, 0, 0.66, -2.62, M.chrome);
+    // rust spots (Mud & Chrome can scrub them off)
     C.hasRust = true;
-    for (const [x, y, z, w] of [[0.6, 1.2, 2.2, 0.4], [-1.01, 1.0, 0.5, 0.3], [0.7, 1.32, -2.1, 0.5], [-0.4, 1.38, 1.4, 0.35]]) bx(b, w, w * 0.6, 0.04, x, y, z, C.rustMat, x < -1 ? 0 : -Math.PI / 2 * (y > 1.3 ? 1 : 0), x < -1 ? Math.PI / 2 : 0);
+    for (const [x, y, z, w, k] of [[0.55, 1.452, 2.0, 0.45, "top"], [-0.45, 1.452, 1.3, 0.35, "top"], [-1.025, 1.0, 0.5, 0.32, "side"], [1.025, 0.95, -1.9, 0.45, "side"], [0.6, 1.432, -1.4, 0.4, "rail"]])
+      bx(b, w, w * 0.6, 0.02, x, y, z, C.rustMat, k === "side" ? 0 : -Math.PI / 2, k === "side" ? Math.PI / 2 : 0);
     bx(b, 0.16, 0.16, 0.3, 0, 0.6, -2.72, M.chrome);
     C.pipes.push(V3(-0.7, 0.55, -2.55));
-    for (const [x, z, f] of [[0.95, 1.6, 1], [-0.95, 1.6, 1], [0.95, -1.55, 0], [-0.95, -1.55, 0]]) wheel(C, x, z, 0.46, 0.34, f);
+    for (const [x, z, f] of [[0.92, 1.6, 1], [-0.92, 1.6, 1], [0.92, -1.55, 0], [-0.92, -1.55, 0]]) wheel(C, x, z, 0.46, 0.34, f);
   },
   bike(C) {
     const b = C.body, P = C.paint;
     C.len = 2.1; C.wid = 0.8; C.seat.set(0, 0.92, -0.2); C.hitch = null; C.hood = null;
-    if (BIKE) { C.len = 2.5; C.seat.set(0, 0.9, -0.2); C.pipes.push(V3(0.18, 0.82, -0.82)); bikeModel(C); C.realBike = true; return; }
+    if (BIKE) { C.len = 2.5; C.seat.set(0, 0.9, -0.2); bikeModel(C); C.realBike = true; return; } // (no add-on exhaust: the bike has its own)
     // the fork + handlebars turn with the front wheel (a group pivoting on the steering head)
     const fork = new THREE.Group(); fork.position.set(0, 0, 0.62); b.add(fork); C.forks = [fork];
     tube(fork, V3(0, 0.45, 0.13), V3(0, 1.15, -0.12), 0.05, M.chrome);
@@ -287,7 +308,6 @@ const BUILD = {
     bx(b, 0.32, 0.34, 0.24, 0, 0.6, 0.1, M.trim);
     tube(fork, V3(-0.38, 1.2, -0.12), V3(0.38, 1.2, -0.12), 0.03, M.trim);
     bx(fork, 0.42, 0.34, 0.04, 0, 1.15, 0.13, M.white);
-    C.pipes.push(V3(0.18, 0.7, -0.6));
     wheel(C, 0, 0.75, 0.42, 0.16, 1, { bike: true }); wheel(C, 0, -0.75, 0.42, 0.2, 0, { bike: true });
   },
   jeep(C) {
@@ -325,18 +345,20 @@ const BUILD = {
     for (const [x, z, f, r] of [[0.98, 1.3, 1, 0.46], [-0.98, 1.3, 1, 0.46], [1.0, -1.25, 0, 0.54], [-1.0, -1.25, 0, 0.54]]) wheel(C, x, z, r, f ? 0.32 : 0.46, f);
   },
   sports(C) {
-    const b = C.body, P = C.paint;
-    C.len = 4.5; C.wid = 2.0; C.seat.set(0.4, 0.12, -0.2); C.hitch = null; C.hood = V3(0, 0.85, 1.3);
-    bx(b, 1.95, 0.42, 4.4, 0, 0.55, 0, P);
-    bx(b, 1.9, 0.16, 1.3, 0, 0.82, 1.4, P, 0.08); bx(b, 1.8, 0.2, 0.5, 0, 0.5, 2.25, P, 0.3);
-    bx(b, 1.6, 0.42, 1.7, 0, 0.98, -0.3, M.glass); bx(b, 1.5, 0.08, 1.2, 0, 1.2, -0.35, P);
-    bx(b, 1.7, 0.26, 1.2, 0, 0.84, -1.6, P, -0.1);
-    for (const s of [-1, 1]) { bx(b, 0.06, 0.18, 2.2, s * 0.99, 0.6, 0, M.white); bx(b, 0.12, 0.25, 0.6, s * 0.98, 0.55, -1.05, M.dark); }
-    tube(b, V3(-0.6, 0.95, -2.0), V3(-0.6, 1.3, -2.1), 0.05, M.dark); tube(b, V3(0.6, 0.95, -2.0), V3(0.6, 1.3, -2.1), 0.05, M.dark);
-    bx(b, 2.0, 0.08, 0.5, 0, 1.33, -2.12, P, 0.1); bx(b, 0.06, 0.3, 0.55, -1.0, 1.28, -2.12, M.dark); bx(b, 0.06, 0.3, 0.55, 1.0, 1.28, -2.12, M.dark);
-    for (const s of [-1, 1]) { bx(b, 0.45, 0.1, 0.06, s * 0.65, 0.68, 2.22, M.light, 0.3); bx(b, 0.5, 0.1, 0.06, s * 0.6, 0.66, -2.21, M.tail); }
-    bx(b, 1.2, 0.18, 0.06, 0, 0.42, 2.38, M.dark);
-    C.pipes.push(V3(0.35, 0.4, -2.2), V3(-0.35, 0.4, -2.2));
+    // a low, smooth sports car: long hood, sloping roof, side intakes, a rear wing
+    const b = C.body, P = C.paint, W = 1.94;
+    C.len = 4.5; C.wid = 2.0; C.seat.set(0.4, 0.12, -0.2); C.hitch = null; C.hood = V3(0, 0.8, 1.35);
+    profile(b, [[-2.24, 0.34], ["arch", -1.42, 0.44, 0.34], ["arch", 1.42, 0.44, 0.34], [2.24, 0.32], [2.3, 0.48], [2.05, 0.66], [0.95, 0.78], [0.3, 1.16], [-0.6, 1.18], [-1.55, 0.95], [-2.22, 0.88], [-2.3, 0.52]], W, P);
+    profile(b, [[0.99, 0.8], [0.35, 1.17], [-0.58, 1.19], [-1.4, 0.97], [-1.45, 0.84]], W + 0.03, M.glass, 0, 0.02);
+    for (const s of [-1, 1]) {
+      bx(b, 0.04, 0.22, 0.6, s * (W / 2 + 0.01), 0.58, -0.95, M.dark); // side intakes
+      bx(b, 0.02, 0.45, 0.03, s * (W / 2 + 0.02), 0.6, 0.85, M.dark); bx(b, 0.06, 0.12, 0.2, s * (W / 2 + 0.07), 0.88, 0.75, P);
+      bx(b, 0.5, 0.08, 0.06, s * 0.62, 0.62, 2.26, M.light, 0.35); bx(b, 0.55, 0.08, 0.05, s * 0.58, 0.8, -2.27, M.tail);
+    }
+    bx(b, 1.1, 0.14, 0.05, 0, 0.42, 2.3, M.dark); bx(b, W, 0.16, 0.2, 0, 0.32, -2.22, M.dark); // grille + diffuser
+    tube(b, V3(-0.6, 0.9, -2.0), V3(-0.6, 1.2, -2.1), 0.04, M.dark); tube(b, V3(0.6, 0.9, -2.0), V3(0.6, 1.2, -2.1), 0.04, M.dark);
+    bx(b, 1.9, 0.06, 0.42, 0, 1.22, -2.12, P, 0.08); for (const s of [-1, 1]) bx(b, 0.05, 0.22, 0.45, s * 0.95, 1.16, -2.12, M.dark);
+    C.pipes.push(V3(0.35, 0.36, -2.24), V3(-0.35, 0.36, -2.24));
     for (const [x, z, f] of [[0.88, 1.42, 1], [-0.88, 1.42, 1], [0.88, -1.42, 0], [-0.88, -1.42, 0]]) wheel(C, x, z, 0.38, 0.32, f);
   },
   hauler(C) {
@@ -365,6 +387,55 @@ const BUILD = {
     bx(b, 1.6, 0.14, 0.2, 0, 3.6, 0.6, M.dark); for (let i = 0; i < 4; i++) bx(b, 0.24, 0.1, 0.04, -0.45 + i * 0.3, 3.6, 0.72, M.light);
     C.pipes.push(V3(0.8, 1.5, -2.5));
     for (const [x, z, f] of [[1.45, 1.6, 1], [-1.45, 1.6, 1], [1.45, -1.6, 0], [-1.45, -1.6, 0]]) wheel(C, x, z, 1.05, 0.85, f);
+  },
+  // a modern full-size crew cab pickup (real body shape: wheel arches, sloped windshield, four doors, chrome grille)
+  crew(C) {
+    const b = C.body, P = C.paint, W = 2.04;
+    C.len = 5.9; C.wid = 2.1; C.seat.set(0.45, 1.02, 0.25); C.hitch.set(0, 0.62, -3.1); C.hood = V3(0, 1.55, 1.95);
+    bx(b, 1.6, 0.25, 5.4, 0, 0.5, -0.1, M.dark); // frame
+    // cab + hood
+    profile(b, [[-1.36, 0.62], [1.36, 0.62], ["arch", 1.9, 0.52, 0.55], [2.96, 0.6], [2.99, 1.08], [2.9, 1.4], [2.55, 1.5], [1.2, 1.56], [0.38, 2.02], [0.18, 2.06], [-1.22, 2.06], [-1.34, 1.98], [-1.36, 1.56]], W, P);
+    profile(b, [[1.12, 1.6], [0.4, 1.99], [-1.2, 2.0], [-1.28, 1.6]], W + 0.03, M.glass, 0, 0.02); // windows all around
+    for (const z of [-0.42]) bx(b, W + 0.06, 0.42, 0.12, 0, 1.6, z, P); // the pillar between the doors
+    for (const s of [-1, 1]) {
+      for (const z of [0.95, -0.42, -1.3]) bx(b, 0.02, 0.92, 0.03, s * (W / 2 + 0.02), 0.66, z, M.dark); // door seams
+      for (const z of [0.2, -0.95]) bx(b, 0.05, 0.05, 0.22, s * (W / 2 + 0.03), 1.4, z, M.chrome); // door handles
+      bx(b, 0.08, 0.26, 0.34, s * (W / 2 + 0.12), 1.62, 1.05, M.dark); bx(b, 0.18, 0.06, 0.06, s * (W / 2 + 0.05), 1.55, 1.1, M.dark); // mirrors
+      bx(b, 0.24, 0.08, 2.4, s * (W / 2 + 0.06), 0.48, 0.1, M.trim); // running boards
+    }
+    // the bed (hollow: walls, floor, tailgate)
+    for (const s of [-1, 1]) profile(b, [[-1.42, 0.62], ["arch", -1.8, 0.52, 0.55], [-2.98, 0.62], [-2.98, 1.52], [-1.42, 1.52]], 0.1, P, s * (W / 2 - 0.05), 0.02);
+    bx(b, W - 0.1, 0.08, 1.56, 0, 0.94, -2.2, M.trim); bx(b, W - 0.05, 0.6, 0.1, 0, 0.92, -1.45, P); bx(b, W, 0.62, 0.1, 0, 0.9, -2.96, P);
+    bx(b, W + 0.02, 0.05, 1.6, 0, 1.53, -2.2, M.trim); // bed rail caps
+    // front: big chrome grille, headlights, bumper + skid plate
+    bx(b, 1.62, 0.6, 0.06, 0, 0.82, 2.98, M.chrome); bx(b, 1.46, 0.46, 0.07, 0, 0.89, 2.99, M.dark);
+    bx(b, 1.46, 0.07, 0.08, 0, 1.06, 3.0, M.chrome); bx(b, 0.07, 0.46, 0.08, 0, 0.89, 3.0, M.chrome);
+    for (const s of [-1, 1]) { bx(b, 0.34, 0.22, 0.06, s * 0.84, 1.18, 2.96, M.light); bx(b, 0.34, 0.05, 0.07, s * 0.84, 1.06, 2.97, M.white); bx(b, 0.12, 0.42, 0.06, s * 0.96, 1.1, -3.0, M.tail); }
+    bx(b, 2.08, 0.3, 0.26, 0, 0.62, 3.06, M.chrome); bx(b, 1.4, 0.12, 0.3, 0, 0.42, 2.96, M.trim);
+    bx(b, 2.08, 0.24, 0.24, 0, 0.6, -3.07, M.chrome); bx(b, 0.18, 0.18, 0.3, 0, 0.58, -3.2, M.chrome);
+    C.pipes.push(V3(-0.75, 0.48, -3.05));
+    for (const [x, z, f] of [[0.9, 1.9, 1], [-0.9, 1.9, 1], [0.9, -1.8, 0], [-0.9, -1.8, 0]]) wheel(C, x, z, 0.46, 0.34, f);
+  },
+  // a boxy 80s V8 hatchback coupe (four little headlights, a slanted hatch, a lip spoiler)
+  foxhatch(C) {
+    const b = C.body, P = C.paint, W = 1.84;
+    C.len = 4.6; C.wid = 1.9; C.seat.set(0.38, 0.2, -0.3); C.hitch = null; C.hood = V3(0, 0.9, 1.45);
+    profile(b, [[-2.28, 0.4], ["arch", -1.3, 0.42, 0.36], ["arch", 1.38, 0.42, 0.36], [2.3, 0.38], [2.32, 0.62], [2.22, 0.74], [0.95, 0.86], [0.84, 0.88], [0.05, 1.28], [-0.82, 1.3], [-2.02, 1.0], [-2.26, 0.98], [-2.3, 0.62]], W, P);
+    profile(b, [[0.8, 0.92], [0.08, 1.25], [-0.8, 1.27], [-1.96, 0.99], [-1.98, 0.9]], W + 0.03, M.glass, 0, 0.02);
+    bx(b, W + 0.05, 0.36, 0.1, 0, 0.9, -0.3, P); // B pillar
+    for (const s of [-1, 1]) {
+      bx(b, 0.04, 0.12, 3.4, s * (W / 2 + 0.02), 0.5, 0, M.dark); // black side trim strip
+      bx(b, 0.02, 0.5, 0.03, s * (W / 2 + 0.02), 0.45, 0.8, M.dark); bx(b, 0.02, 0.5, 0.03, s * (W / 2 + 0.02), 0.45, -0.85, M.dark); // door seams
+      bx(b, 0.06, 0.16, 0.22, s * (W / 2 + 0.08), 0.95, 0.75, M.dark); // mirrors
+      for (const x of [0.32, 0.6]) bx(b, 0.22, 0.13, 0.05, s * x, 0.64, 2.31, M.light); // four little headlights
+      bx(b, 0.56, 0.16, 0.05, s * 0.55, 0.72, -2.31, M.tail); bx(b, 0.56, 0.05, 0.05, s * 0.55, 0.6, -2.31, M.dark);
+    }
+    bx(b, 0.5, 0.1, 0.05, 0, 0.66, 2.33, M.dark); // the grille slot
+    bx(b, W + 0.02, 0.18, 0.2, 0, 0.32, 2.28, M.dark); bx(b, W + 0.02, 0.2, 0.18, 0, 0.32, -2.26, M.dark); // bumpers
+    bx(b, 1.5, 0.06, 0.3, 0, 1.03, -2.08, P, -0.15); // lip spoiler on the hatch
+    for (let i = 0; i < 4; i++) bx(b, 1.0, 0.03, 0.05, 0, 0.885 + i * 0.012, 1.0 - i * 0.12, M.dark); // hood bulge vents
+    C.pipes.push(V3(0.55, 0.3, -2.3), V3(-0.55, 0.3, -2.3));
+    for (const [x, z, f] of [[0.8, 1.38, 1], [-0.8, 1.38, 1], [0.8, -1.3, 0], [-0.8, -1.3, 0]]) wheel(C, x, z, 0.34, 0.26, f);
   },
   atv(C) { quad(C, 1, 0.36); },
   sportquad(C) { quad(C, 0.95, 0.34, { sport: true }); },
@@ -503,24 +574,28 @@ function quad(C, s, wr, o = {}) {
 function P2(C) { return C.paint2; }
 // a police car: white doors, a push bar and a red + blue light bar on the roof
 function police(C, fast) {
-  const b = C.body, P = C.paint, W = M.white;
-  C.len = 4.8; C.wid = 2.1; C.seat.set(0.42, 0.25, -0.1); C.hitch = null; C.hood = null;
-  const lo = fast ? 0.48 : 0.62, top = fast ? 1.2 : 1.55;
-  bx(b, 2.0, 0.5, 4.7, 0, lo, 0, P);
-  bx(b, 1.96, 0.18, 1.3, 0, lo + 0.3, 1.55, P, fast ? 0.1 : 0.04);
-  bx(b, 2.02, 0.42, 1.9, 0, lo + 0.02, -0.1, fast ? M.dark : W); // doors
-  bx(b, 1.7, top - lo - 0.25, 2.1, 0, (lo + top) / 2 + 0.05, -0.3, M.glass); bx(b, 1.72, 0.08, 1.7, 0, top + 0.02, -0.35, P);
-  bx(b, 1.9, 0.26, 1.1, 0, lo + 0.3, -1.85, P);
+  // a police sedan (the fast one is lower and sleeker): real body shape, white doors, push bar, light bar
+  const b = C.body, P = C.paint, W = 1.98, r = fast ? 0.38 : 0.42, roof = fast ? 1.34 : 1.52, lo = 0.4;
+  C.len = 4.9; C.wid = 2.1; C.seat.set(0.42, 0.25, -0.1); C.hitch = null; C.hood = null;
+  profile(b, [[-2.42, lo], ["arch", -1.45, r + 0.08, 0.38], ["arch", 1.5, r + 0.08, 0.38], [2.42, lo], [2.46, 0.72], [2.3, 0.88], [1.0, 0.97], [0.88, 1.0], [0.18, roof - 0.04], [-0.92, roof], [-1.58, 1.08], [-2.38, 1.02], [-2.46, 0.74]], W, P);
+  profile(b, [[0.86, 1.03], [0.2, roof - 0.08], [-0.9, roof - 0.04], [-1.53, 1.08], [-1.58, 1.03]], W + 0.03, M.glass, 0, 0.02);
+  bx(b, W + 0.05, roof - 1.05, 0.1, 0, 1.03, -0.3, P); // B pillar
+  for (const s of [-1, 1]) {
+    profile(b, [[-1.0, 0.5], [0.95, 0.5], [0.95, 0.98], [-1.0, 0.98]], 0.03, fast ? M.dark : M.white, s * (W / 2 + 0.005), 0); // the doors
+    bx(b, 0.02, 0.48, 0.03, s * (W / 2 + 0.03), 0.74, -0.3, M.dark);
+    bx(b, 0.04, 0.3, 0.3, s * (W / 2 + 0.04), 0.74, 0.35, new THREE.MeshBasicMaterial({ color: 0xffd23a })); // the star
+    bx(b, 0.06, 0.14, 0.2, s * (W / 2 + 0.08), 1.05, 0.8, M.dark); // mirrors
+    bx(b, 0.42, 0.12, 0.05, s * 0.68, 0.76, 2.44, M.light); bx(b, 0.46, 0.14, 0.05, s * 0.66, 0.85, -2.44, M.tail);
+  }
   // light bar
-  bx(b, 1.4, 0.12, 0.34, 0, top + 0.1, -0.35, M.dark);
-  const red = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0x6a1a1a })); red.position.set(-0.36, top + 0.22, -0.35); b.add(red);
-  const blue = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0x1a2a6a })); blue.position.set(0.36, top + 0.22, -0.35); b.add(blue);
+  bx(b, 1.4, 0.1, 0.34, 0, roof, -0.35, M.dark);
+  const red = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0x6a1a1a })); red.position.set(-0.36, roof + 0.13, -0.35); b.add(red);
+  const blue = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.3), new THREE.MeshBasicMaterial({ color: 0x1a2a6a })); blue.position.set(0.36, roof + 0.13, -0.35); b.add(blue);
   C.lights = [red, blue];
-  // push bar, lights, a star on the door
-  bx(b, 1.6, 0.36, 0.14, 0, lo - 0.05, 2.42, M.dark); for (const s of [-1, 1]) { bx(b, 0.1, 0.5, 0.1, s * 0.6, lo, 2.4, M.dark); bx(b, 0.42, 0.14, 0.06, s * 0.68, lo + 0.12, 2.36, M.light); bx(b, 0.42, 0.14, 0.06, s * 0.68, lo + 0.12, -2.36, M.tail); }
-  for (const s of [-1, 1]) bx(b, 0.04, 0.3, 0.3, s * 1.02, lo + 0.05, -0.1, new THREE.MeshBasicMaterial({ color: 0xffd23a }));
-  C.pipes.push(V3(0.4, lo - 0.1, -2.35));
-  const r = fast ? 0.38 : 0.42;
+  // push bar + bumpers
+  bx(b, 1.5, 0.34, 0.12, 0, 0.42, 2.62, M.dark); for (const s of [-1, 1]) bx(b, 0.1, 0.6, 0.1, s * 0.6, 0.38, 2.6, M.dark);
+  bx(b, W, 0.18, 0.16, 0, 0.42, 2.44, M.dark); bx(b, W, 0.2, 0.16, 0, 0.44, -2.44, M.dark);
+  C.pipes.push(V3(0.45, 0.32, -2.45));
   for (const [x, z, f] of [[0.9, 1.5, 1], [-0.9, 1.5, 1], [0.9, -1.45, 0], [-0.9, -1.45, 0]]) wheel(C, x, z, r, 0.34, f);
 }
 BUILD.cruiser = (C) => police(C, false);

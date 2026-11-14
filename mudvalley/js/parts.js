@@ -13,6 +13,8 @@ export const PARTS = [
   { id: "f_mini", kind: "frame", name: "Mini Truck Frame", price: 700, icon: "🚚", model: "minitruck", body: true, desc: "Builds a little work truck. Needs a seat + body panels." },
   { id: "f_jeep", kind: "frame", name: "Trail Jeep Frame", price: 1400, icon: "🚙", model: "jeep", body: true, desc: "Builds an off-road jeep. Needs a seat + body panels." },
   { id: "f_truck", kind: "frame", name: "Pickup Truck Frame", price: 1600, icon: "🛻", model: "pickup", body: true, desc: "Builds a shiny pickup (no rust!). Needs a seat + body panels." },
+  { id: "f_crew", kind: "frame", name: "Crew Cab 1500 Frame", price: 5200, icon: "🛻", model: "crew", body: true, desc: "Builds a big full-size crew cab pickup. Needs a seat + body panels." },
+  { id: "f_fox", kind: "frame", name: "80s Hatchback Frame", price: 4200, icon: "🏎️", model: "foxhatch", body: true, desc: "Builds a boxy 80s V8 hatchback. Needs a seat + body panels." },
   { id: "f_squad", kind: "frame", name: "Sport Quad Frame", price: 1400, icon: "🛞", model: "sportquad", desc: "Builds a fast sport quad. Needs a seat." },
   { id: "f_bquad", kind: "frame", name: "Big Quad Frame", price: 1900, icon: "🛞", model: "bigquad", desc: "Builds a big muddy quad with racks. Needs a seat." },
   { id: "f_450", kind: "frame", name: "Race Bike Frame", price: 1700, icon: "🏍️", model: "bike450", desc: "Builds a race dirt bike. Needs a seat." },
