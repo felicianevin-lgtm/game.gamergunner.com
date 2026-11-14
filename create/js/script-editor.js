@@ -7,6 +7,7 @@
 // ⚡ Auto Build (locked with the same code as Ask an AI) writes the script from plain words, right here (autobuild.js).
 import { HELP, EXAMPLES, checkTypos } from "./scripts.js";
 import { autoScript } from "./autobuild.js";
+import { RELAY } from "./net.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -190,24 +191,34 @@ export function aiGuide(want, info) {
   lines.push("", "EXAMPLE of a correct GunnerVerse script:", "```javascript", "// When this button is clicked, open or close the panel named \"Shop\"", "me.onClick(function () {", "  find(\"Shop\").toggle()", "  sound(\"click\")", "})", "```");
   return lines.join("\n");
 }
-// 🔒 The code lock (used by ⚡ Auto Build; Ask an AI is open to everyone). It is a soft lock: the code is in the page.
-const AI_CODE = "2468";
-function aiUnlocked() { try { return sessionStorage.getItem("gv_ai_ok") === "1"; } catch { return false; } }
-function askCode(then, title = "🔒 Ask an AI") {
+// 🔒 ⚡ Auto Build needs the developer code (Ask an AI is open to everyone). The code is checked on the GunnerVerse
+// server (relay script-ai.js), never written in this page; it's kept for this tab only so you type it once.
+const codeKept = () => { try { return sessionStorage.getItem("gv_ai_c") || ""; } catch { return ""; } };
+const keepCode = (c) => { try { c ? sessionStorage.setItem("gv_ai_c", c) : sessionStorage.removeItem("gv_ai_c"); } catch {} };
+async function aiCall(path, body) {
+  try { return await (await fetch(RELAY + "/hub/script-ai" + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json(); }
+  catch { return { ok: false, e: "net" }; }
+}
+function askCode(then, title = "🔒 Auto Build") {
   const box = document.createElement("div");
   box.className = "se-maker";
   box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Code"><h3>' + esc(title) + '</h3><p>Type the code to open the script builder.</p>' +
-    '<form id="aiLock"><input id="aiCode" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="Code" style="font-size:20px;letter-spacing:.2em;text-align:center;width:140px">' +
+    '<form id="aiLock"><input id="aiCode" inputmode="numeric" maxlength="12" autocomplete="off" aria-label="Code" style="font-size:20px;letter-spacing:.2em;text-align:center;width:160px">' +
     '<p class="se-ai-msg" id="aiLockMsg"></p><div class="se-mk-btns"><button class="tb" type="button" id="aiLockNo">Close</button><button class="tb se-make">Open</button></div></form></div>';
   $("scriptEd").appendChild(box);
   const q = (id) => box.querySelector("#" + id);
   box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") box.remove(); });
   q("aiLockNo").onclick = () => { box.remove(); $("seTa").focus(); };
-  q("aiLock").onsubmit = (e) => {
+  q("aiLock").onsubmit = async (e) => {
     e.preventDefault();
-    if (q("aiCode").value.trim() !== AI_CODE) { q("aiLockMsg").textContent = "Wrong code!"; q("aiCode").value = ""; q("aiCode").focus(); return; }
-    try { sessionStorage.setItem("gv_ai_ok", "1"); } catch {}
-    box.remove(); then();
+    const c = q("aiCode").value.trim(); if (!c) return;
+    q("aiLockMsg").textContent = "Checking...";
+    const r = await aiCall("/unlock", { c });
+    if (!r.ok) {
+      q("aiLockMsg").textContent = r.e === "password" ? "Wrong code!" : r.e === "slowdown" ? "Too many wrong tries. Wait 10 minutes." : "Couldn't reach GunnerVerse. Check your internet.";
+      q("aiCode").value = ""; q("aiCode").focus(); return;
+    }
+    keepCode(c); box.remove(); then(r);
   };
   q("aiCode").focus();
 }
@@ -248,12 +259,12 @@ const AUTO_IDEAS = {
 };
 function openAuto() {
   if (!cur) return;
-  if (!aiUnlocked()) { askCode(openAuto, "🔒 Auto Build"); return; }
+  if (!codeKept()) { askCode(openAuto); return; }
   const kind = cur.kind === "game" ? "game" : cur.kind === "part" ? "part" : "gui";
   const box = document.createElement("div");
   box.className = "se-maker";
   box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Auto Build"><h3>⚡ Auto Build</h3>' +
-    '<p>Type what you want the script to do, in your own words. Use the names of your things (like they are in the Explorer). Auto Build writes the code for you, right here!</p>' +
+    '<p>Type what you want the script to do, in your own words. Use the names of your things (like they are in the Explorer). 🤖 A real AI writes the code for you, right here!</p>' +
     '<label>What should the script do?<textarea id="abWant" rows="4" maxlength="800" placeholder="Example: ' + esc(AUTO_IDEAS[kind][0]) + '"></textarea></label>' +
     '<p class="se-tip" style="margin:6px 0 2px">Ideas (click one):</p><div class="se-ab-ideas">' + AUTO_IDEAS[kind].map((x) => '<button type="button" class="se-ab-idea">' + esc(x) + "</button>").join("") + "</div>" +
     '<div id="abOut"></div>' +
@@ -264,41 +275,56 @@ function openAuto() {
   box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") box.remove(); if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) q("abGo").click(); });
   q("abNo").onclick = () => { box.remove(); $("seTa").focus(); };
   let busy = false;
-  q("abGo").onclick = () => {
+  const show = (code, info) => {
+    const typo = checkTypos(code);
+    q("abOut").innerHTML = info + '<pre class="se-mk-code" id="abCode"></pre>' + (typo ? '<p class="se-tip">⚠ ' + esc(typo) + "</p>" : "") +
+      '<div class="se-mk-btns"><button class="tb" type="button" id="abRep">♻️ Replace my script</button><button class="tb se-make" type="button" id="abAdd">➕ Add to my script</button></div>';
+    q("abCode").textContent = code.trim();
+    const put = (replace) => {
+      const ta = $("seTa");
+      box.remove(); ta.focus();
+      if (replace) { if (ta.value.trim() && !confirm("Replace everything in this script with the Auto Build code?")) return; ta.select(); }
+      else ta.setSelectionRange(ta.value.length, ta.value.length);
+      const add = replace || !ta.value.trim() ? code : (ta.value.endsWith("\n") ? "" : "\n") + "\n" + code;
+      if (!document.execCommand("insertText", false, add)) { if (replace) ta.value = add; else ta.value += add; }
+      paint(); changed();
+      $("seStatus").className = "se-status good"; $("seStatus").textContent = "⚡ Auto Build wrote your script! Press ▶ Play to try it.";
+    };
+    q("abAdd").onclick = () => put(false);
+    q("abRep").onclick = () => put(true);
+  };
+  // the free word builder (autobuild.js): used when the AI can't (no internet, this month's $5 is used up...)
+  const wordBuild = (want, why) => {
+    const r = autoScript(want, { kind: cur.kind, meName: cur.meName, things: cur.things ? cur.things() : [] });
+    const msg = why ? '<p class="se-ai-msg" style="color:#ffb35c!important">' + esc(why) + "</p>" : "";
+    if (r.empty) { q("abOut").innerHTML = msg + '<p class="se-tip">The free builder didn\'t understand that one either. Try words like: when I click this / touch / press F, then open, hide, spin, chase, teleport, say, win.</p>'; return; }
+    show(r.code, msg + '<p class="se-tip">' + r.got.map((g) => "✅ " + esc(g)).join("<br>") + (r.missed.length ? "<br>" + r.missed.map((m) => "❓ Didn't get " + esc(m)).join("<br>") : "") + "</p>");
+  };
+  const WHY = { cap: "This month's $5 of AI is used up (it comes back next month). The free builder made this instead:", off: "The AI isn't turned on. The free builder made this instead:",
+    busy: "The AI is busy right now. The free builder made this instead:", refused: "The AI wouldn't write that one. The free builder tried instead:",
+    slowdown: "Slow down a little! The free builder made this instead:", net: "Couldn't reach GunnerVerse. The free builder made this instead:" };
+  q("abGo").onclick = async () => {
     if (busy) return;
     const want = q("abWant").value.trim();
     if (!want) { q("abOut").innerHTML = '<p class="se-ai-msg" style="color:#ffb35c!important">Type what you want first!</p>'; q("abWant").focus(); return; }
     busy = true; let k = 0;
-    const tick = () => { // (a little "building..." bar, then the code)
+    const bar = setInterval(() => { // (a "building..." bar while the AI writes it)
       k++;
-      q("abOut").innerHTML = '<p style="font:700 16px ui-monospace,Consolas,monospace;margin:10px 0">[' + "█".repeat(k).padEnd(10, "░") + "] " + ["Reading your words...", "Finding your things...", "Writing the code...", "Checking for typos..."][Math.min(3, Math.floor(k / 3))] + "</p>";
-      if (k < 10) { setTimeout(tick, 70); return; }
-      busy = false;
-      const r = autoScript(want, { kind: cur.kind, meName: cur.meName, things: cur.things ? cur.things() : [] });
-      if (r.empty) {
-        q("abOut").innerHTML = '<p class="se-ai-msg" style="color:#ffb35c!important">Hmm, I didn\'t understand that one. Try words like: when I click this / touch / press F / every 5 seconds, then open, hide, spin, chase, teleport, say, play a sound, win, build 20 trees.</p>' +
-          (r.missed.length ? '<p class="se-tip">❓ ' + r.missed.map(esc).join("<br>❓ ") + "</p>" : "");
-        return;
-      }
-      const typo = checkTypos(r.code);
-      q("abOut").innerHTML = '<pre class="se-mk-code" id="abCode"></pre>' +
-        '<p class="se-tip">' + r.got.map((g) => "✅ " + esc(g)).join("<br>") + (r.missed.length ? "<br>" + r.missed.map((m) => "❓ Didn't get " + esc(m)).join("<br>") : "") + (typo ? "<br>⚠ " + esc(typo) : "") + "</p>" +
-        '<div class="se-mk-btns"><button class="tb" type="button" id="abRep">♻️ Replace my script</button><button class="tb se-make" type="button" id="abAdd">➕ Add to my script</button></div>';
-      q("abCode").textContent = r.code.trim();
-      const put = (replace) => {
-        const ta = $("seTa");
-        box.remove(); ta.focus();
-        if (replace) { if (ta.value.trim() && !confirm("Replace everything in this script with the Auto Build code?")) return; ta.select(); }
-        else ta.setSelectionRange(ta.value.length, ta.value.length);
-        const add = replace || !ta.value.trim() ? r.code : (ta.value.endsWith("\n") ? "" : "\n") + "\n" + r.code;
-        if (!document.execCommand("insertText", false, add)) { if (replace) ta.value = add; else ta.value += add; }
-        paint(); changed();
-        $("seStatus").className = "se-status good"; $("seStatus").textContent = "⚡ Auto Build wrote your script! Press ▶ Play to try it.";
-      };
-      q("abAdd").onclick = () => put(false);
-      q("abRep").onclick = () => put(true);
-    };
-    tick();
+      q("abOut").innerHTML = '<p style="font:700 16px ui-monospace,Consolas,monospace;margin:10px 0">[' + "█".repeat(Math.min(9, Math.floor(k / 3))).padEnd(10, "░") + "] 🤖 " + ["Reading your words...", "Looking at your game...", "Writing the code...", "Almost done..."][Math.min(3, Math.floor(k / 8))] + "</p>";
+    }, 250);
+    const guide = aiGuide(want, { kind: cur.kind, meName: cur.meName, things: cur.things ? cur.things() : [], code: $("seTa").value.replace(/^\/\/ 📜.*\n?/gm, "") });
+    const r = await aiCall("", { c: codeKept(), guide });
+    clearInterval(bar); busy = false;
+    if (!box.isConnected) return;
+    if (r.ok) {
+      const code = codeFromAnswer(r.text) || r.text;
+      const note = r.text.split("```")[0].trim();
+      show(code, (note ? '<p class="se-tip" style="font-size:14px">🤖 ' + esc(note) + "</p>" : "") +
+        '<p class="se-tip">Written by AI · ' + (r.cost < 0.01 ? "less than 1¢" : Math.round(r.cost * 100) + "¢") + " · $" + (r.left || 0).toFixed(2) + " left this month" + (r.cut ? " · ⚠ it ran out of room, the end might be missing" : "") + "</p>");
+      return;
+    }
+    if (r.e === "password") { keepCode(""); box.remove(); askCode(openAuto); return; }
+    wordBuild(want, WHY[r.e] || "The AI had a problem. The free builder made this instead:");
   };
   q("abWant").focus();
 }
