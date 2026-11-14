@@ -39,7 +39,9 @@ function load() {
   if (!Array.isArray(s.drops)) s.drops = [];
   if (!s.camp || typeof s.camp !== "object") s.camp = {}; // (camping gear: have = id -> how many in your bag, set = set up in the world)
   if (!s.camp.have || typeof s.camp.have !== "object") s.camp.have = {};
-  if (!Array.isArray(s.camp.set)) s.camp.set = []; // (delivery boxes on the ground you haven't opened yet)
+  if (!Array.isArray(s.camp.set)) s.camp.set = [];
+  if (!s.outfit || typeof s.outfit !== "object") s.outfit = {}; // (clothes you wear: character.js setOutfit)
+  if (!Array.isArray(s.closet)) s.closet = []; // (clothing styles you bought: "top1", "hat2"...) // (delivery boxes on the ground you haven't opened yet)
   if (!Array.isArray(s.houses) || !s.houses.includes("lot")) s.houses = ["lot", ...(Array.isArray(s.houses) ? s.houses : [])];
   s.money = Math.max(0, Math.floor(+s.money || 0));
   return s;

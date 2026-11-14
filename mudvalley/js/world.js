@@ -162,11 +162,12 @@ function copperCreek(scene) {
   placeAt(scene, B.blasterShop, 366, -300, Math.PI);
   placeAt(scene, (s, b) => B.smallShop(s, b, "COPPER CAFE", 0xf2e0c8, 0xc0602a), 418, -301, Math.PI);
   placeAt(scene, (s, b) => B.smallShop(s, b, "TOY TRAIN SHOP", 0xd8f0ff, 0x2a8ad0), 436, -301, Math.PI);
+  placeAt(scene, (s, b) => B.smallShop(s, b, "THREADS CLOTHING", 0xffe4f2, 0xd04a9a), 304, -301, Math.PI);
   for (const p of PAWNS) placeAt(scene, B.pawnShop, p.x, p.z, p.yaw);
   // (the two houses on Copper Lane are for sale: see HOUSES)
   // street lamps + trees along Main Street
   const b = new B.Batch();
-  for (let x = 304; x <= 492; x += 22) for (const z of [-311, -325]) { if (Math.abs(x - 400) < 8) continue; b.at(x, hAt(x, z), z, z < -318 ? 0 : Math.PI); B.tree(b, 0, 0, 0.7, 1); }
+  for (let x = 304; x <= 492; x += 22) for (const z of [-311, -325]) { if (Math.abs(x - 400) < 8 || (Math.abs(x - 304) < 8 && z > -318)) continue; b.at(x, hAt(x, z), z, z < -318 ? 0 : Math.PI); B.tree(b, 0, 0, 0.7, 1); }
   b.finish(scene);
   B.sign(scene, "WELCOME TO COPPER CREEK", 9, 1.6, 300, hAt(300, -330) + 4, -330, Math.PI / 2, { bg: "#c0602a", fg: "#ffffff", back: true });
 }

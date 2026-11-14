@@ -16,18 +16,24 @@ export const LOOKS = {
     { skin: 0xffd0a8, shirt: 0xffffff, pants: 0x3a6a3a, shoes: 0x3a2a1a, hair: 0xb0b0b0, cap: 0x3a7a3a },
   ],
 };
+// clothes (the clothing store, menus.js): top = 0 tee, 1 hoodie, 2 jacket, 3 tank top, 4 flannel, 5 jersey;
+// legs = 0 jeans, 1 shorts, 2 cargo pants; hat = 0 cap, 1 beanie, 2 cowboy hat, 3 bucket hat (cap: null = no hat);
+// glasses = 0 none, 1 sunglasses, 2 glasses; extra = 0 none, 1 gold chain, 2 backpack. acc = the second color (jacket inside, flannel checks...)
+export const CLOTH_COLORS = [0xffffff, 0x1a1a1e, 0x9aa0aa, 0xe0203a, 0xff7a1a, 0xffd23a, 0x8adf3a, 0x3aa04a, 0x2ac0a0, 0x3ad0ff, 0x2f8ae0, 0x2a3550, 0x6a3ad0, 0xff5ad8, 0x7a4a2a, 0xd8b890];
+let OUTFIT = {};
+export function setOutfit(o) { OUTFIT = o || {}; }
 // your look for a career: cops wear the blue uniform, robbers a striped shirt (and a ski mask if you bought one)
 export function lookFor(role, masked) {
   if (role === "cop") return LOOKS.cop;
-  if (role === "robber") return { ...LOOKS.you, shirt: 0x2a2a2a, stripes: true, cap: masked ? null : 0x2a2a2a, mask: masked ? 0x222226 : null };
-  return LOOKS.you;
+  if (role === "robber") return { ...LOOKS.you, ...OUTFIT, shirt: 0x2a2a2a, top: OUTFIT.top === 1 || OUTFIT.top === 2 ? OUTFIT.top : 0, stripes: true, cap: masked ? null : OUTFIT.cap === undefined ? 0x2a2a2a : OUTFIT.cap, mask: masked ? 0x222226 : null };
+  return { ...LOOKS.you, ...OUTFIT };
 }
 
 // a kid made of boxes. Returns { root, parts, pose(kind, t), setLook(look), hold(item) }
 export function makePerson(look = LOOKS.you, scale = 1) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   const hip = new THREE.Group(); hip.position.y = 0.9; body.add(hip);
-  const m = { skin: mat(look.skin), shirt: mat(look.shirt), pants: mat(look.pants), shoes: mat(look.shoes), hair: mat(look.hair), cap: mat(look.cap || 0), mask: mat(look.mask || 0x222226), stripe: mat(0xf4f4f4) };
+  const m = { skin: mat(look.skin), shirt: mat(look.shirt), pants: mat(look.pants), shoes: mat(look.shoes), hair: mat(look.hair), cap: mat(look.cap || 0), mask: mat(look.mask || 0x222226), stripe: mat(0xf4f4f4), acc: mat(look.acc ?? 0xffffff), dark: mat(0x141418), gold: new THREE.MeshPhongMaterial({ color: 0xffc42a, shininess: 90, specular: 0xffffff }) };
   const torso = box(0.62, 0.7, 0.36, m.shirt); torso.position.y = 0.35; hip.add(torso);
   const stripes = new THREE.Group(); hip.add(stripes);
   for (const y of [0.15, 0.35, 0.55]) { const s = box(0.64, 0.07, 0.38, m.stripe); s.position.y = y; stripes.add(s); }
@@ -42,15 +48,44 @@ export function makePerson(look = LOOKS.you, scale = 1) {
   // a ski mask (with eye holes, so you can still see the eyes)
   const maskG = new THREE.Group(); head.add(maskG);
   { const top = box(0.54, 0.22, 0.52, m.mask); top.position.y = 0.24; maskG.add(top); const low = box(0.54, 0.2, 0.52, m.mask); low.position.y = -0.1; maskG.add(low); for (const x of [-0.25, 0.25]) { const sd = box(0.06, 0.14, 0.52, m.mask); sd.position.set(x, 0.07, 0); maskG.add(sd); } const pom = box(0.16, 0.12, 0.16, m.stripe); pom.position.y = 0.4; maskG.add(pom); }
-  const arms = [], legs = [];
+  const arms = [], legs = [], armM = [], legM = [], shins = [], sleeves = [], pockets = [];
   for (const s of [-1, 1]) {
     const a = new THREE.Group(); a.position.set(s * 0.41, 0.66, 0); hip.add(a);
-    const am = box(0.2, 0.62, 0.22, m.shirt); am.position.y = -0.26; a.add(am);
+    const am = box(0.2, 0.62, 0.22, m.shirt); am.position.y = -0.26; a.add(am); armM.push(am);
+    const sl = box(0.22, 0.1, 0.24, m.acc); sl.position.y = -0.3; a.add(sl); sleeves.push(sl); // (jersey sleeve stripe)
     const hand = box(0.18, 0.14, 0.18, m.skin); hand.position.y = -0.62; a.add(hand); arms.push(a);
     const l = new THREE.Group(); l.position.set(s * 0.16, 0, 0); hip.add(l);
-    const lm = box(0.24, 0.72, 0.28, m.pants); lm.position.y = -0.4; l.add(lm);
+    const lm = box(0.24, 0.72, 0.28, m.pants); lm.position.y = -0.4; l.add(lm); legM.push(lm);
+    const shin = box(0.2, 0.4, 0.24, m.skin); shin.position.y = -0.56; l.add(shin); shins.push(shin); // (bare legs under shorts)
+    const pk = box(0.06, 0.2, 0.18, m.pants); pk.position.set(s * 0.14, -0.38, 0); l.add(pk); pockets.push(pk); // (cargo pockets)
     const sh = box(0.26, 0.14, 0.36, m.shoes); sh.position.set(0, -0.82, 0.04); l.add(sh); legs.push(l);
   }
+  // tops: a hood + front pocket, an open jacket (the shirt under it shows), flannel checks, a jersey number
+  const hood = new THREE.Group(); hip.add(hood);
+  { const h = box(0.46, 0.26, 0.14, m.shirt); h.position.set(0, 0.62, -0.24); hood.add(h); const pk = box(0.36, 0.16, 0.03, m.shirt); pk.position.set(0, 0.16, 0.19); hood.add(pk); for (const x of [-0.07, 0.07]) { const st = box(0.025, 0.2, 0.02, m.acc); st.position.set(x, 0.5, 0.19); hood.add(st); } }
+  const jacket = new THREE.Group(); hip.add(jacket);
+  { const inner = box(0.2, 0.68, 0.03, m.acc); inner.position.set(0, 0.36, 0.185); jacket.add(inner); for (const x of [-0.17, 0.17]) { const c = box(0.12, 0.16, 0.06, m.shirt); c.position.set(x, 0.68, 0.17); c.rotation.z = x > 0 ? -0.4 : 0.4; jacket.add(c); } }
+  const checks = new THREE.Group(); hip.add(checks);
+  { for (const y of [0.12, 0.32, 0.52]) { const c = box(0.64, 0.05, 0.38, m.acc); c.position.y = y; checks.add(c); } for (const x of [-0.18, 0, 0.18]) { const c = box(0.05, 0.7, 0.38, m.acc); c.position.set(x, 0.35, 0); checks.add(c); } }
+  const jersey = new THREE.Group(); hip.add(jersey);
+  { const n1 = box(0.08, 0.36, 0.02, m.acc); n1.position.set(-0.08, 0.38, -0.19); jersey.add(n1); const n2 = box(0.08, 0.36, 0.02, m.acc); n2.position.set(0.1, 0.38, -0.19); jersey.add(n2); const col = box(0.3, 0.06, 0.38, m.acc); col.position.y = 0.68; jersey.add(col); }
+  // hats (all use the cap color)
+  const hats = [capG];
+  const beanie = new THREE.Group(); head.add(beanie); hats.push(beanie);
+  { const b = box(0.56, 0.26, 0.54, m.cap); b.position.y = 0.36; beanie.add(b); const r = box(0.58, 0.08, 0.56, m.acc); r.position.y = 0.24; beanie.add(r); const pom = box(0.14, 0.14, 0.14, m.acc); pom.position.y = 0.56; beanie.add(pom); }
+  const cowboy = new THREE.Group(); head.add(cowboy); hats.push(cowboy);
+  { const br = box(0.96, 0.05, 0.86, m.cap); br.position.y = 0.33; cowboy.add(br); const cr = box(0.5, 0.3, 0.46, m.cap); cr.position.y = 0.48; cowboy.add(cr); const bd = box(0.52, 0.06, 0.48, m.dark); bd.position.y = 0.38; cowboy.add(bd); }
+  const bucket = new THREE.Group(); head.add(bucket); hats.push(bucket);
+  { const br = box(0.74, 0.05, 0.72, m.cap); br.position.y = 0.3; br.rotation.x = 0.04; bucket.add(br); const cr = box(0.54, 0.24, 0.52, m.cap); cr.position.y = 0.42; bucket.add(cr); }
+  // glasses, a gold chain, a backpack
+  const shades = new THREE.Group(); head.add(shades);
+  { const g = box(0.44, 0.11, 0.03, m.dark); g.position.set(0, 0.11, 0.255); shades.add(g); }
+  const specs = new THREE.Group(); head.add(specs);
+  { for (const x of [-0.12, 0.12]) { const f = box(0.15, 0.13, 0.02, m.dark); f.position.set(x, 0.1, 0.255); specs.add(f); const g = box(0.11, 0.09, 0.025, mat(0xbfe8ff)); g.position.set(x, 0.1, 0.256); specs.add(g); } const br = box(0.1, 0.03, 0.02, m.dark); br.position.set(0, 0.12, 0.258); specs.add(br); }
+  const chain = new THREE.Group(); hip.add(chain);
+  { const c = box(0.3, 0.04, 0.03, m.gold); c.position.set(0, 0.6, 0.19); chain.add(c); const p = box(0.1, 0.12, 0.03, m.gold); p.position.set(0, 0.5, 0.195); chain.add(p); }
+  const pack = new THREE.Group(); hip.add(pack);
+  { const b = box(0.5, 0.56, 0.22, m.acc); b.position.set(0, 0.36, -0.29); pack.add(b); const f = box(0.36, 0.22, 0.06, m.dark); f.position.set(0, 0.22, -0.42); pack.add(f); }
   // the right hand holds things. The item's +z points out of the fist (along the arm when the arm is raised forward)
   const hand = new THREE.Group(); hand.position.set(0, -0.66, 0.02); hand.rotation.x = Math.PI / 2; arms[1].add(hand);
   // knocked-out stars that spin around the head
@@ -61,7 +96,12 @@ export function makePerson(look = LOOKS.you, scale = 1) {
   const P = { root, body, hip, head, arms, legs, torso, hand, stars, item: null };
   P.setLook = (lk) => {
     m.skin.color.setHex(lk.skin); m.shirt.color.setHex(lk.shirt); m.pants.color.setHex(lk.pants); m.shoes.color.setHex(lk.shoes); m.hair.color.setHex(lk.hair);
-    capG.visible = !!lk.cap && !lk.mask; if (lk.cap) m.cap.color.setHex(lk.cap);
+    const hat = lk.hat ?? 0; hats.forEach((g, i) => { g.visible = !!lk.cap && !lk.mask && hat === i; }); if (lk.cap) m.cap.color.setHex(lk.cap);
+    m.acc.color.setHex(lk.acc ?? 0xffffff); const top = lk.stripes ? Math.min(lk.top || 0, 2) : lk.top || 0, legsK = lk.legs || 0;
+    hood.visible = top === 1; jacket.visible = top === 2; checks.visible = top === 4; jersey.visible = top === 5;
+    for (const a of armM) a.material = top === 3 ? m.skin : m.shirt; for (const sl of sleeves) sl.visible = top === 5;
+    for (const l of legM) { l.scale.y = legsK === 1 ? 0.45 : 1; l.position.y = legsK === 1 ? -0.2 : -0.4; } for (const sh of shins) sh.visible = legsK === 1; for (const pk of pockets) pk.visible = legsK === 2;
+    shades.visible = lk.glasses === 1 && !lk.mask; specs.visible = lk.glasses === 2 && !lk.mask; chain.visible = lk.extra === 1 && !lk.badge; pack.visible = lk.extra === 2;
     maskG.visible = !!lk.mask; if (lk.mask) m.mask.color.setHex(lk.mask);
     stripes.visible = !!lk.stripes; badge.visible = !!lk.badge; hair.visible = !lk.mask;
   };

@@ -12,6 +12,7 @@ import { GEAR, BLASTERS, RANKS, rankOf, nextRank, lootCap, BOOK_PAY } from "./cr
 import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } from "./fishing.js";
 import { QUICK } from "./mp.js";
 import { CAMP_ITEMS, campItem, CAMP_MAX, TENT_COLORS } from "./camp.js";
+import { CLOTH_COLORS, LOOKS } from "./character.js";
 import { itemById, packCap } from "./npcs.js";
 import { PARTS, partById, KINDS, SHIP_FEE, have } from "./parts.js";
 import * as IN from "./input.js";
@@ -305,7 +306,7 @@ function phone(view = "home") {
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["camp", "⛺", "Camp"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["camp", "⛺", "Camp Bag"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? (r.drift ? S.best[r.id].toLocaleString() + " pts" : H.fmtTime(S.best[r.id])) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
@@ -501,7 +502,7 @@ const campSw = (cur, act) => `<div class="swatches" style="display:flex;flex-wra
 function campShop() {
   if (campColor == null) campColor = S.camp.color ?? TENT_COLORS[0];
   const rv = trailerById("camper"), haveRV = S.trailers.some((t) => t.type === "camper");
-  const html = `<h2>🏕️ CAMP STORE</h2><div class="bank">${money(S.money)}</div><p class="sub">“Howdy, camper! Buy what you need, then set up your camp ANYWHERE: 📱 Phone → ⛺ Camp → Set up here.”</p>
+  const html = `<h2>🏕️ CAMP STORE</h2><div class="bank">${money(S.money)}</div><p class="sub">“Howdy, camper! Buy what you need, then set up your camp ANYWHERE: 📱 Phone → ⛺ Camp Bag → 📍 Place it.”</p>
     <p class="note"><b>Tent + chair color:</b></p>${campSw(campColor, "ccol")}
     <div class="list">${CAMP_ITEMS.map((it) => { const n = S.camp.have[it.id] || 0, out = S.camp.set.filter((x) => x.id === it.id).length; return `<div class="item"><span class="ico">${it.icon}</span><span class="nm"><b>${esc(it.name)}${n + out ? `<span class="tag">HAVE ${n + out}</span>` : ""}</b><small>${esc(it.desc)}</small></span><button type="button" class="mid" data-a="buy" data-v="${it.id}" ${S.money >= it.price ? "" : "disabled"}>${money(it.price)}</button></div>`; }).join("")}</div>
     <h3>🚐 ${esc(rv.name)}</h3><p class="note">${esc(rv.desc)}${haveRV ? " <b>(You have one!)</b>" : ""}</p><p class="note"><b>Stripe color:</b></p>${swatches(tColor, "rcol")}
@@ -510,16 +511,51 @@ function campShop() {
   onAct = (a, val) => {
     if (a === "ccol") { campColor = +val; S.camp.color = campColor; save(); SFX.click(); campShop(); }
     if (a === "rcol") { tColor = +val; SFX.click(); campShop(); }
-    if (a === "buy") { if (GM.buyCamp(val, campColor)) H.toast(campItem(val).icon + " Bought a " + campItem(val).name + "!", "Set it up anywhere: 📱 Phone → ⛺ Camp.", "good", 3000); campShop(); }
+    if (a === "buy") { if (GM.buyCamp(val, campColor)) H.toast(campItem(val).icon + " Bought a " + campItem(val).name + "!", "It's in your Camp Bag: 📱 Phone → ⛺ Camp Bag → 📍 Place it.", "good", 3000); campShop(); }
     if (a === "rv") { if (GM.buyTrailer("camper", tColor, { x: 300, z: 128, yaw: Math.PI / 2, name: "by the Campground" })) close(); }
   };
 }
 function campHtml(back) {
   const me = GM.mePos(), have = CAMP_ITEMS.filter((it) => S.camp.have[it.id] > 0), set = S.camp.set.map((it) => ({ it, d: Math.round(Math.hypot(it.x - me.x, it.z - me.z)) })).sort((a, b) => a.d - b.d);
-  return `<h2>⛺ CAMP</h2>${back}<p class="sub">Set up your camp anywhere! It goes right in front of you. (${S.camp.set.length} / ${CAMP_MAX} set up)</p>
-    <h3>In your bag</h3>${have.length ? `<div class="list">${have.map((it) => `<div class="item"><span class="ico">${it.icon}</span><span class="nm"><b>${esc(it.name)} ×${S.camp.have[it.id]}</b></span><button type="button" class="mid" data-a="campSet" data-v="${it.id}">Set up here</button></div>`).join("")}</div>` : `<p class="note">Nothing yet. Buy tents and camp stuff at the Camp Store (by the Campground).</p><div class="btns"><button type="button" class="small" data-a="gpsPlace" data-v="campstore">📍 GPS to the Camp Store</button></div>`}
+  return `<h2>⛺ CAMP BAG</h2>${back}<p class="sub">Pick something from your bag, then walk to where you want it (you'll see a see-through copy). E = put it there, Q = turn it. (${S.camp.set.length} / ${CAMP_MAX} set up)</p>
+    <h3>In your bag</h3>${have.length ? `<div class="list">${have.map((it) => `<div class="item"><span class="ico">${it.icon}</span><span class="nm"><b>${esc(it.name)} ×${S.camp.have[it.id]}</b></span><button type="button" class="mid" data-a="campSet" data-v="${it.id}">📍 Place it</button></div>`).join("")}</div>` : `<p class="note">Nothing yet. Buy tents and camp stuff at the Camp Store (by the Campground).</p><div class="btns"><button type="button" class="small" data-a="gpsPlace" data-v="campstore">📍 GPS to the Camp Store</button></div>`}
     <h3>Set up</h3>${set.length ? `<div class="list">${set.map(({ it, d }) => `<div class="item"><span class="ico">${campItem(it.id).icon}</span><span class="nm"><b>${esc(campItem(it.id).name)}</b><small>${d < 15 ? "Right here" : d + " m away"}</small></span><button type="button" class="small" data-a="campGps" data-v="${it.u}">📍</button><button type="button" class="small" data-a="campPack" data-v="${it.u}">Pack up</button></div>`).join("")}</div>
       <div class="btns"><button type="button" class="small" data-a="campPackNear">Pack up everything near me</button></div>` : `<p class="note">Nothing set up yet.</p>`}`;
+}
+// ---------------------------------------------------------------- Threads Clothing (character.js draws the clothes)
+// [name, price] for each style; the free ones are always yours. You buy a style once, then every color is free.
+const CLOTHES = {
+  top: { name: "Tops", icon: "👕", list: [["T-Shirt", 0], ["Hoodie", 150], ["Open Jacket", 250], ["Tank Top", 60], ["Flannel", 120], ["Sports Jersey", 180]] },
+  legs: { name: "Pants", icon: "👖", list: [["Jeans", 0], ["Shorts", 80], ["Cargo Pants", 140]] },
+  hat: { name: "Hats", icon: "🧢", list: [["Ball Cap", 0], ["Beanie", 60], ["Cowboy Hat", 200], ["Bucket Hat", 90], ["No Hat", 0]] },
+  glasses: { name: "Glasses", icon: "🕶️", list: [["No Glasses", 0], ["Sunglasses", 75], ["Glasses", 50]] },
+  extra: { name: "Extras", icon: "📿", list: [["Nothing", 0], ["Gold Chain", 400], ["Backpack", 120]] },
+};
+const HAIR = [0x1a1a1a, 0x3a2414, 0x5a3a1a, 0x8a5a2a, 0xd8a040, 0xf0d890, 0xb0b0b0, 0xc0402a, 0xff5ad8, 0x3ad0ff, 0x6aff3a, 0x6a3ad0];
+let clTab = "top";
+const owns = (k, i) => !CLOTHES[k].list[i][1] || S.closet.includes(k + i);
+function clothesShop() {
+  const O = S.outfit, Y = LOOKS.you, cur = (k) => (k === "hat" ? (O.cap === null ? 4 : O.hat || 0) : O[k] || 0);
+  const sw = (list, val, act) => `<div class="swatches" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${list.map((c) => `<button type="button" data-a="${act}" data-v="${c}" title="color" style="width:30px;height:30px;border-radius:50%;background:${hex(c)};border:3px solid ${c === val ? "#ffd23a" : "rgba(255,255,255,0.5)"};cursor:pointer"></button>`).join("")}</div>`;
+  const tabs = [...Object.entries(CLOTHES).map(([k, c]) => [k, c.icon + " " + c.name]), ["shoes", "👟 Shoes"], ["hair", "💇 Hair"]];
+  let body = "";
+  if (CLOTHES[clTab]) {
+    body = `<div class="list">${CLOTHES[clTab].list.map(([n, pr], i) => { const on = cur(clTab) === i, own = owns(clTab, i); return `<div class="item ${on ? "sel" : ""}"><span class="nm"><b>${esc(n)}${on ? '<span class="tag">WEARING</span>' : own && pr ? '<span class="tag">YOURS</span>' : ""}</b></span>${on ? "" : own ? `<button type="button" class="small" data-a="wear" data-v="${i}">Wear it</button>` : `<button type="button" class="mid" data-a="buyc" data-v="${i}" ${S.money >= pr ? "" : "disabled"}>${money(pr)}</button>`}</div>`; }).join("")}</div>`;
+    if (clTab === "top") body += `<p class="note"><b>Color:</b></p>${sw(CLOTH_COLORS, O.shirt ?? Y.shirt, "col_shirt")}<p class="note"><b>Second color</b> (jacket inside, hoodie strings, flannel checks, jersey number, backpack):</p>${sw(CLOTH_COLORS, O.acc ?? 0xffffff, "col_acc")}`;
+    if (clTab === "legs") body += `<p class="note"><b>Color:</b></p>${sw(CLOTH_COLORS, O.pants ?? Y.pants, "col_pants")}`;
+    if (clTab === "hat" && O.cap !== null) body += `<p class="note"><b>Hat color:</b></p>${sw(CLOTH_COLORS, O.cap ?? Y.cap, "col_cap")}`;
+    if (clTab === "extra" && O.extra === 2) body += `<p class="note"><b>Backpack color</b> (same as the second color):</p>${sw(CLOTH_COLORS, O.acc ?? 0xffffff, "col_acc")}`;
+  }
+  if (clTab === "shoes") body = `<p class="note"><b>Shoe color</b> (free!):</p>${sw(CLOTH_COLORS, O.shoes ?? Y.shoes, "col_shoes")}`;
+  if (clTab === "hair") body = `<p class="note"><b>Hair color</b> (free!):</p>${sw(HAIR, O.hair ?? Y.hair, "col_hair")}`;
+  side(`<h2>👕 THREADS CLOTHING</h2><div class="bank">${money(S.money)}</div><p class="sub">“Hey! Let’s find your style.” Buy a style once and every color is free. You change right away, and your friends see your new look too!${S.role !== "civ" ? " <b>(" + (S.role === "cop" ? "Cops wear their uniform on the job" : "Robbers keep the striped shirt") + ": you’ll see your outfit when you’re a civilian.)</b>" : ""}</p>
+    <div class="tabs">${tabs.map(([k, n]) => `<button type="button" data-a="ctab" data-v="${k}" class="${clTab === k ? "on" : ""}">${n}</button>`).join("")}</div>${body}`, "shop");
+  onAct = (a, val) => {
+    if (a === "ctab") { clTab = val; SFX.click(); return clothesShop(); }
+    if (a === "buyc") { const pr = CLOTHES[clTab].list[+val][1]; if (!GM.buyCloth(clTab + val, pr)) return; a = "wear"; }
+    if (a === "wear") { const i = +val; if (clTab === "hat") { if (i === 4) { if (O.cap !== null) O.capColor = O.cap ?? Y.cap; O.cap = null; } else { O.hat = i; if (O.cap === null) O.cap = O.capColor ?? Y.cap; } } else O[clTab] = i; SFX.click(); GM.wearOutfit(); return clothesShop(); }
+    if (a.startsWith("col_")) { O[a.slice(4)] = +val; SFX.click(); GM.wearOutfit(); return clothesShop(); }
+  };
 }
 // ---------------------------------------------------------------- pawn shops + your backpack (npcs.js)
 const packList = (sell) => S.backpack.length ? `<div class="list">${S.backpack.map((it, i) => { const I = itemById(it.id); return `<div class="item"><span class="ico">${I.icon}</span><span class="nm"><b>${esc(I.name)}</b></span><span class="pr">${money(it.v)}</span>${sell ? `<button type="button" class="small" data-a="sell" data-v="${i}">Sell</button>` : ""}</div>`; }).join("")}</div>` : `<p class="note">Your backpack is empty. Knock people out (they drop their stuff) and pick up their backpacks with E.</p>`;
@@ -606,7 +642,7 @@ function intro() {
   onAct = (a) => { if (a === "go") { S.intro = true; save(); close(); GM.setWaypoint({ x: PLACES.jobs.x, z: PLACES.jobs.z, name: "the Job Center" }); H.banner("MUD VALLEY", "Follow the purple arrow to the Job Center!"); } };
 }
 
-export const UI = { camp: campShop, close, dealer, customs, house, parts, builder, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged, pawn };
+export const UI = { clothes: clothesShop, camp: campShop, close, dealer, customs, house, parts, builder, jobs: jobsPanel, raceInfo, raceResults, phone, map, closeMap, intro, gear, blasters, bait, police, hideout, mpChanged, pawn };
 export function initMenus(game) {
   GM = game; wire();
   $("mapClose").addEventListener("click", () => { SFX.click(); closeMap(); });

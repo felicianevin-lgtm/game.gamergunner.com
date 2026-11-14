@@ -8,7 +8,8 @@
 // ("mvzap" goes only to the player who got hit; their own game decides what happens: crime.js zappedBy).
 import * as THREE from "/create/vendor/three.module.js";
 import { RELAY, account } from "/create/js/net.js";
-import { makePerson } from "./character.js";
+import { makePerson, CLOTH_COLORS } from "./character.js";
+import { buildingById } from "./interiors.js";
 import { buildCar, animateCar, vehicleById } from "./vehicles.js";
 import { groundAt } from "./terrain.js";
 import { S, save } from "./save.js";
@@ -81,10 +82,12 @@ export class MP {
     const A = this.api;
     switch (m.t) {
       case "welcome":
-        this.id = m.id; this.name = m.n; this.host = m.h; this.rt = m.rt || ""; this.status = "in"; this.chatRoom = m.cr !== 0; this.copsOn = m.co !== 0; this.parkSent = ""; this.parkT = 0.3;
+        this.id = m.id; this.name = m.n; this.host = m.h; this.rt = m.rt || ""; this.status = "in"; this.chatRoom = m.cr !== 0; this.copsOn = m.co !== 0; this.parkSent = ""; this.parkT = 0.3; this.roomSent = null; this.rideSent = null;
         if (!m.re) { this.clearPlayers(); for (const p of m.players || []) this.addPlayer(p); this.say("", "You joined lobby " + this.code + " as " + m.n + ".", "sys"); }
         this.sendLook(); this.sendRole(true); this.lastCar = null; A.changed(); break;
-      case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; this.parkSent = ""; this.parkT = 0.6; break;
+      case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; this.parkSent = ""; this.parkT = 0.6; this.roomSent = null; this.rideSent = null; break;
+      case "mvroom": { const p = this.players.get(m.id); if (p) p.room = typeof m.r === "string" ? m.r : ""; break; }
+      case "mvride": { const p = this.players.get(m.id); if (p) { p.ride = m.d | 0; if (m.d === this.id) A.toast("🚗 " + p.n + " hopped in your ride!", "", "good", 2500); } break; }
       case "mvpark": { const p = this.players.get(m.id); if (p && Array.isArray(m.l)) this.setPark(p, m.l); break; }
       case "mvcops": { const was = this.copsOn; this.copsOn = !!m.c; if (was !== this.copsOn) { this.say("", m.c ? "🚓 The host turned the cops ON." : "🚫🚓 The host turned the cops OFF. No police in this lobby!", "sys"); A.toast(m.c ? "🚓 Cops are ON" : "🚫 Cops are OFF", m.c ? "" : "Nobody gets chased in this lobby.", m.c ? "warn" : "good", 3000); A.changed(); } break; }
       case "mvrole": { const p = this.players.get(m.id); if (p) { const r = ROLES[m.r] || "civ", w = m.w | 0; if (p.role !== r || p.wanted !== w) { p.role = r; p.wanted = w; this.retag(p); } } break; }
@@ -134,7 +137,9 @@ export class MP {
   rebuild(p) {
     this.dispose(p);
     const k = Array.isArray(p.k) ? p.k : [];
-    const look = { shirt: unhex(k[0] || "2f8ae0"), pants: unhex(k[1] || "2a3550"), skin: unhex(k[2] || "ffc999"), hair: unhex(k[4] || "5a3a1a"), cap: k[5] && k[5] !== "000000" ? unhex(k[5]) : null, shoes: unhex(k[6] || "ffffff") };
+    const g = String(k[3] || "000000"), d = (i) => parseInt(g[i], 16) || 0;
+    const look = { shirt: unhex(k[0] || "2f8ae0"), pants: unhex(k[1] || "2a3550"), skin: unhex(k[2] || "ffc999"), hair: unhex(k[4] || "5a3a1a"), cap: k[5] && k[5] !== "000000" ? unhex(k[5]) : null, shoes: unhex(k[6] || "ffffff"),
+      top: Math.min(5, d(0)), legs: Math.min(2, d(1)), hat: Math.min(3, d(2)), glasses: Math.min(2, d(4) >> 2), extra: d(4) & 3, acc: CLOTH_COLORS[d(5)] ?? 0xffffff };
     p.model = makePerson(look); this.api.scene.add(p.model.root);
     const parts = (p.v || "").split("|");
     if (parts.length === 3 && vehicleById(parts[1]).id === parts[1]) {
@@ -148,11 +153,13 @@ export class MP {
   sendRole(now) { if (!this.on) return; const r = ROLES.indexOf(S.role), w = S.wanted | 0; if (now || r !== this.lastRole || w !== this.lastWanted) { this.lastRole = r; this.lastWanted = w; this.roleT = 5; this.send({ t: "mvrole", r: Math.max(0, r), w }); } }
   zap(id, k) { this.send({ t: "mvzap", id, k }); }
   bump(id, vx, vz) { if (this.on) this.send({ t: "mvbump", id, v: [Math.round(vx * 10) / 10, Math.round(vz * 10) / 10] }); }
+  // a friend's ride you're standing next to (to hop in): the player
+  rideNear(x, z) { for (const p of this.players.values()) if (p.car && !p.away && !p.room && !p.ride && p.x !== undefined && Math.hypot(p.x - x, p.z - z) < p.car.len / 2 + 2.4) return p; return null; }
   // friends' cars as bump circles: [{ id, x, z, r, len }]
   carCircles() {
     const out = [];
     for (const p of this.players.values()) {
-      if (!p.car || p.x === undefined || p.away) continue;
+      if (!p.car || p.x === undefined || p.away || p.room) continue;
       const len = p.car.len, wid = p.car.wid, fx = Math.sin(p.r), fz = Math.cos(p.r);
       if (len <= 3) out.push({ id: p.id, x: p.x, z: p.z, y: p.y, r: Math.max(len, wid) * 0.45 });
       else for (const s of [0.26, -0.26]) out.push({ id: p.id, x: p.x + fx * len * s, z: p.z + fz * len * s, y: p.y, r: wid * 0.52 });
@@ -162,12 +169,13 @@ export class MP {
   shot(p, x, w) { if (this.on) this.send({ t: "shot", p: p.map((v) => Math.round(v * 10) / 10), x: x.map((v) => Math.round(v * 10) / 10), w, h: 0 }); }
   sendLook() {
     const L = this.api.look();
-    this.send({ t: "look", k: [hex(L.shirt), hex(L.pants), hex(L.skin), "000000", hex(L.hair), L.cap ? hex(L.cap) : "000000", hex(L.shoes)] });
+    const ai = Math.max(0, CLOTH_COLORS.indexOf(L.acc ?? 0xffffff)), st = [L.top || 0, L.legs || 0, L.hat || 0, 0, ((L.glasses || 0) << 2) | (L.extra || 0), ai].map((v) => v.toString(16)).join("");
+    this.send({ t: "look", k: [hex(L.shirt), hex(L.pants), hex(L.skin), st, hex(L.hair), L.cap ? hex(L.cap) : "000000", hex(L.shoes)] });
   }
   // texts
   quick(i) { if (!this.on) return; this.send({ t: "qc", q: i }); }
   chat(text) { if (!this.on || !S.chatOn) return; text = String(text || "").trim().slice(0, 80); if (text) this.send({ t: "chat", m: text }); }
-  sendPin() { if (!this.on) return; const me = this.api.me(); this.send({ t: "mvpin", p: [Math.round(me.x * 10) / 10, 0, Math.round(me.z * 10) / 10] }); }
+  sendPin() { if (!this.on) return; const me = this.api.mapPos ? this.api.mapPos() : this.api.me(); this.send({ t: "mvpin", p: [Math.round(me.x * 10) / 10, 0, Math.round(me.z * 10) / 10] }); }
   kick(id) { this.send({ t: "kick", id }); }
   mute(id, c) { this.send({ t: "mute", id, c: c ? 1 : 0 }); }
   setChatRoom(c) { this.send({ t: "chatroom", c: c ? 1 : 0 }); }
@@ -180,6 +188,10 @@ export class MP {
     const v = me.car ? "w|" + me.car.id + "|" + hex(me.car.paint) : "";
     if (v !== this.lastCar) { this.lastCar = v; this.send({ t: "car", v }); }
     this.roleT = (this.roleT || 0) - dt; this.sendRole(this.roleT <= 0);
+    // which room you're in ("" = outside) and whose ride you're sitting in (0 = none)
+    const room = this.api.room ? this.api.room() : "", ride = this.api.riding ? this.api.riding() : 0;
+    if (room !== this.roomSent) { this.roomSent = room; this.send({ t: "mvroom", r: room }); }
+    if (ride !== this.rideSent) { this.rideSent = ride; this.send({ t: "mvride", d: ride }); }
     // your parked stuff: when it changes (checked every second), and again every 10 s for anyone who missed it
     this.parkT = (this.parkT ?? 0) - dt; this.parkAge = (this.parkAge || 0) + dt;
     if (this.parkT <= 0 && this.api.parked) {
@@ -188,14 +200,35 @@ export class MP {
       if (str !== this.parkSent || this.parkAge > 10) { this.parkSent = str; this.parkAge = 0; this.send({ t: "mvpark", l }); }
     }
   }
+  // where a passenger sits in a ride (car = the model, at x, y, z turned yaw)
+  static seatAt(C, x, y, z, yaw) {
+    const s = C.seat, lx = Math.abs(s.x) > 0.2 ? -s.x : 0, lz = Math.abs(s.x) > 0.2 ? s.z : s.z - 0.55, ly = (C.liftY || 0) + s.y + (Math.abs(s.x) > 0.2 ? 0 : 0.05);
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    return { x: x + lx * c + lz * sn, y: y + ly, z: z - lx * sn + lz * c };
+  }
   draw(dt, time) {
+    const myRoom = this.api.room ? this.api.room() : "";
     for (const p of this.players.values()) {
       if (p.tx === undefined || !p.model) continue;
+      const here = (p.room || "") === myRoom;
+      p.model.root.visible = here && !p.car; if (p.car) p.car.root.visible = here; p.tag.visible = here;
+      for (const e of p.parkM || []) if (e) e.root.visible = !myRoom;
+      if (!here) { p.x = p.tx; p.y = p.ty; p.z = p.tz; continue; }
+      if (p.ride) { // (riding along in someone's ride)
+        const dr = p.ride === this.id ? this.api.myRide && this.api.myRide() : this.players.get(p.ride), C = dr && (dr.car || dr.C);
+        if (C && (dr.x !== undefined)) {
+          const st = MP.seatAt(C, dr.x, (dr.y || 0) + (dr.C ? 0 : 0.06), dr.z, dr.r ?? dr.yaw);
+          p.x = st.x; p.y = st.y; p.z = st.z; if (p.car) p.car.root.visible = false;
+          p.model.root.visible = true; p.model.root.position.set(st.x, st.y, st.z); p.model.root.rotation.y = dr.r ?? dr.yaw; p.model.root.scale.setScalar(0.85); p.model.pose("sit", time);
+          p.tag.position.set(st.x, st.y + 2.1, st.z); continue;
+        }
+      }
+      p.model.root.scale.setScalar(1);
       const k = Math.min(1, dt * 10);
       p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k;
       let dr = p.tr - p.r; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); p.r += dr * k;
       if (p.car) { p.car.root.position.set(p.x, p.y + 0.06, p.z); p.car.root.rotation.set(0, p.r, 0); animateCar(p.car, { speed: p.walk ? 8 : 0, steer: 0 }, dt); p.tag.position.set(p.x, p.y + 3.4, p.z); }
-      else { const g = Math.max(p.y, groundAt(p.x, p.z) - 0.2); p.model.root.position.set(p.x, g, p.z); p.model.root.rotation.y = p.r; p.model.pose(p.walk ? "walk" : "stand", time); p.tag.position.set(p.x, g + 2.5, p.z); }
+      else { const g = myRoom ? p.y : Math.max(p.y, groundAt(p.x, p.z) - 0.2); p.model.root.position.set(p.x, g, p.z); p.model.root.rotation.y = p.r; p.model.pose(p.walk ? "walk" : "stand", time); p.tag.position.set(p.x, g + 2.5, p.z); }
       p.tag.material.opacity = p.away ? 0.4 : 1;
       for (const e of p.parkM || []) if (e && e.it.h) { // (the trailer they're towing rides along behind their truck)
         const T = trailerById(e.it.id), back = (p.car ? p.car.len / 2 + 0.5 : 3) + (T ? T.len : 5), x = p.x - Math.sin(p.r) * back, z = p.z - Math.cos(p.r) * back;
@@ -203,6 +236,14 @@ export class MP {
       }
     }
   }
-  dots() { const out = []; for (const p of this.players.values()) if (p.x !== undefined) out.push({ x: p.x, z: p.z, n: p.n, role: p.role }); return out; }
+  dots() {
+    const out = [];
+    for (const p of this.players.values()) {
+      if (p.x === undefined) continue;
+      if (p.room) { const bd = buildingById(p.room); if (bd) out.push({ x: bd.dx, z: bd.dz, n: p.n, role: p.role }); continue; } // (inside: show them at the door)
+      out.push({ x: p.x, z: p.z, n: p.n, role: p.role });
+    }
+    return out;
+  }
   list() { return [...this.players.values()]; }
 }

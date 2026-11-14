@@ -12,7 +12,7 @@ import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
 import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
 import { buildTrailer, trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor, RV_DOOR } from "./trailer.js";
-import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
+import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser, setOutfit } from "./character.js";
 import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js";
 import { Fishing, rodById } from "./fishing.js";
 import { Heist } from "./heist.js";
@@ -21,7 +21,7 @@ import { Drops, PARTS, partById, addPart, have, SHIP_FEE } from "./parts.js";
 import { RELAY, account } from "/create/js/net.js";
 import { Interiors, buildingById, JAIL_SPOT, POCKET, rvBuilding } from "./interiors.js";
 import { MP } from "./mp.js";
-import { Camp, campItem, campModel } from "./camp.js";
+import { Camp, campItem, campModel, CAMP_MAX } from "./camp.js";
 import { FX } from "./fx.js";
 import { SFX, audio, setMuted, engine } from "./sfx.js";
 import { S, save, uid, slots, pay, spend, money, wipe } from "./save.js";
@@ -108,6 +108,7 @@ function freeSpot(x, z, yaw, len = 5) {
 
 // ---------------------------------------------------------------- you
 function makeMe() {
+  setOutfit(S.outfit);
   const p = makePerson(lookFor(S.role, S.gear.mask)); scene.add(p.root);
   G.me = { p, w: makeWalker(S.px, S.pz), car: null };
   G.me.w.isWalker = true;
@@ -128,7 +129,7 @@ function goOutside() {
 }
 // where you are on the map (inside a building = at its front door)
 function mapPos() { const c = mine(), b = c ? c.b : G.me.w; if (inside()) { const bd = interiors.cur.bd; return { x: bd.dx, y: groundAt(bd.dx, bd.dz), z: bd.dz, vx: 0, vz: 0, yaw: bd.out }; } return b; }
-const MENUS = { camp: () => UI.camp(), pawn: () => UI.pawn(), dealer: () => UI.dealer(), jobs: () => UI.jobs(), gear: () => UI.gear(), blasters: () => UI.blasters(), bait: () => UI.bait(), police: () => UI.police(), hideout: () => UI.hideout() };
+const MENUS = { clothes: () => UI.clothes(), camp: () => UI.camp(), pawn: () => UI.pawn(), dealer: () => UI.dealer(), jobs: () => UI.jobs(), gear: () => UI.gear(), blasters: () => UI.blasters(), bait: () => UI.bait(), police: () => UI.police(), hideout: () => UI.hideout() };
 function insideActions(out) {
   const R = interiors.cur, w = G.me.w, l = interiors.local(w), bd = R.bd;
   if (itemsOwned().includes("blaster")) out.Q = { text: "Shoot", fn: useItem };
@@ -137,7 +138,7 @@ function insideActions(out) {
   if (out.E) return out;
   for (const sp of R.spots) {
     if (Math.hypot(sp.x - l.x, sp.z - l.z) > sp.r) continue;
-    if (sp.act === "menu") out.E = { text: { dealer: "Talk to the sales clerk (buy rides)", jobs: "Look at the Job Board", gear: "Shop for robber gear", blasters: "Shop for guns", bait: "Buy rods + sell your fish", police: "Talk to the desk sergeant", pawn: "Sell stuff to the pawn broker 💰", camp: "Shop for tents + camping gear ⛺", hideout: "Look at the secret map (stash loot)" }[bd.menu] || "Talk", fn: MENUS[bd.menu] };
+    if (sp.act === "menu") out.E = { text: { dealer: "Talk to the sales clerk (buy rides)", jobs: "Look at the Job Board", gear: "Shop for robber gear", blasters: "Shop for guns", bait: "Buy rods + sell your fish", police: "Talk to the desk sergeant", pawn: "Sell stuff to the pawn broker 💰", camp: "Shop for tents + camping gear ⛺", clothes: "Try on clothes 👕", hideout: "Look at the secret map (stash loot)" }[bd.menu] || "Talk", fn: MENUS[bd.menu] };
     else if (sp.act === "chat") out.E = { text: "Say hi to the " + (bd.keeper || "neighbor").toLowerCase(), fn: () => { SFX.phone(); H.toast("“" + (sp.say || "Hi there! Welcome to " + bd.name + "!") + "”", bd.keeper || "", "", 3200); } };
     else if (sp.act === "snack") out.E = { text: "Buy a snack ($5)", fn: () => { if (spend(5)) { SFX.cash(); H.bumpMoney(); H.toast("Yum! 🍪", "That hit the spot.", "good", 1800); save(); } else SFX.nope(); } };
     else if (sp.act === "snack") out.E = { text: "Grab a snack from the fridge", fn: () => { SFX.phone(); H.toast(["🥪 Yum, a sandwich!", "🧃 A juice box!", "🍎 A crunchy apple!", "🌭 A cold hot dog... still good!"][Math.floor(Math.random() * 4)], "", "good", 2000); } };
@@ -330,6 +331,12 @@ function actions() {
   // jail + knocked out: not much you can do
   if (crime.jail) { out.E = { text: "Jail break! Press E when the needle is in the green", fn: () => crime.jailTry() }; return out; }
   if (crime.ko) return out;
+  if (G.placing) { // (choosing where your camp thing goes)
+    const P = G.placing;
+    out.E = { text: "Put the " + campItem(P.id).name + " here", fn: placeCamp }; out.Q = { text: "Turn it ↻", fn: () => { P.turn += Math.PI / 4; SFX.click(); } }; out.F = { text: "Cancel", fn: () => stopPlacing(true) };
+    return out;
+  }
+  if (G.ride) { out.F = { text: "Get out", fn: () => endRide(true) }; return out; }
   if (inside()) return insideActions(out);
   // Q: use what you're holding
   if (c) { if (S.role === "cop") out.Q = { text: "Drop a spike strip (" + S.cop.spikes + ")", fn: useItem }; }
@@ -343,6 +350,7 @@ function actions() {
     let best = null, bd = 1e9;
     for (const v of G.CARS.values()) { if (v.on) continue; const d = Math.hypot(v.b.x - me.x, v.b.z - me.z) - v.m.len / 2; if (d < 2.2 && d < bd) { bd = d; best = v; } }
     if (best) out.F = { text: "Drive " + vehicleById(best.s.id).name, fn: () => enterCar(best) };
+    else if (mp && mp.on && !inside()) { const fr = mp.rideNear(me.x, me.z); if (fr) out.F = { text: "Hop in with " + fr.n + " 🚗", fn: () => startRide(fr) }; }
   }
   // T: hitch / unhitch trailers (and tow-job cars)
   if (c && c.m.hitch) {
@@ -431,6 +439,30 @@ function actions() {
 }
 // trailers: you DRIVE your ride up the ramp to load it (the big box trailer's door has to be open). Lined up behind the
 // trailer, it lets you through; once you're past the back edge, the ride parks on the deck and you hop out.
+// placing camp stuff: a see-through copy follows you around until you press E
+function startPlacing(id) {
+  if (G.placing) stopPlacing();
+  const ghost = campModel(id, campItem(id).tent || id === "chairs" ? S.camp.color ?? 0xff6a3a : undefined);
+  ghost.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.5; o.material.depthWrite = false; o.castShadow = false; } });
+  scene.add(ghost); G.placing = { id, turn: 0, ghost };
+  H.toast(campItem(id).icon + " Where should it go?", "Walk to the spot. E = put it here · Q = turn it · F = cancel", "good", 4500);
+}
+function stopPlacing(said) { if (!G.placing) return; scene.remove(G.placing.ghost); G.placing = null; if (said) H.toast("Put it back in your bag", "", "", 1500); }
+function placeSpot() { const w = G.me.w, P = G.placing, d = P.id === "tent3" ? 4.2 : P.id === "tent2" ? 3.4 : 2.6; return { x: w.x + Math.sin(w.yaw) * d, z: w.z + Math.cos(w.yaw) * d, yaw: w.yaw + Math.PI + P.turn }; }
+function placeCamp() {
+  const P = G.placing, sp = placeSpot(), why = camp.setUpAt(P.id, sp.x, sp.z, sp.yaw);
+  if (why) { SFX.nope(); H.toast("Can’t put it here", why, "warn"); return; }
+  stopPlacing(); SFX.load(); fx.dust(sp.x, groundAt(sp.x, sp.z), sp.z, 6);
+  H.toast(campItem(P.id).icon + " " + campItem(P.id).name + " is set up!", campItem(P.id).tent ? "Walk up to it and press E to sleep in it." : "", "good", 2400);
+}
+// riding along in a friend's ride (mp.js): you sit in the other seat, they drive
+function startRide(fr) { G.ride = fr.id; SFX.door(); H.toast("🚗 You hopped in with " + fr.n + "!", "F = get out", "good", 2500); }
+function endRide(out) {
+  const p = mp && mp.players.get(G.ride); G.ride = 0; G.me.p.root.scale.setScalar(1);
+  const w = G.me.w;
+  if (p && p.x !== undefined) { const yaw = p.r, side = (p.car ? p.car.wid / 2 : 1) + 1.2; w.x = p.x - Math.cos(yaw) * side; w.z = p.z + Math.sin(yaw) * side; }
+  w.y = groundAt(w.x, w.z); w.vx = w.vz = w.vy = 0; if (out) SFX.door();
+}
 // your camp (camp.js): sleep in your tent, roast marshmallows...
 function campAction(e) {
   const id = e.it.id, t = (title, sub) => () => { SFX.phone(); H.toast(title, sub || "", "good", 2600); };
@@ -633,9 +665,13 @@ export const GAME = {
   setUpCamp(id) {
     if (inside()) { SFX.nope(); H.toast("Go outside first!", "You can set up your camp anywhere outside.", "warn"); return false; }
     if (mine()) { SFX.nope(); H.toast("Get out of your ride first", "", "warn"); return false; }
-    const why = camp.setUp(id, G.me.w); if (why) { SFX.nope(); H.toast("Can’t set it up", why, "warn"); return false; }
-    SFX.load(); fx.dust(G.me.w.x, G.me.w.y, G.me.w.z, 6); H.toast(campItem(id).icon + " " + campItem(id).name + " is set up!", campItem(id).tent ? "Walk up to it and press E to sleep in it." : "", "good", 2600); return true;
+    if (!(S.camp.have[id] > 0)) { SFX.nope(); return false; }
+    if (S.camp.set.length >= CAMP_MAX) { SFX.nope(); H.toast("Your camp is full", "Pack something up first.", "warn"); return false; }
+    startPlacing(id); return true;
   },
+  // clothes (the clothing store): put on the outfit you picked and show it to friends
+  buyCloth(key, price) { if (S.closet.includes(key)) return true; if (!spend(price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.closet.push(key); SFX.cash(); H.bumpMoney(); save(); return true; },
+  wearOutfit() { setOutfit(S.outfit); G.me.p.setLook(lookFor(S.role, S.gear.mask)); if (mp && mp.on) mp.sendLook(); save(); },
   packCamp(u) { camp.packUp(u); SFX.load(); },
   get camp() { return camp; },
   // sell a house back for 60% of what it cost (you need room left for all your rides)
@@ -845,7 +881,7 @@ function tick(dt) {
     carEffects(c, b, inp, dt);
   } else {
     const w = IN.walk(); const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
-    const frozen = blocked || G.lockWalk || !!crime.ko || (fishing.busy && fishing.state !== "wait");
+    const frozen = blocked || G.lockWalk || !!crime.ko || !!G.ride || (fishing.busy && fishing.state !== "wait");
     if (fishing.state === "wait" && Math.hypot(w.x, w.y) > 0.3) fishing.cancel(); // (walking away reels the line in)
     const mx = frozen ? 0 : -fz * w.x + fx * w.y, mz = frozen ? 0 : fx * w.x + fz * w.y;
     const jump = !frozen && !fishing.busy && IN.pressed("Space");
@@ -853,10 +889,16 @@ function tick(dt) {
     if (inside()) interiors.step(G.me.w, G.lockWalk ? 0 : mx, G.lockWalk ? 0 : mz, w.run, jump && !G.lockWalk, dt);
     else if (!G.lockWalk) stepWalker(G.me.w, mx, mz, w.run, jump, dt);
   }
+  if (G.ride) { // (riding along: you go wherever your friend's ride goes)
+    const p = mp && mp.on ? mp.players.get(G.ride) : null;
+    if (!p || !p.car || p.away || p.room || c) endRide(false);
+    else { const st = MP.seatAt(p.car, p.x, p.y + 0.06, p.z, p.r), w = G.me.w; w.x = st.x; w.z = st.z; w.y = st.y; w.yaw = p.r; w.vx = w.vz = w.vy = 0; w.moving = 0; }
+  }
+  if (G.placing && (c || inside())) stopPlacing();
   // bumping into other vehicles / trailers
   const me = c ? c.b : G.me.w;
   if (c) carVsStuff(c.b);
-  else { for (const o of G.CARS.values()) if (!o.on) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true); if (mp && mp.on) for (const k of mp.carCircles()) bumpPair(G.me.w, 0.4, k, k.r, true); }
+  else if (!G.ride) { for (const o of G.CARS.values()) if (!o.on) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true); if (mp && mp.on) for (const k of mp.carCircles()) bumpPair(G.me.w, 0.4, k, k.r, true); }
   for (const t of G.TRS.values()) { stepTrailer(t, dt); stepDoor(t, dt); }
   stepGarageDoors(dt);
   driveInTrailers();
@@ -1060,12 +1102,14 @@ function draw(dt) {
   for (const v of G.CARS.values()) if (!v.on) { placeModel(v.b); animateCar(v.m, { speed: v === c ? speedOf(v.b) : 0, burn: v === c && v.b.burn, reverse: v.b.vf < 0, steer: v.b.steer, wheelDrop: v.b.wheelDrop, boost: v.b.boost, siren: v.police && G.siren && v === c, t: G.time }, dt); }
   if (!c) {
     const w = G.me.w, p = G.me.p;
-    p.root.position.set(w.x, w.y + (Math.abs(w.x) < 116 && Math.abs(w.z) < 106 ? 0.12 : 0), w.z); p.root.rotation.y = w.yaw;
-    if (crime.ko) p.pose("ko", G.time);
+    p.root.position.set(w.x, w.y + (!G.ride && Math.abs(w.x) < 116 && Math.abs(w.z) < 106 ? 0.12 : 0), w.z); p.root.rotation.y = w.yaw;
+    if (G.ride) { p.root.scale.setScalar(0.85); p.pose("sit", G.time); }
+    else if (crime.ko) p.pose("ko", G.time);
     else if (fishing.busy) { /* (fishing.draw does the pose) */ }
     else if (G.aimT > 0) p.pose("aim", G.time);
     else p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
   }
+  if (G.placing) { const sp = placeSpot(), gh = G.placing.ghost; gh.position.set(sp.x, groundAt(sp.x, sp.z), sp.z); gh.rotation.y = sp.yaw; }
   crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); camp.draw(G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
   if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
@@ -1173,7 +1217,10 @@ async function boot() {
   G.pins = [];
   mp = new MP({
     scene, toast: H.toast, look: () => lookFor(S.role, S.gear.mask),
-    me() { const c = mine(), p = mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint } : null }; },
+    room: () => (inside() ? (interiors.cur.bd.id === "rv" ? "rv_" + mp.id : interiors.cur.bd.id) : ""),
+    riding: () => G.ride || 0, mapPos: () => mapPos(),
+    myRide() { const c = mine(); return c ? { x: c.m.root.position.x, y: c.m.root.position.y, z: c.m.root.position.z, yaw: c.b.yaw, C: c.m } : null; },
+    me() { const c = mine(), p = inside() ? G.me.w : mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint } : null }; },
     // what you have out near you, so friends see it too: parked rides, trailers, your camp (closest first)
     parked() {
       const me = mapPos(), my = mine(), out = [], d = (x, z) => Math.hypot(x - me.x, z - me.z);

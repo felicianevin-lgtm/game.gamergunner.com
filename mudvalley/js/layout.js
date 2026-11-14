@@ -226,6 +226,7 @@ export const PLACES = {
   blasters: { name: "Gun Shop", x: 366, z: -308, icon: "🔫", color: "#d04030" },
   bank: { name: "Copper Creek Bank", x: 330, z: -332, icon: "🏦", color: "#4ad08a" },
   jewelry: { name: "Sparkle Jewelry", x: 366, z: -331, icon: "💎", color: "#6af0ff" },
+  clothes: { name: "Threads Clothing", x: 304, z: -309, icon: "👕", color: "#ff5ad8" },
   hospital: { name: "Hospital", x: 484, z: -331, icon: "🏥", color: "#ff6a6a" },
   // fishing + hideout + trails
   bait: { name: "Bait & Tackle", x: 408, z: 132, icon: "🪱", color: "#4ac0e0" },
@@ -282,5 +283,5 @@ export const ADDRESSES = [
 ];
 // cash machines (robbers can pry them open with a crowbar)
 export const ATMS = [
-  { x: 10, z: 9, yaw: Math.PI }, { x: 346, z: -331, yaw: 0 }, { x: 108, z: 9, yaw: -Math.PI / 2 }, { x: 292, z: 158, yaw: Math.PI },
+  { x: 10, z: 9, yaw: Math.PI }, { x: 346, z: -331, yaw: 0 }, { x: 108, z: 9, yaw: -Math.PI / 2 }, { x: 284, z: 134.2, yaw: Math.PI }, // (on the side of the Camp Store)
 ];

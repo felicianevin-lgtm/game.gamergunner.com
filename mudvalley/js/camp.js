@@ -86,6 +86,13 @@ export class Camp {
     const it = { u: S.nextId++, id, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, yaw: Math.round((me.yaw + Math.PI) * 100) / 100, c: campItem(id).tent || id === "chairs" ? (S.camp.color ?? TENT_COLORS[0]) : undefined };
     S.camp.have[id]--; S.camp.set.push(it); this.spawn(it); save(); return null;
   }
+  // set something up at a spot you picked (main.js placing mode)
+  setUpAt(id, x, z, yaw) {
+    if (!(S.camp.have[id] > 0)) return "You don’t have one. Buy it at the Camp Store!";
+    if (S.camp.set.length >= CAMP_MAX) return "Your camp is full (" + CAMP_MAX + " things). Pack something up first.";
+    const it = { u: S.nextId++, id, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, yaw: Math.round(Math.atan2(Math.sin(yaw), Math.cos(yaw)) * 100) / 100, c: campItem(id).tent || id === "chairs" ? (S.camp.color ?? TENT_COLORS[0]) : undefined };
+    S.camp.have[id]--; S.camp.set.push(it); this.spawn(it); save(); return null;
+  }
   packUp(u) {
     const e = this.items.get(u); if (!e) return;
     this.scene.remove(e.m); this.items.delete(u);

@@ -31,6 +31,7 @@ export const BUILDINGS = [
   ...[[-40, -80, 0], [42, -80, 0], [-90, 80, Math.PI], [-40, 80, Math.PI], [-18, 80, Math.PI], [18, 80, Math.PI], [40, 80, Math.PI], [90, 80, Math.PI]].map(([x, z, yaw], k) => T("town" + k, "A neighbor’s house", "neighbor", x, z, yaw, [(11 + (k % 3)) / 2 - 2, 5.1], 11, 8)),
   T("lumber", "Lumber Yard Office", "office", -304, -10, 0, [14, -2.4], 8, 6, { keeper: "Foreman" }),
   T("ranger", "Ranger Station", "office", -300, 289, 0, [10, 3.6], 8, 6, { keeper: "Ranger" }),
+  T("clothes", "Threads Clothing", "clothes", 304, -301, Math.PI, [0, 6.6], 16, 12, { menu: "clothes", keeper: "Stylist", goods: "clothes" }),
   T("campstore", "Camp Store", "shop", 283, 140, Math.PI / 2, [0, 4.3], 14, 10, { menu: "camp", keeper: "Camp ranger", goods: "camp" }),
   T("bait", "Bait & Tackle", "shop", 404, 132, Math.PI / 2, [0, 3.8], 9, 7, { menu: "bait", keeper: "Old fisher", goods: "fish" }),
   T("hideout", "Robber Hideout", "hideout", -462, -262, Math.PI / 2, [0, 4.1], 10, 8, { menu: "hideout" }),
@@ -82,10 +83,16 @@ export const JAIL_SPOT = { x: -7.2, z: -4.6 }; // inside the police station: the
 // ---------------------------------------------------------------- building a room
 const WALL = { showroom: 0xf8f9fb, shop: 0xf2ece0, garage: 0xb8bcc4, diner: 0xffe9c8, gas: 0xf4f0e8, office: 0xe8e2d4, school: 0xffe2b0, neighbor: 0xd8ecf8, hideout: 0x7a6a50, barn: 0xb84a2a, bank: 0xe8e2d4, jewelry: 0xf4e4f8, police: 0xdfe6f4, hospital: 0xf4fbff, cafe: 0xf2e0c8, home: 0xf4ead8, rv: 0xf2ece0 };
 const FLOOR = { showroom: 0xe4e7ec, shop: 0xc8b090, garage: 0x6a6e78, diner: 0xd8d0c0, gas: 0xd0d0d0, office: 0x9a6a3a, school: 0xb08a5a, neighbor: 0xa8784a, hideout: 0x5a4a3a, barn: 0xc8a050, bank: 0xd8d0c0, jewelry: 0xe0d8f0, police: 0x9aa0aa, hospital: 0xd8e8f0, cafe: 0x9a6a3a, home: 0xa8784a, rv: 0x8a6a4a };
-function room(B, w, d, kind) {
+// every shop has its own colors inside (so they don't all look the same)
+const THEME = {
+  jobs: [0xe4ecf8, 0x7a8a9a], post: [0xe8eef8, 0x4a5a7a], hardware: [0xf4e8c8, 0x8a8a8a], bait: [0x7ab0a0, 0x6a5a40], gear: [0xc8a070, 0x6a4a2a],
+  blasters: [0x3a3d44, 0x2a2a2e], toys: [0xfff0a8, 0x5aa8ff], pawn: [0xd8c8a8, 0x5a3a2a], campstore: [0x9a6a3a, 0x7a5030], clothes: [0xffe4f2, 0xf2f2f4],
+};
+const themeOf = (bd) => THEME[bd.goods === "pawn" ? "pawn" : bd.id];
+function room(B, w, d, kind, bd) {
   const b = new Batch(); b.at(0, 0, 0);
-  const wall = WALL[kind] || 0xeeeeee, H = ROOM_H;
-  b.box(w, 0.1, d, 0, -0.1, 0, FLOOR[kind] || 0xaaaaaa);
+  const th = bd && themeOf(bd), wall = th ? th[0] : WALL[kind] || 0xeeeeee, H = ROOM_H;
+  b.box(w, 0.1, d, 0, -0.1, 0, th ? th[1] : FLOOR[kind] || 0xaaaaaa);
   if (kind === "showroom") { // (shiny tiles instead of floor boards)
     b.box(w, 0.05, d, 0, H - 0.08, 0, 0xe6eaf0, "glow"); // (a bright white ceiling)
     for (let i = -w / 2 + 2; i < w / 2; i += 2) b.box(0.04, 0.012, d, i, 0, 0, 0xc4c8d0);
@@ -126,6 +133,64 @@ function bed(b, C, x, z, color = 0xff8aa8) { b.box(2, 0.5, 2.6, x, 0, z, 0x8a5a3
 function plant(b, C, x, z) { b.cyl(0.3, 0.5, x, 0, z, 0xc06a3a, 8); b.ball(0.55, x, 1.0, z, 0x3aa04a); solid(C, x, z, 0.3, 0.3); }
 function rug(b, x, z, w, d, color) { b.box(w, 0.02, d, x, 0, z, color); }
 
+// what each shop has inside (besides the counter): b = the room, C = solid boxes, w x d = the room size, back = the back wall
+const SHOP_DECOR = {
+  jobs(b, C, w, d, back) { // desks with computers + a big job board
+    for (const x of [-w / 2 + 2.5, w / 2 - 2.5]) for (const z of [-0.5, 2.5]) { b.box(2, 0.75, 1, x, 0, z, 0xe8e2d4); b.box(0.7, 0.45, 0.06, x, 0.8, z - 0.3, 0x22262c); b.box(0.62, 0.36, 0.07, x, 0.84, z - 0.28, 0x6ac8ff, "glow"); b.box(0.5, 0.45, 0.5, x, 0, z + 0.8, 0x2a6ad0); solid(C, x, z, 1, 0.55); }
+    b.box(5, 2, 0.08, 0, 1.3, back + 0.05, 0xc89a5a); for (let i = 0; i < 12; i++) b.box(0.6, 0.5, 0.04, -2 + (i % 6) * 0.8, 1.5 + Math.floor(i / 6) * 0.8, back + 0.1, [0xffffff, 0xfff6a8, 0xd8f0ff][i % 3]);
+    rug(b, 0, 2, 3, 6, 0x2a4a8a);
+  },
+  post(b, C, w, d, back) { // mail cubbies on the back wall, piles of packages, a blue mailbox
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 10; c++) b.box(0.5, 0.42, 0.3, -2.5 + c * 0.55, 1.4 + r * 0.46, back + 0.18, [0xa8b8d0, 0xc8d4e8][(r + c) % 2]);
+    for (const [x, z] of [[-w / 2 + 1.3, 0], [w / 2 - 1.3, 1.5]]) { for (let i = 0; i < 6; i++) b.box(0.7, 0.5, 0.6, x + (i % 2) * 0.5 - 0.25, Math.floor(i / 2) * 0.5, z, [0xb08a5a, 0x9a7448, 0xc8a070][i % 3]); solid(C, x, z, 0.7, 0.4); }
+    b.box(0.8, 1.1, 0.7, w / 2 - 1.2, 0, d / 2 - 1.5, 0x2a4ad0); b.box(0.82, 0.25, 0.72, w / 2 - 1.2, 1.1, d / 2 - 1.5, 0x2a4ad0); solid(C, w / 2 - 1.2, d / 2 - 1.5, 0.45, 0.4);
+  },
+  hardware(b, C, w, d, back) { // paint can pyramids, ladders, a stack of lumber
+    const pc = [0xe0203a, 0x2f8ae0, 0xffd23a, 0x3aa04a, 0xffffff, 0xff7a1a];
+    for (let r = 0; r < 4; r++) for (let i = 0; i < 4 - r; i++) b.cyl(0.18, 0.36, -w / 2 + 1.2 + i * 0.4 + r * 0.2, r * 0.37, -0.5, pc[(i + r) % pc.length], 10);
+    solid(C, -w / 2 + 1.8, -0.5, 1, 0.3);
+    for (const x of [w / 2 - 0.6, w / 2 - 1.4]) { for (const s2 of [-0.25, 0.25]) b.box(0.06, 3, 0.06, x, 0, -1 + s2, 0xc8ccd2); for (let y = 0.3; y < 3; y += 0.4) b.box(0.06, 0.04, 0.5, x, y, -1, 0xc8ccd2); }
+    for (let i = 0; i < 8; i++) b.box(3, 0.12, 0.25, 2, i * 0.13, d / 2 - 2, i % 2 ? 0xd8b070 : 0xc8a060); solid(C, 2, d / 2 - 2, 1.5, 0.3);
+  },
+  bait(b, C, w, d, back) { // a glowing fish tank, a rack of rods, a giant fish on the wall
+    b.box(0.6, 0.8, 2.4, -w / 2 + 0.4, 0, 0.5, 0x5a3a1a); b.box(0.5, 0.9, 2.3, -w / 2 + 0.4, 0.8, 0.5, 0x3ab0ff, "glow"); solid(C, -w / 2 + 0.4, 0.5, 0.35, 1.2);
+    for (let i = 0; i < 5; i++) b.box(0.06, 0.12, 0.25, -w / 2 + 0.68, 1.0 + (i % 3) * 0.2, -0.3 + i * 0.4, [0xff8a1a, 0xffd23a, 0xff5ad8][i % 3]);
+    for (let i = 0; i < 7; i++) b.cyl(0.025, 2.8, w / 2 - 0.25, 0.2, -1.5 + i * 0.4, [0x3a7ad0, 0x2a2a2a, 0xe0203a][i % 3], 5);
+    b.box(2, 0.6, 0.1, 0, 2.6, back + 0.08, 0x8a5a30); b.box(1.6, 0.4, 0.12, 0, 2.7, back + 0.12, 0x5a8a3a);
+  },
+  gear(b, C, w, d, back) { // pegboards full of tools, a workbench, red tool chests
+    for (const x of [-w / 2 + 0.05, w / 2 - 0.05]) { b.box(0.06, 2, 5, x, 0.8, 0, 0xb08a5a); for (let i = 0; i < 10; i++) b.box(0.08, 0.5, 0.12, x, 1.2 + (i % 2) * 0.8, -2 + Math.floor(i / 2) * 1, [0xff7a1a, 0x9aa0aa, 0x2a2a2a, 0xe0203a][i % 4]); }
+    b.box(3, 0.9, 1, 0, 0, 2, 0x7a5a3a); b.box(3.1, 0.1, 1.1, 0, 0.9, 2, 0x9a7a52); solid(C, 0, 2, 1.55, 0.55);
+    for (const x of [-w / 2 + 1.2, w / 2 - 1.2]) { b.box(1, 1.2, 0.6, x, 0, d / 2 - 1.6, 0xd0302a); for (let y = 0.2; y < 1.2; y += 0.25) b.box(0.9, 0.03, 0.62, x, y, d / 2 - 1.6, 0x9aa0aa); solid(C, x, d / 2 - 1.6, 0.5, 0.3); }
+  },
+  blasters(b, C, w, d, back) { // glass display cases, target posters, a rack on the wall
+    for (const x of [-4, 4]) { b.box(3, 0.9, 1, x, 0, 0.5, 0x2a2a2e); b.box(2.9, 0.4, 0.9, x, 0.9, 0.5, 0xbfe8ff, "glass"); for (let i = 0; i < 3; i++) b.box(0.5, 0.12, 0.2, x - 0.9 + i * 0.9, 0.95, 0.5, 0x141416); solid(C, x, 0.5, 1.5, 0.5); }
+    for (const [x, z] of [[-w / 2 + 0.05, -1], [w / 2 - 0.05, -1], [-w / 2 + 0.05, 2.5], [w / 2 - 0.05, 2.5]]) for (let r = 0; r < 3; r++) b.box(0.06, 1.2 - r * 0.35, 1.2 - r * 0.35, x, 1.4 + r * 0.175, z, r % 2 ? 0xffffff : 0xe0203a);
+    b.box(6, 1.4, 0.1, 0, 1.8, back + 0.08, 0x3a2a1a); for (let i = 0; i < 6; i++) b.box(0.8, 0.14, 0.1, -2.5 + i, 2.3 + (i % 2) * 0.5, back + 0.15, 0x141416);
+    rug(b, 0, 2.5, 4, 3, 0x5a1a1a);
+  },
+  toys(b, C, w, d, back) { // a toy train going round and round, balloons, teddy bears
+    for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2; b.box(0.5, 0.04, 0.12, Math.cos(a) * 2.6, 0, 1.2 + Math.sin(a) * 1.6, 0x3a3a3a); }
+    for (let i = 0; i < 4; i++) b.box(0.5, 0.4, 0.3, -1 + i * 0.6, 0.04, 2.8, [0xe0203a, 0x3aa0ff, 0xffd23a, 0x4adf6a][i]);
+    for (let i = 0; i < 10; i++) { const x = -w / 2 + 1 + (i * 1.13) % (w - 2), z = -1.5 + (i % 3) * 1.6; b.ball(0.3, x, 3.6, z, [0xff3a3a, 0x3aa0ff, 0xffd23a, 0x4adf6a, 0xff5ad8][i % 5]); b.box(0.02, 1.4, 0.02, x, 2.2, z, 0xffffff); }
+    for (const x of [-w / 2 + 1, w / 2 - 1]) { b.ball(0.35, x, 0.35, d / 2 - 1.5, 0x9a6a3a); b.ball(0.25, x, 0.9, d / 2 - 1.5, 0x9a6a3a); b.ball(0.08, x - 0.15, 1.1, d / 2 - 1.5, 0x9a6a3a); b.ball(0.08, x + 0.15, 1.1, d / 2 - 1.5, 0x9a6a3a); solid(C, x, d / 2 - 1.5, 0.4, 0.4); }
+  },
+  pawn(b, C, w, d, back) { // guitars on the wall, a stack of old TVs, a case of gold
+    for (let i = 0; i < 3; i++) { const x = -w / 2 + 0.1, z = -2 + i * 1.3; b.box(0.1, 0.7, 0.5, x, 1.2, z, [0xc0602a, 0x1a1a1e, 0xe0203a][i]); b.box(0.06, 0.9, 0.08, x, 1.9, z, 0x5a3a1a); }
+    for (let i = 0; i < 3; i++) { b.box(0.9, 0.7, 0.7, w / 2 - 0.7, i * 0.7, -0.5, 0x3a3a3a); b.box(0.04, 0.5, 0.55, w / 2 - 1.17, i * 0.7 + 0.1, -0.5, 0x6a8aa0, "glow"); } solid(C, w / 2 - 0.7, -0.5, 0.45, 0.35);
+    b.box(2.4, 0.9, 0.8, 0, 0, d / 2 - 2.6, 0x5a3a2a); b.box(2.3, 0.35, 0.7, 0, 0.9, d / 2 - 2.6, 0xbfe8ff, "glass"); for (let i = 0; i < 5; i++) b.box(0.25, 0.1, 0.15, -0.8 + i * 0.4, 0.95, d / 2 - 2.6, 0xffd23a); solid(C, 0, d / 2 - 2.6, 1.2, 0.4);
+  },
+  campstore(b, C, w, d, back) { // log walls, a canoe up high, a tent on display, sleeping bags, lanterns, firewood
+    for (const x of [-w / 2 + 0.06, w / 2 - 0.06]) for (let y = 0.2; y < 4.2; y += 0.42) b.add(new THREE.CylinderGeometry(0.16, 0.16, d - 0.4, 7), 0x8a5a30, x, y, 0, Math.PI / 2, 0, 0);
+    b.add(new THREE.CylinderGeometry(0.4, 0.18, 4.6, 8), 0xe0402a, 0, 3.6, 0.5, 0, 0, Math.PI / 2);
+    b.add(prismGeo(2.4, 1.7, 2.4), 0xff8a1a, -w / 2 + 2, 0, 1, 0, 0, 0); solid(C, -w / 2 + 2, 1, 1.2, 1.2);
+    for (let i = 0; i < 6; i++) b.add(new THREE.CylinderGeometry(0.22, 0.22, 0.8, 8), [0x2a7ad0, 0x3aa04a, 0xe0203a][i % 3], w / 2 - 1, 0.25 + Math.floor(i / 3) * 0.45, -1 + (i % 3) * 0.6, 0, 0, Math.PI / 2);
+    solid(C, w / 2 - 1, -0.4, 0.5, 1);
+    for (const x of [-3, 3]) { b.box(0.2, 0.3, 0.2, x, 3.2, -1, 0xffe08a, "glow"); b.box(0.02, 1, 0.02, x, 3.5, -1, 0x2a2a2a); }
+    for (let i = 0; i < 5; i++) b.add(new THREE.CylinderGeometry(0.15, 0.15, 1, 6), 0xb08050, 2.5, 0.15 + (i % 2) * 0.28, d / 2 - 1.6 + Math.floor(i / 2) * 0.3, 0, 0, Math.PI / 2);
+    rug(b, 0, 1, 3, 2.4, 0x3a6a3a);
+  },
+};
 // what's in each kind of room. Returns { spots: [{x, z, r, act}], keeper: {x, z} }
 function furnish(bd, b, C) {
   const w = bd.w, d = bd.d, k = bd.kind, spots = []; let keeper = null, decor = null;
@@ -170,6 +235,25 @@ function furnish(bd, b, C) {
       cur.extras.push(sign(scene, "VALLEY MOTORS", 10, 1.6, POCKET.x, 2.8, POCKET.z + back + 0.16, 0, { bg: "#2a6fd6", fg: "#ffffff", stroke: "#123a7a", glow: true }));
       cur.extras.push(sign(scene, "TRUCKS • QUADS • BIKES • CARS", 8, 0.7, POCKET.x, 1.85, POCKET.z + back + 0.16, 0, { bg: "#2a6fd6", fg: "#ffd23a" }));
     };
+  } else if (k === "shop" && SHOP_DECOR[bd.goods === "pawn" ? "pawn" : bd.id]) {
+    shopCounter(); SHOP_DECOR[bd.goods === "pawn" ? "pawn" : bd.id](b, C, w, d, back);
+  } else if (k === "clothes") {
+    // racks of clothes in every color, mannequins, a big mirror, fitting rooms
+    counter(b, C, 0, back + 2.4, 5, 0xffffff, 0xff5ad8); keeper = { x: 0, z: back + 1.4 }; spots.push({ x: 0, z: back + 3.4, r: 1.8, act: "menu" });
+    const cols = [0xe0203a, 0xff7a1a, 0xffd23a, 0x3aa04a, 0x3ad0ff, 0x2f8ae0, 0x6a3ad0, 0xff5ad8, 0xffffff, 0x1a1a1e, 0x7a4a2a, 0x2ac0a0];
+    for (const [x, z] of [[-w / 2 + 2, -1], [-w / 2 + 2, 2.5], [w / 2 - 2, -1], [w / 2 - 2, 2.5]]) {
+      for (const s2 of [-1, 1]) b.box(0.06, 1.7, 0.06, x, 0, z + s2 * 1.2, 0xc8ccd2); // (rack posts)
+      b.add(new THREE.CylinderGeometry(0.03, 0.03, 2.5, 6), 0xc8ccd2, x, 1.68, z, Math.PI / 2, 0, 0);
+      for (let i = 0; i < 9; i++) b.box(0.5, 0.75, 0.08, x, 0.85, z - 1.0 + i * 0.25, cols[(i + Math.round(x + z)) % cols.length]);
+      solid(C, x, z, 0.35, 1.25);
+    }
+    for (const [x, c1, c2] of [[-2.2, 0x2f8ae0, 0x2a3550], [2.2, 0xff5ad8, 0xffffff]]) { // mannequins
+      b.cyl(0.35, 0.08, x, 0, d / 2 - 3, 0x9aa0aa, 10); b.box(0.24, 0.8, 0.24, x, 0.08, d / 2 - 3, c2); b.box(0.6, 0.7, 0.32, x, 0.88, d / 2 - 3, c1); b.box(0.36, 0.36, 0.34, x, 1.6, d / 2 - 3, 0xf0e6dc);
+      solid(C, x, d / 2 - 3, 0.4, 0.4);
+    }
+    b.box(2.6, 2.4, 0.06, -w / 2 + 0.05, 0.4, back + 2, 0xbfe8ff, "glass"); // the big mirror (on the side wall)
+    for (const x of [w / 2 - 1.2, w / 2 - 3]) { b.box(1.6, 2.4, 0.08, x, 0, back + 0.05, 0xf4f4f4); b.box(1.4, 2.0, 0.06, x, 0.1, back + 1.6, [0x6a3ad0, 0xe0203a][x > w / 2 - 2 ? 0 : 1]); b.box(0.06, 2.4, 1.6, x - 0.8, 0, back + 0.8, 0xf4f4f4); solid(C, x, back + 0.8, 0.8, 0.8); } // fitting rooms
+    rug(b, 0, 1, 5, 3, 0xff8ad8);
   } else if (k === "shop") {
     shopCounter();
     shelf(b, C, -w / 2 + 0.5, 0, Math.min(6, d - 4), bd.goods, 1); shelf(b, C, w / 2 - 0.5, 0, Math.min(6, d - 4), bd.goods, 1);
@@ -296,7 +380,7 @@ export class Interiors {
   // build the room and put you inside it, by the door (or at spot, e.g. a jail cell)
   enter(bd, spot) {
     if (this.cur) this.leaveRoom();
-    const C = [], b = room(null, bd.w, bd.d, bd.kind), f = furnish(bd, b, C);
+    const C = [], b = room(null, bd.w, bd.d, bd.kind, bd), f = furnish(bd, b, C);
     // a cash register on the counter wherever there's somebody to hold up
     if (HOLDUP[bd.id] && f.keeper) { const rx = f.keeper.x - 1.6, rz = f.keeper.z + 1; b.box(0.7, 0.32, 0.5, rx, 1.13, rz, 0x3a3a44); b.box(0.5, 0.26, 0.05, rx, 1.5, rz - 0.18, 0x2a2a2a); b.box(0.44, 0.2, 0.06, rx, 1.53, rz - 0.15, 0x7aff5a, "glow"); f.register = { x: rx, z: rz }; }
     b.at(0, 0, 0);
