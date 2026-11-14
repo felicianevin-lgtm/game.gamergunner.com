@@ -190,7 +190,7 @@ export function aiGuide(want, info) {
   lines.push("", "EXAMPLE of a correct GunnerVerse script:", "```javascript", "// When this button is clicked, open or close the panel named \"Shop\"", "me.onClick(function () {", "  find(\"Shop\").toggle()", "  sound(\"click\")", "})", "```");
   return lines.join("\n");
 }
-// 🔒 Ask an AI is locked with a code (only the owner of this studio uses it). It's a soft lock: the code is in the page.
+// 🔒 The code lock (used by ⚡ Auto Build; Ask an AI is open to everyone). It is a soft lock: the code is in the page.
 const AI_CODE = "2468";
 function aiUnlocked() { try { return sessionStorage.getItem("gv_ai_ok") === "1"; } catch { return false; } }
 function askCode(then, title = "🔒 Ask an AI") {
@@ -212,8 +212,7 @@ function askCode(then, title = "🔒 Ask an AI") {
   q("aiCode").focus();
 }
 function openAi() {
-  if (!cur) return;
-  if (!aiUnlocked()) { askCode(openAi); return; }
+  if (!cur) return; // (no code: anyone can copy the guide for their own AI chat)
   const box = document.createElement("div");
   box.className = "se-maker";
   box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Ask an AI"><h3>🤖 Ask an AI</h3>' +
