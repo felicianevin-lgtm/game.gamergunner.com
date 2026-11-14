@@ -1,0 +1,72 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #8fd3ff; font-family: Inter, system-ui, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; touch-action: none; }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+.hidden { display: none !important; }
+button { font: inherit; cursor: pointer; }
+.big { font-family: "Lilita One", sans-serif; font-size: 26px; letter-spacing: 1px; padding: 12px 44px; border: 0; border-radius: 14px; color: #1a1300; background: linear-gradient(#ffe46a, #ffb020); box-shadow: 0 5px 0 #b06a00, 0 8px 20px #0005; }
+.big:active { transform: translateY(3px); box-shadow: 0 2px 0 #b06a00; }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .35s; z-index: 5; }
+#flash.red { background: #ff2a2a; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+#hud button { pointer-events: auto; }
+#topL { position: absolute; left: 14px; top: 12px; text-shadow: 0 2px 4px #0008; }
+#stage { font-family: "Lilita One", sans-serif; font-size: 22px; letter-spacing: 1px; }
+#stage b { font-size: 40px; font-weight: 400; color: #ffe46a; }
+#stage small { font-size: 18px; opacity: .8; margin-left: 4px; }
+#bar { width: 220px; height: 10px; border-radius: 6px; background: #0006; overflow: hidden; margin: 2px 0 6px; }
+#bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3aff6a, #ffe46a); }
+#zone { font-weight: 800; font-size: 14px; }
+#zone small { font-weight: 600; opacity: .85; display: block; }
+#net { font-size: 12px; opacity: .85; margin-top: 4px; }
+#topR { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+#topR button { width: 44px; height: 44px; border-radius: 12px; border: 2px solid #fff6; background: #0007; color: #fff; font-size: 21px; }
+#topR button:hover { background: #000a; }
+#bCarpet { background: linear-gradient(#d0306a, #7a1040) !important; border-color: #ffd23f !important; }
+#bCarpet.on { box-shadow: 0 0 14px #ffd23f; }
+#players { position: absolute; right: 12px; top: 66px; font-size: 13px; text-align: right; text-shadow: 0 1px 3px #000c; line-height: 1.5; }
+#players b { color: #ffe46a; }
+#deaths { position: absolute; left: 14px; bottom: 12px; font-weight: 800; text-shadow: 0 2px 4px #0008; }
+#hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); font-size: 12px; opacity: .8; text-shadow: 0 1px 3px #000; white-space: nowrap; }
+#banner { position: fixed; left: 50%; top: 22%; transform: translate(-50%, -50%) scale(.6); font-family: "Lilita One", sans-serif; font-size: 54px; letter-spacing: 2px; text-shadow: 0 4px 0 #0006, 0 0 24px #0008; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 4; white-space: nowrap; text-align: center; }
+#banner small { display: block; font-size: 22px; letter-spacing: 1px; }
+#banner.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+#toasts { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; z-index: 6; pointer-events: none; }
+.toast { background: #000b; border-radius: 10px; padding: 8px 16px; font-weight: 600; font-size: 14px; animation: tin .25s; }
+.toast.good { border-left: 4px solid #3aff6a; } .toast.warn { border-left: 4px solid #ff4a4a; } .toast.gold { border-left: 4px solid #ffd23f; }
+@keyframes tin { from { opacity: 0; transform: translateY(-8px); } }
+
+#panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, 94vw); max-height: 84vh; overflow: auto; background: #10182aee; border: 2px solid #fff3; border-radius: 18px; padding: 18px 20px; z-index: 8; }
+#panel h2 { font-family: "Lilita One", sans-serif; font-weight: 400; margin: 0 0 8px; font-size: 28px; letter-spacing: 1px; }
+#panel .x { position: absolute; right: 12px; top: 10px; width: 36px; height: 36px; border-radius: 10px; border: 0; background: #fff2; color: #fff; font-size: 18px; }
+#panel p { margin: 6px 0; line-height: 1.45; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 5px; margin-top: 10px; }
+.grid button { height: 40px; border-radius: 8px; border: 0; background: #ffffff1c; color: #fff; font-weight: 800; }
+.grid button:hover { background: #ffffff38; }
+.grid button.cur { background: #ffd23f; color: #221800; }
+.grid button:disabled { opacity: .25; cursor: default; }
+.zoneh { font-weight: 800; margin: 12px 0 0; font-size: 13px; opacity: .9; }
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.looks button { border: 2px solid transparent; border-radius: 12px; padding: 8px 4px; background: #ffffff18; color: #fff; font-size: 13px; font-weight: 600; }
+.looks button.on { border-color: #ffd23f; background: #ffd23f30; }
+.looks button:disabled { opacity: .4; cursor: default; }
+.looks i { display: block; width: 30px; height: 30px; border-radius: 8px; margin: 0 auto 4px; font-style: normal; font-size: 24px; line-height: 30px; }
+kbd { background: #fff2; border-radius: 5px; padding: 1px 6px; font-family: inherit; font-weight: 800; }
+
+#intro { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(#0000, #0007); z-index: 9; }
+#intro .box { width: min(560px, 92vw); text-align: center; background: #10182add; border: 2px solid #fff3; border-radius: 22px; padding: 22px 26px; }
+#intro h1 { font-family: "Lilita One", sans-serif; font-weight: 400; font-size: 64px; margin: 0; letter-spacing: 2px; text-shadow: 0 5px 0 #0007; }
+#intro h1 span { color: #ffd23f; }
+#intro ul { text-align: left; padding-left: 4px; list-style: none; line-height: 1.6; }
+#intro .small { font-size: 13px; opacity: .85; }
+#intro a { color: #9ad8ff; }
+
+#stick, #tJump, #tPush { display: none; }
+@media (pointer: coarse) {
+  #hint { display: none; }
+  #stick { display: block; position: absolute; left: 30px; bottom: 40px; width: 130px; height: 130px; border-radius: 50%; background: #ffffff1c; border: 2px solid #fff4; }
+  #stick i { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px; border-radius: 50%; background: #fff6; }
+  #tJump { display: block; position: absolute; right: 30px; bottom: 44px; width: 96px; height: 96px; border-radius: 50%; border: 3px solid #fff8; background: #ffffff30; color: #fff; font-size: 40px; pointer-events: auto; }
+  #tPush { display: block; position: absolute; right: 140px; bottom: 60px; width: 70px; height: 70px; border-radius: 50%; border: 3px solid #ffd23f; background: #7a104099; color: #fff; font-size: 30px; pointer-events: auto; }
+  #deaths { bottom: auto; top: 140px; }
+}
