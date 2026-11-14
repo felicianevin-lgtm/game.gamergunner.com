@@ -1,0 +1,90 @@
+/* CIRCUIT SIEGE: black + glowing green */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #020604; color: #e8fff0; font-family: Inter, system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+#canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; outline: none; }
+.hidden { display: none !important; }
+button { font: inherit; cursor: pointer; border-radius: 10px; border: 2px solid #3aff6a; background: #0c1a10; color: #c8ffd8; padding: 7px 12px; font-weight: 700; }
+button:hover:not(:disabled) { background: #12301c; box-shadow: 0 0 12px #3aff6a66; }
+button:disabled { opacity: 0.45; cursor: default; }
+button.big { font-family: "Russo One", sans-serif; font-size: 20px; padding: 10px 24px; background: #3aff6a; color: #031008; box-shadow: 0 0 22px #3aff6a99; }
+button.on { background: #3aff6a; color: #031008; }
+input, select { font: inherit; background: #07120b; color: #e8fff0; border: 2px solid #2a8a4a; border-radius: 8px; padding: 6px 8px; }
+kbd { display: inline-block; min-width: 26px; padding: 2px 7px; border-radius: 6px; background: #3aff6a; color: #031008; font-weight: 800; margin-right: 6px; }
+#flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 5; }
+/* hub HUD */
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+#topL { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 6px; }
+#bolts { font-family: "Russo One", sans-serif; font-size: 30px; color: #ffd23a; text-shadow: 0 0 14px #ffb02066, 0 2px 0 #000; }
+#zone { font-family: "Russo One", sans-serif; font-size: 18px; color: #3aff6a; text-shadow: 0 0 10px #3aff6a; letter-spacing: 2px; }
+#net { font-size: 13px; color: #9fd8b0; background: #000a; padding: 3px 8px; border-radius: 8px; width: max-content; }
+#topR { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; pointer-events: auto; }
+#topR button { font-size: 22px; padding: 6px 10px; }
+#prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: #000c; border: 2px solid #3aff6a; padding: 10px 18px; border-radius: 12px; font-size: 18px; font-weight: 800; box-shadow: 0 0 20px #3aff6a55; }
+#padTimer { position: absolute; left: 50%; top: 80px; transform: translateX(-50%); background: #000c; border: 2px solid #3aff6a; padding: 10px 22px; border-radius: 12px; font-size: 18px; text-align: center; box-shadow: 0 0 22px #3aff6a66; }
+#hint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); font-size: 13px; color: #8fcfa0; background: #0008; padding: 4px 10px; border-radius: 8px; white-space: nowrap; }
+#banner { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%) scale(0.7); font-family: "Russo One", sans-serif; font-size: 52px; text-shadow: 0 0 24px currentColor, 0 4px 0 #000; opacity: 0; pointer-events: none; z-index: 8; white-space: nowrap; }
+#banner.show, #mMsg.show { animation: pop 2.2s ease-out; }
+@keyframes pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); } 12% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } 20% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+#toasts { position: fixed; right: 12px; top: 70px; display: flex; flex-direction: column; gap: 6px; z-index: 9; pointer-events: none; max-width: 360px; }
+.toast { background: #07120bdd; border-left: 4px solid #3ad0ff; padding: 8px 12px; border-radius: 8px; font-weight: 600; transition: opacity 0.4s, transform 0.4s; }
+.toast.good { border-color: #3aff6a; } .toast.warn { border-color: #ff7a3a; } .toast.out { opacity: 0; transform: translateX(30px); }
+/* panels */
+#panel { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+#panel .box, #intro .box, #mEnd .box { position: relative; background: linear-gradient(#08140c, #030805); border: 2px solid #3aff6a; border-radius: 18px; box-shadow: 0 0 40px #3aff6a44; padding: 20px 24px; max-width: 980px; width: 100%; max-height: 92vh; overflow: auto; }
+#panel h2 { font-family: "Russo One", sans-serif; color: #3aff6a; margin: 0 0 6px; text-shadow: 0 0 12px #3aff6a88; }
+#panel h3 { color: #9fffc0; margin: 14px 0 6px; }
+.sub { color: #b8e8c8; margin: 4px 0 10px; } .note { color: #8fb89a; font-size: 14px; }
+.x { position: absolute; top: 10px; right: 12px; padding: 4px 10px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.list { display: flex; flex-direction: column; gap: 6px; }
+.item { display: flex; align-items: center; gap: 10px; background: #0a1a10; border: 1px solid #1f5a33; border-radius: 10px; padding: 8px 10px; }
+.item b { flex: 1; } .item small { color: #8fb89a; }
+.crates { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.crate { background: #0a120d; border: 2px solid var(--rc); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; box-shadow: 0 0 18px color-mix(in srgb, var(--rc) 35%, transparent); }
+.crate b { color: var(--rc); font-family: "Russo One", sans-serif; } .crate small { color: #9fb8a8; font-size: 11px; }
+.cbox { width: 56px; height: 56px; border: 4px solid var(--rc); border-radius: 8px; background: #111; box-shadow: 0 0 16px var(--rc), inset 0 0 12px var(--rc); }
+.cbox.big { width: 110px; height: 110px; }
+#reveal { margin-top: 14px; display: flex; justify-content: center; }
+.rev { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px; }
+.rev.spin .cbox { animation: shake 1.3s ease-in; } .rev small { font-family: "Russo One", sans-serif; font-size: 22px; color: var(--rc); text-shadow: 0 0 14px var(--rc); }
+@keyframes shake { 0% { transform: rotate(0) scale(1); } 60% { transform: rotate(18deg) scale(1.1); } 70% { transform: rotate(-18deg) scale(1.15); } 80% { transform: rotate(14deg) scale(1.2); } 90% { transform: rotate(-14deg) scale(1.25); } 100% { transform: rotate(0) scale(1.4); filter: brightness(3); } }
+.rev.pop { animation: rpop 0.6s ease-out; } .rev.r4, .rev.r5 { animation: rpop 0.6s ease-out, glowp 1s ease-in-out infinite alternate; }
+@keyframes rpop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes glowp { from { filter: drop-shadow(0 0 6px var(--rc)); } to { filter: drop-shadow(0 0 26px var(--rc)); } }
+.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.tcard { background: #0a120d; border: 2px solid var(--rc); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 0 12px color-mix(in srgb, var(--rc) 30%, transparent); }
+.tcard b { color: var(--rc); font-family: "Russo One", sans-serif; } .tcard small { color: var(--rc); opacity: 0.8; font-size: 12px; } .tcard span { font-size: 12px; color: #b8d8c0; } .tcard em { font-style: normal; color: #ffd23a; font-weight: 800; }
+.trade { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } .table { min-height: 60px; background: #050d08; border: 2px dashed #2a8a4a; border-radius: 10px; padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 2px solid var(--rc, #ffd23a); border-radius: 20px; padding: 3px 10px; font-weight: 700; font-size: 13px; }
+.help li { margin: 8px 0; line-height: 1.4; }
+/* intro */
+#intro { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: radial-gradient(#0a2a14cc, #000e); padding: 16px; }
+#intro .box { max-width: 620px; text-align: center; }
+#intro h1 { font-family: "Russo One", sans-serif; font-size: 58px; margin: 4px 0; color: #e8fff0; text-shadow: 0 0 20px #3aff6a; letter-spacing: 3px; } #intro h1 span { color: #3aff6a; }
+#intro ul { text-align: left; line-height: 1.6; } #intro a { color: #8fdfaa; } .small { font-size: 13px; }
+/* match HUD */
+#mhud { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+#mhud button, #mPanel, #mCards, #mEnd { pointer-events: auto; }
+#mTop { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+.mStat { background: #000c; border: 2px solid #1f8a44; border-radius: 12px; padding: 4px 14px; text-align: center; min-width: 90px; }
+.mStat small { display: block; font-size: 11px; color: #8fdfaa; letter-spacing: 2px; } .mStat b { font-family: "Russo One", sans-serif; font-size: 22px; }
+#mCash { color: #ffd23a; }
+#mBase { width: 180px; height: 20px; background: #300; border-radius: 8px; position: relative; overflow: hidden; margin-top: 4px; } #mBase i { position: absolute; inset: 0; width: 100%; background: linear-gradient(#3aff6a, #1aa04a); transition: width 0.2s; } #mBase span { position: relative; font-size: 13px; font-weight: 800; }
+#mMsg { position: absolute; left: 50%; top: 28%; transform: translate(-50%, -50%); font-family: "Russo One", sans-serif; font-size: 48px; text-shadow: 0 0 24px currentColor, 0 4px 0 #000; opacity: 0; white-space: nowrap; }
+#mBossBar { position: absolute; top: 76px; left: 50%; transform: translateX(-50%); width: min(560px, 90vw); text-align: center; } #mBossBar b { font-family: "Russo One", sans-serif; color: #ff3a6a; text-shadow: 0 0 10px #ff3a6a; } #mBossBar div { height: 16px; background: #200; border: 2px solid #ff3a6a; border-radius: 8px; overflow: hidden; } #mBossBar i { display: block; height: 100%; background: linear-gradient(#ff5a8a, #c01a4a); width: 100%; }
+#mPlayers { position: absolute; top: 12px; left: 12px; font-size: 13px; background: #0008; border-radius: 8px; padding: 4px 8px; }
+#mBar { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: flex-end; max-width: 98vw; }
+#mCards { display: flex; gap: 8px; }
+.mCard { position: relative; width: 120px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-color: var(--rc); background: #070f0a; padding: 8px 10px; text-align: left; box-shadow: 0 0 10px color-mix(in srgb, var(--rc) 35%, transparent); }
+.mCard b { color: var(--rc); font-size: 13px; line-height: 1.1; } .mCard small { color: var(--rc); opacity: 0.8; font-size: 11px; } .mCard em { font-style: normal; color: #ffd23a; font-weight: 800; } .mCard u { text-decoration: none; position: absolute; right: 8px; bottom: 6px; font-size: 11px; color: #8fb89a; } .mCard i { position: absolute; top: 4px; right: 8px; font-style: normal; font-size: 11px; color: #8fb89a; }
+.mCard.off { opacity: 0.5; } .mCard.on { background: #12301c; transform: translateY(-6px); }
+#mSkip { font-family: "Russo One", sans-serif; font-size: 16px; padding: 14px 16px; background: #3aff6a; color: #031008; } #mSkip:disabled { background: #0c1a10; color: #8fdfaa; opacity: 1; }
+#mPanel { position: absolute; right: 12px; bottom: 120px; width: 300px; background: #050d08ee; border: 2px solid #3aff6a; border-radius: 14px; padding: 12px; }
+#mPanel h3 { margin: 0; font-family: "Russo One", sans-serif; } #mPanel h3 small { display: block; font-family: Inter, sans-serif; font-size: 12px; color: #9fd8b0; } #mPanel p { font-size: 13px; color: #b8d8c0; margin: 6px 0; }
+.mSt { display: flex; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 700; } .mBtns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } .mBtns.small button { font-size: 12px; padding: 4px 8px; } .mNote { color: #8fb89a; }
+#mTip { position: absolute; bottom: 118px; left: 12px; font-size: 12px; color: #7fb08f; max-width: 300px; background: #0008; padding: 4px 8px; border-radius: 8px; }
+#mEnd { position: fixed; inset: 0; background: #000b; display: flex; align-items: center; justify-content: center; z-index: 12; padding: 16px; }
+#mEnd .box { max-width: 560px; text-align: center; } #mEnd h1 { font-family: "Russo One", sans-serif; font-size: 48px; margin: 4px 0; text-shadow: 0 0 22px currentColor; }
+#mEnd .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; } #mEnd .stats div { background: #0a1a10; border: 1px solid #1f5a33; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; } #mEnd .stats span { font-size: 22px; } #mEnd .stats small { color: #8fb89a; } #mEnd .stats b { font-family: "Russo One", sans-serif; font-size: 22px; }
+.reward { font-family: "Russo One", sans-serif; font-size: 34px; color: #ffd23a; text-shadow: 0 0 18px #ffb020; margin: 8px 0 14px; }
+@media (max-width: 700px) { .trade { grid-template-columns: 1fr; } #mCards .mCard { width: 92px; } #intro h1 { font-size: 40px; } #hint { display: none; } }
