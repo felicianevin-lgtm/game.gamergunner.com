@@ -1,6 +1,10 @@
 // MUD VALLEY RP: how things move. Arcade driving (gas, brakes, steering, drifting, hills, jumps, mud, water)
 // and walking around on foot. Not a real simulator, just fun!
-import { groundAt, surfaceAt, SURF, normalAt } from "./terrain.js";
+import { groundAt as terrainAt, surfaceAt, SURF, normalAt } from "./terrain.js";
+// extra things you can drive on top of (trailer ramps + decks): main.js sets this
+let PLAT = null;
+export function setPlatforms(fn) { PLAT = fn; }
+function groundAt(x, z) { const g = terrainAt(x, z); return PLAT ? Math.max(g, PLAT(x, z)) : g; }
 import { WATER_Y, EDGE } from "./layout.js";
 import { pushOut } from "./colliders.js";
 import { tune } from "./vehicles.js";

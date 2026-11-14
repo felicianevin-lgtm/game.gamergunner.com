@@ -10,7 +10,7 @@ import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./
 import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
 import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS } from "./vehicles.js";
-import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf } from "./physics.js";
+import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
 import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
 import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js";
@@ -18,6 +18,7 @@ import { Fishing, rodById } from "./fishing.js";
 import { Heist } from "./heist.js";
 import { NPCs } from "./npcs.js";
 import { Drops, PARTS, partById, addPart, have, SHIP_FEE } from "./parts.js";
+import { RELAY, account } from "/create/js/net.js";
 import { Interiors, buildingById, JAIL_SPOT, POCKET } from "./interiors.js";
 import { MP } from "./mp.js";
 import { FX } from "./fx.js";
@@ -234,6 +235,7 @@ function exitCar() {
   b.vx *= 0.3; b.vz *= 0.3; if (c.police) G.siren = false;
   SFX.door(); engine(false);
   S.driving = null;
+  parkOnTrailer(c);
 }
 function teleportMe(x, z, yaw) {
   if (interiors && interiors.cur && Math.abs(x) < 1000) interiors.leaveRoom();
@@ -382,7 +384,7 @@ function actions() {
       if (tr.hitched === c.b || !near(tr, me, tr.T.enclosed ? 10.5 : 6.5)) continue;
       if (tr.T.enclosed && !tr.s.open) { out.E = { text: "Open the trailer door", fn: () => trailerDoor(tr, true) }; break; }
       const sl = freeSlots(tr, sizeOf(c));
-      out.E = sl ? { text: "Drive up the ramp into the " + tr.T.name + " to load it", warn: true, fn: () => SFX.nope() } : { text: sizeOf(c) > tr.T.maxSize ? "Too big for this trailer" : "Trailer is full", warn: true, fn: () => SFX.nope() };
+      out.E = sl ? { text: "Drive up the ramp onto the " + tr.T.name + ", then get out", warn: true, fn: () => SFX.nope() } : { text: sizeOf(c) > tr.T.maxSize ? "Too big for this trailer" : "Trailer is full", warn: true, fn: () => SFX.nope() };
       break;
     }
   }
@@ -426,6 +428,23 @@ function actions() {
 // trailers: you DRIVE your ride up the ramp to load it (the big box trailer's door has to be open). Lined up behind the
 // trailer, it lets you through; once you're past the back edge, the ride parks on the deck and you hop out.
 const deckBack = (t) => ({ utility: -1.7, flatbed: -4.8, enclosed: -3.6 })[t.T.id] ?? -2;
+const deckFront = (t) => ({ utility: 2.0, flatbed: 4.6, enclosed: 3.0 })[t.T.id] ?? 2;
+const rampLen = (t) => ({ utility: 1.3, flatbed: 1.8, enclosed: 2.9 })[t.T.id] ?? 1.5;
+// how high the trailer's deck / ramp is at a spot (or -Infinity if you're not on it). Cars + people drive up it.
+function deckAt(x, z) {
+  let best = -Infinity;
+  for (const t of G.TRS.values()) {
+    if (Math.abs(x - t.x) > 10 || Math.abs(z - t.z) > 10) continue;
+    const p = trailerLocal(t, x, z); if (Math.abs(p.lx) > 1.3) continue;
+    const back = deckBack(t), top = t.y + t.T.deckY;
+    if (p.lz >= back && p.lz <= deckFront(t)) best = Math.max(best, top);
+    else if (p.lz < back && p.lz > back - rampLen(t) && (!t.T.enclosed || t.doorA > 1.2)) best = Math.max(best, top - t.T.deckY * ((back - p.lz) / rampLen(t)));
+  }
+  return best;
+}
+setPlatforms(deckAt);
+// is this ride sitting on a trailer's deck?
+function onDeck(c, t) { const p = trailerLocal(t, c.b.x, c.b.z); return Math.abs(p.lx) < 1.4 && p.lz > deckBack(t) + c.m.len / 2 - 0.6 && p.lz < deckFront(t) + 0.3; }
 function trailerLocal(t, x, z) { const dx = x - t.x, dz = z - t.z, c = Math.cos(t.yaw), s = Math.sin(t.yaw); return { lx: dx * c - dz * s, lz: dx * s + dz * c }; }
 function canDriveIn(t, c) {
   if (!c || t.hitched === c.b) return false;
@@ -437,9 +456,30 @@ function canDriveIn(t, c) {
 function driveInTrailers() {
   const c = mine(); if (!c || sizeOf(c) > 2) return;
   for (const t of G.TRS.values()) {
-    if (!canDriveIn(t, c)) continue;
+    if (t.hitched === c.b) continue;
     const p = trailerLocal(t, c.b.x, c.b.z);
-    if (p.lz > deckBack(t) + 1.0) { const sl = freeSlots(t, sizeOf(c)); if (sl) { loadCar(c, t, sl); return; } }
+    if (Math.abs(p.lx) > 1.6 || p.lz < deckBack(t) - 0.5 || p.lz > deckFront(t) + 1) continue;
+    // up on the deck: the front wall stops you, the side walls keep you lined up
+    const maxZ = deckFront(t) - c.m.len / 2 - 0.1, c0 = Math.cos(t.yaw), s0 = Math.sin(t.yaw);
+    let lz = Math.min(p.lz, maxZ), lx = Math.max(-0.5, Math.min(0.5, p.lx));
+    if (lz !== p.lz || lx !== p.lx) {
+      c.b.x = t.x + lx * c0 + lz * s0; c.b.z = t.z - lx * s0 + lz * c0;
+      const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), vf = c.b.vx * fx + c.b.vz * fz; if (lz === maxZ && vf > 0) { c.b.vx -= fx * vf; c.b.vz -= fz * vf; }
+    }
+    if (onDeck(c, t) && !t.hintT) { t.hintT = 1; H.toast("On the trailer!", "Get out (F) to park it here.", "good", 2500); }
+  }
+}
+function onDeckZone(t, c) { if (sizeOf(c) > 2 || !freeSlots(t, sizeOf(c))) return false; const p = trailerLocal(t, c.b.x, c.b.z); return Math.abs(p.lx) < 1.6 && p.lz > deckBack(t) - 0.5 && p.lz < deckFront(t) + 1; }
+// you got out: a ride sitting on a trailer deck parks there for real (strapped down, so it rides along when you tow)
+function parkOnTrailer(c) {
+  if (sizeOf(c) > 2) return;
+  for (const t of G.TRS.values()) {
+    if (t.hitched === c.b || !onDeck(c, t)) continue;
+    const sl = freeSlots(t, sizeOf(c)); if (!sl) continue;
+    c.on = t; c.s.on = t.s.uid; c.b.vx = c.b.vz = 0; scene.remove(c.m.root); loadOnto(t, { uid: c.s.uid }, c.m, sl); t.hintT = 0;
+    const w = G.me.w, back = deckBack(t) - rampLen(t) - 0.8; w.x = t.x + Math.sin(t.yaw) * back; w.z = t.z + Math.cos(t.yaw) * back; w.y = groundAt(w.x, w.z);
+    SFX.load(); H.toast("Parked!", t.T.enclosed ? "Press T to close the door, then hook it to your truck." : "Hook the trailer to your truck (T) and tow it away.", "good"); save();
+    return;
   }
 }
 // house garage doors roll up when it's your house and you come close
@@ -482,7 +522,8 @@ function bedHost(t) {
 function putInBed(c, t) {
   const B = BEDS[t.s.id], h = bedHost(t), v = vehicleById(c.s.id);
   scene.remove(c.m.root); t.m.body.add(c.m.root);
-  c.m.root.position.set(0, B.y, B.z + (v.bike ? -0.15 : 0)); c.m.root.rotation.set(0, 0, 0);
+  if (v.bike) { c.m.root.position.set(0.05, B.y, B.z + 0.05); c.m.root.rotation.set(0, 0.62, 0.1); } // (corner to corner, leaning a little, so it fits)
+  else { c.m.root.position.set(0, B.y, B.z); c.m.root.rotation.set(0, 0, 0); }
   h.loaded.push({ uid: c.s.uid, slots: [0], model: c.m }); c.on = h; c.s.on = null; c.s.bed = t.s.uid; c.b.vx = c.b.vz = 0;
 }
 function loadBed(c, t) {
@@ -597,11 +638,32 @@ export const GAME = {
     if (!fr || !mo || !ti || Object.entries(cnt).some(([id, k]) => have(id) < k)) { SFX.nope(); H.toast("Missing parts!", "Check the list: you need every part.", "warn"); return false; }
     if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Sell a ride or buy a bigger house first.", "warn"); SFX.nope(); return false; }
     for (const id of need) addPart(id, -1);
-    const s = newCar(fr.model, uid()); Object.assign(s, { paint: o.color ?? s.paint, engine: mo.lv, maxEngine: mo.lv, tires: ti.tires, ownTires: ["street", ti.tires], lift: o.lift ? 1 : 0, maxLift: o.lift ? 1 : 0, rust: 0, built: true });
+    const s = newCar(fr.model, uid()); Object.assign(s, { paint: o.color ?? s.paint, engine: mo.lv, maxEngine: mo.lv, tires: ti.tires, ownTires: ["street", ti.tires], lift: o.lift ? 1 : 0, maxLift: o.lift ? 1 : 0, rust: 0, built: true,
+      rims: o.rims || "chrome", neon: o.neon || 0, ownNeon: [0, o.neon || 0], name: String(o.name || "").trim().slice(0, 24) || undefined });
     const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, 6); s.x = f.x; s.z = f.z; s.yaw = yaw;
     S.cars.push(s); const c = spawnCar(s); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 80); SFX.buy();
     H.banner("YOU BUILT IT!", vehicleById(s.id).name + " · " + mo.name); save(); return c;
   },
+  // ---- the build contest: enter a ride you built; the 🛠 Dev menu picks 3 winners, and everyone can buy those here
+  enterContest(u) {
+    const s = S.cars.find((c) => c.uid === u); if (!s || !s.built) return Promise.resolve(false);
+    const a = account(), b = { base: s.id, name: s.name || "", paint: s.paint, rims: s.rims, tires: s.tires, engine: s.engine, lift: s.lift, neon: s.neon };
+    return fetch(RELAY + "/mv/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ b, by: a ? a.u : "" }) }).then((r) => r.json()).then((r) => {
+      if (r.ok) { s.entered = true; save(); SFX.buy(); H.toast("🏆 Entered!", "The GunnerVerse team will look at your build. If it wins, everyone can buy it at Valley Motors!", "good", 4500); return true; }
+      H.toast("Couldn't enter it", r.e === "slowdown" ? "You entered a lot of builds. Try again later." : "Try again in a bit.", "warn"); return false;
+    }).catch(() => { H.toast("Couldn't reach GunnerVerse", "Check your internet and try again.", "warn"); return false; });
+  },
+  get winners() { return G.winners || []; },
+  buyWinner(i) {
+    const w = (G.winners || [])[i]; if (!w) return false; const v = vehicleById(w.base), price = Math.round(v.price * 1.25 / 100) * 100;
+    if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Buy a bigger house to own more rides (or sell one).", "warn"); SFX.nope(); return false; }
+    if (!spend(price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
+    const s = newCar(w.base, uid()); Object.assign(s, { paint: w.paint, rims: w.rims, tires: w.tires, ownTires: ["street", w.tires], engine: w.engine, maxEngine: w.engine, lift: v.bike ? Math.min(1, w.lift) : w.lift, maxLift: w.lift, neon: w.neon, ownNeon: [0, w.neon], rust: 0, name: w.name, by: w.by });
+    s.yaw = Math.PI; const f = freeSpot(-36, 12, Math.PI, 5); s.x = f.x; s.z = f.z; S.cars.push(s); const c = spawnCar(s);
+    if (mine()) exitCar(); if (inside()) { interiors.leaveRoom(); applyItem(); H.flash("#fff"); }
+    enterCar(c); SFX.buy(); H.bumpMoney(); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 60); H.banner("NEW RIDE!", w.name + " (built by " + w.by + ")"); save(); return true;
+  },
+  winnerPreview(i) { const w = (G.winners || [])[i]; if (w) GAME.showroomCar({ ...newCar(w.base, 0), paint: w.paint, rims: w.rims, tires: w.tires, engine: w.engine, lift: w.lift, neon: w.neon }); },
   buyScrubber() { if (!spend(25)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.scrubber = true; SFX.cash(); H.bumpMoney(); save(); return true; },
   scrubFx(done) {
     const c = mine(); if (!c) return; SFX.wash(); for (let i = 0; i < 3; i++) fx.splash(c.b.x + (Math.random() - 0.5) * 2.5, c.b.y + 1.4, c.b.z + (Math.random() - 0.5) * 3, 6);
@@ -629,6 +691,12 @@ export const GAME = {
   mePos() { return mapPos(); },
   sellItem(i) { const list = i < 0 ? S.backpack.splice(0) : S.backpack.splice(i, 1); const n = list.reduce((a, it) => a + it.v, 0); if (!n) return; pay(n); S.stats.pawned = (S.stats.pawned || 0) + n; SFX.cash(); H.bumpMoney(); H.toast("+" + money(n), "Sold " + list.length + " thing" + (list.length === 1 ? "" : "s") + " to the pawn shop.", "cash", 2400); save(); },
   setWaypoint(p) { G.waypoint = p; setBeacon(gpsBeacon, p); if (p) H.toast("GPS set", "Follow the purple arrow to " + (p.name || "your spot"), ""); },
+  showroomCar(car) { // (a whole car setup on the showroom stand: contest winners)
+    GAME.showroom(null); const m = buildCar(car); const R = inside() && interiors.cur.stage ? interiors.cur : null;
+    if (R && R.featured) R.featured.visible = false;
+    G.previewAt = R ? { x: POCKET.x + R.stage.x, y: R.stage.y, z: POCKET.z + R.stage.z, inside: true } : { x: -36, y: 1.45, z: 18 };
+    m.root.position.set(G.previewAt.x, G.previewAt.y, G.previewAt.z); scene.add(m.root); G.preview = m;
+  },
   showroom(id, color) {
     if (G.preview) { scene.remove(G.preview.root); G.preview = null; }
     if (!id) { if (inside() && interiors.cur.featured) interiors.cur.featured.visible = true; return; }
@@ -798,7 +866,7 @@ function carVsStuff(b) {
   const me = mine();
   for (const t of G.TRS.values()) {
     if (t.hitched === b) continue;
-    if (me && me.b === b && canDriveIn(t, me)) continue; // (lined up behind it: let the ride drive up the ramp)
+    if (me && me.b === b && (canDriveIn(t, me) || onDeckZone(t, me))) continue; // (lined up behind it / up on it: let the ride drive up the ramp)
     const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : t.T.enclosed ? 3.2 : 1.8;
     for (const a of carCircles(b)) for (const s of [-half, 0, half]) {
       const kx = t.x + fx * s, kz = t.z + fz * s, dx = a.x - kx, dz = a.z - kz, d = Math.hypot(dx, dz), m = a.r + 1.3;
@@ -1008,6 +1076,7 @@ async function boot() {
   jobBeacon = beacon(0xffd23a); gpsBeacon = beacon(0xc86aff);
   H.setMapBase(mapCanvas(512));
   await loadBikeModel();
+  fetch(RELAY + "/mv/winners").then((r) => r.json()).then((r) => { if (r && Array.isArray(r.winners)) G.winners = r.winners.filter((w) => vehicleById(w.base).id === w.base); }).catch(() => {});
   makeMe();
   for (const s of S.trailers) spawnTrailer(s);
   for (const s of S.cars) {

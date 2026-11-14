@@ -675,6 +675,7 @@
       }).join("");
       main.innerHTML = '<h1 class="page-title">🛠 Dev menu</h1><h2 class="row-title">Reported games <small>' + (r.reports || []).length + "</small></h2>" +
         (rows ? '<div class="people">' + rows + "</div>" : '<p class="empty">No reports. 🎉</p>') +
+        '<h2 class="row-title">🏆 Mud Valley build contest <small id="mvCount"></small></h2><p class="tip">Rides players built from parts and entered. Pick up to 3 winners: they get sold at Valley Motors for everyone.</p><div id="mvList"><p class="empty">Loading…</p></div>' +
         '<h2 class="row-title">💡 Player ideas <small id="ideaCount"></small></h2><div id="ideaList"><p class="empty">Loading…</p></div>' +
         '<h2 class="row-title">Ban a player</h2><form class="add-friend" id="bnForm"><label for="bnUser">Username (blocks just that account from GunnerVerse and the game, not the Wi-Fi it plays on)</label><div class="add-row"><input id="bnUser" maxlength="17" placeholder="@username">' +
         '<button class="btn danger">Ban</button></div><p class="add-msg" id="bnMsg"></p></form>' +
@@ -720,6 +721,28 @@
         }).catch(function () { var box = document.getElementById("ideaList"); if (box) box.innerHTML = '<p class="err">Couldn’t load the ideas.</p>'; });
       };
       drawIdeas();
+      // 🏆 Mud Valley builds: review them, pick 3 winners (they show up in the game's dealership)
+      var MV_NAMES = { atv: "Quad", bike: "Dirt bike", sportquad: "Sport quad", bigquad: "Big quad", bike450: "Race dirt bike", pickup: "Pickup", jeep: "Jeep", buggy: "Dune buggy", sports: "Sports car", hyper: "Hypercar", minitruck: "Mini truck", ranch: "Ranch truck", trailboss: "Lifted truck", prerunner: "Prerunner", monster: "Monster truck", swamp: "Swamp truck", dumper: "Dump truck" };
+      var mvRow = function (x, win) {
+        var col = "#" + (x.paint || 0).toString(16).padStart(6, "0");
+        return '<div class="person"><span class="person-main"><span class="avatar" style="background:' + col + ';border-radius:8px"></span><span><b>' + esc(x.name) + "</b><small>" + esc(MV_NAMES[x.base] || x.base) + " by " + esc(x.by) +
+          " · engine " + (x.engine | 0) + " · " + esc(x.tires) + " tires · " + esc(x.rims) + " rims" + (x.lift ? " · lift " + x.lift : "") + (x.neon ? " · neon" : "") + " · " + new Date(win ? x.won : x.at).toLocaleDateString() + "</small></span></span>" +
+          '<div class="person-btns">' + (win ? '<button class="btn small danger" data-mvunwin="' + esc(x.id) + '">Remove winner</button>' : '<button class="btn small" data-mvwin="' + esc(x.id) + '">⭐ Pick as winner</button><button class="btn small ghost" data-mvdel="' + esc(x.id) + '">Delete</button>') + "</div></div>";
+      };
+      var drawMV = function () {
+        fetch(RELAY + "/mv/builds", { headers: hdr }).then(function (r) { return r.json(); }).then(function (d) {
+          var box = document.getElementById("mvList"), cnt = document.getElementById("mvCount"); if (!box) return;
+          var b = (d && d.builds) || [], w = (d && d.winners) || [];
+          if (cnt) cnt.textContent = b.length + " entered · " + w.length + "/3 winners";
+          box.innerHTML = '<h3>⭐ Winners (' + w.length + '/3)</h3>' + (w.length ? '<div class="people">' + w.map(function (x) { return mvRow(x, true); }).join("") + "</div>" : '<p class="empty">No winners picked yet.</p>') +
+            '<h3>Entries</h3>' + (b.length ? '<div class="people">' + b.map(function (x) { return mvRow(x, false); }).join("") + "</div>" : '<p class="empty">No builds entered yet.</p>');
+          var go = function (sel, fn) { Array.prototype.forEach.call(box.querySelectorAll(sel), function (el) { el.onclick = function () { el.disabled = true; fn(el).then(function (r) { return r.json(); }).then(function (r) { if (r && r.e === "full") alert("You already picked 3 winners. Remove one first."); drawMV(); }, drawMV); }; }); };
+          go("[data-mvwin]", function (el) { return fetch(RELAY + "/mv/win", { method: "POST", headers: hdr, body: JSON.stringify({ id: el.getAttribute("data-mvwin") }) }); });
+          go("[data-mvdel]", function (el) { return fetch(RELAY + "/mv/builds?id=" + encodeURIComponent(el.getAttribute("data-mvdel")), { method: "DELETE", headers: hdr }); });
+          go("[data-mvunwin]", function (el) { return fetch(RELAY + "/mv/winners?id=" + encodeURIComponent(el.getAttribute("data-mvunwin")), { method: "DELETE", headers: hdr }); });
+        }).catch(function () { var box = document.getElementById("mvList"); if (box) box.innerHTML = '<p class="err">Couldn’t load the builds.</p>'; });
+      };
+      drawMV();
       document.getElementById("bnForm").onsubmit = function (e) {
         e.preventDefault();
         var u = document.getElementById("bnUser").value.trim().replace(/^@/, "");
