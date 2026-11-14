@@ -1,8 +1,8 @@
 // MUD VALLEY RP: puts the whole valley together. Sky, sun, the land, town, houses, forests, rocks, racetrack stuff
 // and the glowing circles you drive into to do things.
 import * as THREE from "/create/vendor/three.module.js";
-import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, ATMS, PAWNS } from "./layout.js";
-import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform, roadNet, groundAt, LIMIT_TOWN, LIMIT_HWY } from "./terrain.js";
+import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, LAKE, ATMS, PAWNS } from "./layout.js";
+import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform, roadNet, groundAt, LIMIT_TOWN, LIMIT_HWY, biome, desertAt, merge } from "./terrain.js";
 import * as B from "./build.js";
 import { addCircle } from "./colliders.js";
 import { bakeGroup, buildCar, vehicleById } from "./vehicles.js";
@@ -192,16 +192,18 @@ function forestDensity(x, z) {
   let d = Math.max(0, fbm(x / 90 + 3, z / 90 - 5, 3)) * 0.9;
   const dm = Math.hypot(x - MOUNTAIN.x, z - MOUNTAIN.z); if (dm > 40 && dm < 200 && h < 105) d += 0.45 * (1 - h / 140);
   if (x < -330 && z < -180) d += 0.5; // Timber Ridge woods
-  if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 6) return 0;
+  if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 6 || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 8) return 0;
   if (Math.hypot(x + 300, z + 10) < 90) d += 0.5;
   if (x > 200 && z > 60) d += 0.3 * (0.6 + fbm(x / 40, z / 40, 2));
   const rd = Math.abs(x - riverX(z)); if (rd > RIVER_W + 8 && rd < 45) d += 0.3;
   if (Math.hypot(x + 215, z + 128) < 80) d += 0.3;
-  const m = Math.max(Math.abs(x), Math.abs(z)); if (m > EDGE + 40) return 0; if (m > 470) d += 0.4;
-  return d;
+  const m = Math.max(Math.abs(x), Math.abs(z)); if (m > EDGE + 40) return 0; if (m > 470 && m < 640) d += 0.3;
+  const b = biome(x, z); // the new lands: thick woods in the west, pines up north, a few trees in the south, none in the desert
+  if (b[0] > 0) d = d * (1 - b[0]) + b[0] * (b[2] * 0.85 + b[4] * (hAt(x, z) < 125 ? 0.5 : 0) + b[3] * 0.12);
+  return d * (1 - Math.min(1, desertAt(x, z) * 1.6));
 }
 function forests(scene) {
-  const pines = [], rounds = [], rocks = [];
+  const pines = [], rounds = [], rocks = [], cacti = [];
   let seed = 7; const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
   for (let gz = -HALF + 2; gz < HALF; gz += 5) for (let gx = -HALF + 2; gx < HALF; gx += 5) {
     const x = gx + (rnd() - 0.5) * 4.6, z = gz + (rnd() - 0.5) * 4.6, r = rnd();
@@ -212,19 +214,22 @@ function forests(scene) {
       const s = 0.8 + rnd() * 0.7, h = hAt(x, z);
       (h > 20 || rnd() < 0.6 ? pines : rounds).push({ x, z, s, y: h, c: rnd() });
       addCircle(x, z, 0.5 * s, h + 7);
-    } else if (r > 0.992 - (x > 180 ? 0.006 : 0) - (Math.hypot(x - MOUNTAIN.x, z - MOUNTAIN.z) < 190 ? 0.01 : 0)) {
+    } else if (r > 0.6 && r < 0.6 + desertAt(x, z) * 0.012) { // cactus!
+      if (inFlat(x, z) || nearPath(x, z, 5)) continue;
+      const s = 0.8 + rnd() * 0.6, h = hAt(x, z); cacti.push({ x, z, s, y: h, c: rnd() }); addCircle(x, z, 0.4 * s, h + 4);
+    } else if (r > 0.992 - (x > 180 ? 0.006 : 0) - (Math.hypot(x - MOUNTAIN.x, z - MOUNTAIN.z) < 190 ? 0.01 : 0) - desertAt(x, z) * 0.006) {
       if (Math.max(Math.abs(x), Math.abs(z)) > EDGE + 30) continue;
       if (inFlat(x, z) || nearPath(x, z, 5)) continue;
       const s = 0.6 + rnd() * 1.8; const h = hAt(x, z); rocks.push({ x, z, s, y: h, c: rnd() }); addCircle(x, z, s * 0.85, h + s * 1.1);
     }
   }
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
-  // (cut into 3 x 3 big squares: the computer skips the squares the camera can't see)
-  const R = (HALF * 2) / 3, reg = (t) => Math.min(2, Math.floor((t.x + HALF) / R)) + 3 * Math.min(2, Math.floor((t.z + HALF) / R));
+  // (cut into 12 x 12 big squares: the computer skips the squares the camera can't see)
+  const NR = 12, R = (HALF * 2) / NR, reg = (t) => Math.min(NR - 1, Math.floor((t.x + HALF) / R)) + NR * Math.min(NR - 1, Math.floor((t.z + HALF) / R));
   const mats = {};
   const make = (geo, color, all, y, ys, cv) => {
     const mat = mats[color] || (mats[color] = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }));
-    for (let r = 0; r < 9; r++) {
+    for (let r = 0; r < NR * NR; r++) {
       const list = all.filter((t) => reg(t) === r); if (!list.length) continue;
       const m = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach((t, i) => { M.compose(v.set(t.x, t.y + y * t.s, t.z), q.setFromAxisAngle(up, t.c * 6.28), sc.set(t.s, t.s * ys, t.s)); m.setMatrixAt(i, M); m.setColorAt(i, col.set(color).offsetHSL(cv ? (t.c - 0.5) * 0.04 : 0, 0, cv ? (t.c - 0.5) * 0.12 : 0)); });
@@ -237,7 +242,12 @@ function forests(scene) {
   make(new THREE.ConeGeometry(1.5, 2.9, 7), 0x3b9c48, pines, 5.0, 1, true);
   make(new THREE.IcosahedronGeometry(2.1, 0), 0x4fae3e, rounds, 3.6, 0.95, true);
   make(new THREE.DodecahedronGeometry(1, 0), 0x8f8a82, rocks, 0.35, 0.75, true);
-  return { trees: trunks.length, rocks: rocks.length };
+  // cacti: a tall stem + two arms
+  make(new THREE.CylinderGeometry(0.32, 0.38, 3.6, 7), 0x3f8a3a, cacti, 1.8, 1, true);
+  { const a = new THREE.CylinderGeometry(0.22, 0.22, 1.4, 6).translate(0.62, 0.5, 0), b = new THREE.CylinderGeometry(0.2, 0.2, 1.1, 6).translate(-0.58, 0.2, 0);
+    const h1 = new THREE.CylinderGeometry(0.18, 0.18, 0.5, 6).rotateZ(Math.PI / 2).translate(0.42, -0.1, 0), h2 = new THREE.CylinderGeometry(0.17, 0.17, 0.45, 6).rotateZ(Math.PI / 2).translate(-0.4, -0.3, 0);
+    make(merge([a, b, h1, h2]), 0x3f8a3a, cacti, 2.0, 1, true); }
+  return { trees: trunks.length, rocks: rocks.length, cacti: cacti.length };
 }
 // big blue-ish mountains far away all around the valley
 function farMountains(scene0) {
@@ -252,12 +262,12 @@ function farMountains(scene0) {
   return g;
 }
 function clouds(scene) {
-  const list = [], geo = new THREE.IcosahedronGeometry(1, 1), m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x9aa8b8, flatShading: true, fog: false }), 140);
+  const list = [], geo = new THREE.IcosahedronGeometry(1, 1), m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x9aa8b8, flatShading: true, fog: false }), 560);
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3();
   let k = 0;
-  for (let c = 0; c < 20; c++) {
-    const cx = (Math.sin(c * 12.9) * 0.5 + 0.5) * 1300 - 650, cz = (Math.sin(c * 78.2) * 0.5 + 0.5) * 1300 - 650, cy = 230 + (c % 4) * 15;
-    for (let i = 0; i < 7 && k < 140; i++, k++) { const r = 8 + ((i * 37 + c * 11) % 9); M.compose(v.set(cx + (i - 3) * 9, cy + ((i * 7) % 5), cz + ((i * 13) % 7) - 3), q, s.set(r * 1.4, r * 0.8, r)); m.setMatrixAt(k, M); }
+  for (let c = 0; c < 80; c++) {
+    const cx = (Math.sin(c * 12.9) * 0.5 + 0.5) * 3800 - 1900, cz = (Math.sin(c * 78.2) * 0.5 + 0.5) * 3800 - 1900, cy = 230 + (c % 4) * 15;
+    for (let i = 0; i < 7 && k < 560; i++, k++) { const r = 8 + ((i * 37 + c * 11) % 9); M.compose(v.set(cx + (i - 3) * 9, cy + ((i * 7) % 5), cz + ((i * 13) % 7) - 3), q, s.set(r * 1.4, r * 0.8, r)); m.setMatrixAt(k, M); }
   }
   m.count = k; scene.add(m); list.push(m);
   return m;

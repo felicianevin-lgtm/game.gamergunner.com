@@ -1,5 +1,5 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
-import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP } from "./vehicles.js";
+import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP, BED_LENS, OFFSETS } from "./vehicles.js";
 import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
@@ -17,7 +17,7 @@ import * as IN from "./input.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { sxs: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵";
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -116,7 +116,8 @@ function customs() {
   let body = "";
   if (cTab === "paint") body = `<p class="note">Paint job: <b>${money(PRICES.paint)}</b> each</p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === s.paint ? "on" : ""}" style="background:${hex(p)}" data-a="paint" data-v="${p}"></button>`).join("")}</div>`;
   if (cTab === "wheels") body = `<h3>Tires</h3><div class="opts">${TIRES.map((x) => `<button type="button" class="opt ${s.tires === x.id ? "on" : ""}" data-a="tires" data-v="${x.id}"><span>${x.name}<small>${x.desc}</small></span><em>${s.tires === x.id ? "✓" : x.price ? money(x.price) : "FREE"}</em></button>`).join("")}</div>
-    <h3>Rims (${money(PRICES.rims)})</h3><div class="swatches">${RIMS.map((r) => `<button type="button" class="sw ${s.rims === r.id ? "on" : ""}" style="background:${hex(r.c)}" title="${r.name}" data-a="rims" data-v="${r.id}"></button>`).join("")}</div>`;
+    <h3>Rims (${money(PRICES.rims)})</h3><div class="swatches">${RIMS.map((r) => `<button type="button" class="sw ${s.rims === r.id ? "on" : ""}" style="background:${hex(r.c)}" title="${r.name}" data-a="rims" data-v="${r.id}"></button>`).join("")}</div>
+    ${v.bike ? "" : `<h3>Wheel offset</h3><p class="note">How far the wheels stick out. Poke = wide and mean, tucked = tight under the fenders.</p><div class="opts">${OFFSETS.map((q, i) => `<button type="button" class="opt ${(s.offset ?? 1) === i ? "on" : ""}" data-a="offset" data-v="${i}"><span>${q.name}</span><em>${(s.offset ?? 1) === i ? "✓" : (s.ownOffset || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>`}`;
   if (cTab === "engine") body = `<p class="note">Faster engines = more top speed and quicker starts. Want it slower? Pick a lower level any time for free!</p><div class="opts">${ENGINE_COST.map((cost, i) => `<button type="button" class="opt ${s.engine === i ? "on" : ""}" data-a="engine" data-v="${i}"><span>${(v.bike ? ["Stock motor", "Stage 1", "Stage 2", "Stage 3", "Stage 4 RACE"] : ["Stock engine", "Stage 1 Turbo", "Stage 2 Turbo", "Stage 3 Super", "Stage 4 MONSTER (flames!)"])[i]}<small>${i ? "+" + i * 6 + "% top speed, +" + i * 10 + "% acceleration" : "The engine it came with"}${!v.bike && i >= 2 ? " · hood scoop" : ""}${!v.bike && i >= 3 ? " · big exhausts" : ""}</small></span><em>${s.engine === i ? "✓" : i <= (s.maxEngine || s.engine) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
   if (cTab === "speed") body = `<p class="note">The speed limiter makes your ride slower. Great for tricky trails, towing, or learning to drive. Free!</p>
     <h3>Top speed: <span id="limLbl">${mph(t.top)} mph</span> (${Math.round(s.limit * 100)}%)</h3><input type="range" min="30" max="100" step="5" value="${Math.round(s.limit * 100)}" data-a="limit">`;
@@ -124,7 +125,8 @@ function customs() {
   if (cTab === "susp") body = `<p class="note">Longer suspension makes your dirt bike taller. The wheels grow with it, so it always looks right!</p><div class="opts">${SUSP.map((q, i) => `<button type="button" class="opt ${(s.susp ?? 1) === i ? "on" : ""}" data-a="susp" data-v="${i}"><span>${q.name}<small>${i === 0 ? "Lower + smaller wheels: easier to stand over" : i === 1 ? "How it came from the shop" : i === 2 ? "Long-travel suspension + bigger wheels" : "Huge suspension + big wheels: sits up high"}</small></span><em>${(s.susp ?? 1) === i ? "✓" : (s.ownSusp || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>`;
   if (cTab === "bed") body = `<p class="note">Swap the truck bed for a <b>flatbed</b>: a flat steel deck with a headache rack and toolboxes. Bikes and quads still ride on the back!</p><div class="opts">
     <button type="button" class="opt ${!s.flatbed ? "on" : ""}" data-a="flat" data-v="0"><span>Stock bed<small>The normal truck bed with sides</small></span><em>${!s.flatbed ? "✓" : "FREE"}</em></button>
-    <button type="button" class="opt ${s.flatbed ? "on" : ""}" data-a="flat" data-v="1"><span>Flatbed<small>Flat steel deck, headache rack, toolboxes</small></span><em>${s.flatbed ? "✓" : s.ownFlat ? "FREE" : money(FLATBED_PRICE)}</em></button></div>`;
+    <button type="button" class="opt ${s.flatbed ? "on" : ""}" data-a="flat" data-v="1"><span>Flatbed<small>Flat steel deck, headache rack, toolboxes</small></span><em>${s.flatbed ? "✓" : s.ownFlat ? "FREE" : money(FLATBED_PRICE)}</em></button></div>
+    <h3>Bed length</h3><p class="note">A longer bed makes the whole truck longer (the back wheels move back). A short bed is quick and nimble.</p><div class="opts">${BED_LENS.map((q, i) => `<button type="button" class="opt ${(s.bedLen ?? 1) === i ? "on" : ""}" data-a="bedLen" data-v="${i}"><span>${q.name}</span><em>${(s.bedLen ?? 1) === i ? "✓" : (s.ownBed || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>`;
   if (cTab === "rust") { const r = rustOf(s), pct = Math.round((1 - r) * 100), bar = "█".repeat(Math.round(pct / 10)) + "░".repeat(10 - Math.round(pct / 10));
     body = r <= 0.02 ? `<p class="note">✨ No rust! Your ${esc(v.name)} is shiny clean.</p>` : !S.scrubber ? `<p class="note">Rust spots! Grab a scrubber and scrub them off yourself.</p><div class="btns"><button type="button" class="mid" data-a="buyScrub">🧽 Buy a scrubber ${money(25)}</button></div>`
       : `<p class="note">Keep scrubbing! Watch the rust fade away.</p><p style="font:700 18px monospace;letter-spacing:1px">[${bar}] ${pct}%</p><div class="btns"><button type="button" class="big" data-a="scrub">🧽 SCRUB!</button></div>`; }
@@ -141,6 +143,8 @@ function customs() {
     if (a === "lift") { const i = +val, free = i <= (s.maxLift || s.lift); if (i !== s.lift && GM.custom("lift", i, free ? 0 : LIFT_COST[i])) s.maxLift = Math.max(s.maxLift || 0, i); }
     if (a === "buyScrub") GM.buyScrubber();
     if (a === "flat") GM.setFlatbed(val === "1");
+    if (a === "bedLen") GM.setBedLen(+val);
+    if (a === "offset") { const i = +val, own = s.ownOffset || [1]; if (i !== (s.offset ?? 1) && GM.custom("offset", i, own.includes(i) ? 0 : OFFSETS[i].price)) s.ownOffset = [...new Set([...own, i])]; }
     if (a === "susp") GM.setSuspension(+val);
     if (a === "scrub") { const r = Math.max(0, rustOf(s) - 0.1); GM.custom("rust", r < 0.02 ? 0 : r, 0); GM.scrubFx(r < 0.02); }
     if (a === "neon") { const i = +val, owned = (s.ownNeon || [0]).includes(i); if (i !== s.neon && GM.custom("neon", i, owned ? 0 : PRICES.neon)) s.ownNeon = [...new Set([...(s.ownNeon || [0]), i])]; }
@@ -537,7 +541,7 @@ function helpHtml() {
 // ---------------------------------------------------------------- the big map
 function map() {
   if (GM.G.mode === "map") return closeMap();
-  GM.G.prevMode = GM.G.mode; GM.G.mode = "map"; $("mapView").classList.remove("hidden");
+  GM.G.prevMode = GM.G.mode; GM.G.mode = "map"; $("mapView").classList.remove("hidden"); H.MAPV.recenter = true;
 }
 function closeMap() { $("mapView").classList.add("hidden"); GM.G.mode = GM.G.race ? "race" : "play"; }
 
@@ -554,9 +558,22 @@ export const UI = { close, dealer, customs, house, parts, builder, jobs: jobsPan
 export function initMenus(game) {
   GM = game; wire();
   $("mapClose").addEventListener("click", () => { SFX.click(); closeMap(); });
-  $("bigMap").addEventListener("pointerdown", (e) => {
-    const p = H.mapToWorld(e), ic = H.nearestIcon(p.x, p.z);
+  // the big map: tap = set your GPS, drag = move the map, scroll / + / - = zoom
+  const bm = $("bigMap"); let drag = null;
+  bm.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, moved: false, cx: H.MAPV.cx, cz: H.MAPV.cz }; try { bm.setPointerCapture(e.pointerId); } catch {} });
+  bm.addEventListener("pointermove", (e) => {
+    if (!drag) return; const r = bm.getBoundingClientRect(), dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.hypot(dx, dy) > 8) drag.moved = true;
+    if (drag.moved) H.mapPan(drag.cx - (dx / r.width) * H.MAPV.span, drag.cz - (dy / r.height) * H.MAPV.span);
+  });
+  bm.addEventListener("pointerup", (e) => {
+    const d = drag; drag = null; if (!d || d.moved) return;
+    const p = H.mapToWorld(e), ic = H.nearestIcon(p.x, p.z, H.MAPV.span / 40);
     GM.setWaypoint(ic ? { x: ic.x, z: ic.z, name: ic.name } : { x: p.x, z: p.z, name: "the map pin" });
     closeMap();
   });
+  bm.addEventListener("pointercancel", () => { drag = null; });
+  bm.addEventListener("wheel", (e) => { e.preventDefault(); const p = H.mapToWorld(e); H.mapZoom(e.deltaY > 0 ? 1.25 : 0.8, p.x, p.z); }, { passive: false });
+  $("mapIn").addEventListener("click", () => { SFX.click(); H.mapZoom(0.7); });
+  $("mapOut").addEventListener("click", () => { SFX.click(); H.mapZoom(1.45); });
 }

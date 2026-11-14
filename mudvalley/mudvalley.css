@@ -187,7 +187,7 @@ input[type=range] { width: 100%; accent-color: #ff8a1a; height: 30px; }
 
 /* ---------------- big map */
 #mapView { position: fixed; inset: 0; z-index: 8; background: rgba(15, 10, 5, 0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px; }
-.mapHead { display: flex; align-items: center; gap: 14px; width: min(94vw, 82vh); }
+.mapHead { display: flex; align-items: center; gap: 8px; width: min(94vw, 82vh); }
 .mapHead b { font-size: 20px; color: #ffd23a; } .mapHead span { flex: 1; font-size: 13px; color: #d8ccb4; font-weight: 600; }
 .mapHead button { width: 44px; height: 44px; border-radius: 12px; border: 2px solid #fff; background: rgba(0, 0, 0, 0.4); color: #fff; font-size: 20px; }
 #bigMap { width: min(94vw, 78vh); height: min(94vw, 78vh); border-radius: 16px; border: 4px solid #fff; cursor: crosshair; touch-action: none; }

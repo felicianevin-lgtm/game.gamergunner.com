@@ -1,9 +1,17 @@
 // MUD VALLEY RP: the map plan. Where the towns, roads, trails, river, pond, mud pits, jumps, houses and racetracks are.
 // x goes east, z goes south (on the map, up = -z). Mud Valley town is in the middle at (0, 0). The world is 1200 x 1200 meters
 // (you can drive inside the fence at EDGE; past it the land climbs up into big border hills).
+// The map is 10x bigger now: the old valley is the middle, and all around it are the Red Rock Desert (east),
+// the Frostpine Mountains (north), the Big Woods (west) and the south plains with Big Bass Lake + Bayou Bog,
+// joined by the Big Loop highway (a huge circle) and 4 long roads out of the valley.
 
-export const HALF = 600; // the world goes from -600 to 600
-export const EDGE = 515; // the fence around the valley (invisible wall: you can't go past it)
+export const HALF = 1920; // the world goes from -1920 to 1920
+export const EDGE = 1835; // the fence around the whole map (invisible wall: you can't go past it)
+export const RING_R = 1300; // the Big Loop highway (a circle around everything)
+// the 4 long roads from the valley out to the Big Loop (straight, so the hills can make room for them)
+export const SPOKES = [[[40, -424], [40, -1300]], [[498, -220], [1282, -220]], [[80, 380], [80, 1297]], [[-440, -150], [-1291, -150]]];
+export const LAKE = { x: -600, z: 900, r: 150 }; // Big Bass Lake (south-west)
+export const FROST = { x: -350, z: -1560, h: 230, s: 140 }; // Frostpine Peak (the tallest mountain)
 export const WATER_Y = -1.2; // the river's (and the pond's) water level
 
 // a curvy river from the top of the map to the bottom
@@ -63,6 +71,15 @@ const goat = (() => {
   return pts;
 })();
 export const MOUNTAIN_TRAIL = spiral;
+// the Big Loop: a circle of points
+const ring = Array.from({ length: 40 }, (_, i) => { const a = (i / 40) * Math.PI * 2; return [Math.cos(a) * RING_R, Math.sin(a) * RING_R]; });
+// the Frostpine Climb: winds round and round up Frostpine Peak
+const frostClimb = (() => {
+  const F = FROST, pts = [[40, -1300], [-60, -1400]], a0 = Math.atan2(-1400 - F.z, -60 - F.x), n = 30;
+  for (let i = 0; i <= n; i++) { const k = i / n, a = a0 + k * 1.4 * Math.PI * 2, r = 220 - 205 * k; pts.push([F.x + Math.cos(a) * r, F.z + Math.sin(a) * r]); }
+  return pts;
+})();
+const loopAround = (cx, cz, rx, rz, n, wob = 0.15, seed = 1) => Array.from({ length: n }, (_, i) => { const a = (i / n) * Math.PI * 2, k = 1 + wob * Math.sin(i * 2.3 + seed); return [cx + Math.cos(a) * rx * k, cz + Math.sin(a) * rz * k]; });
 
 export const ROADS = [
   // town grid
@@ -91,6 +108,10 @@ export const ROADS = [
   // the Valley Loop: a long highway all the way around (north + west, and east + south)
   { pts: [[296, -318], [240, -352], [160, -404], [40, -424], [-100, -426], [-240, -404], [-350, -346], [-418, -262], [-440, -150], [-412, -52], [-338, -12]], w: 10, name: "loopN" },
   { pts: [[496, -318], [498, -220], [486, -100], [474, 0], [446, 60], [396, 112], [388, 200], [410, 280], [380, 352], [280, 384], [170, 398], [80, 380], [50, 330], [48, 290]], w: 10, name: "loopS" },
+  // the BIG LOOP + the 4 long roads out to it
+  { pts: ring, w: 12, loop: true, name: "bigloop" },
+  ...SPOKES.map((s, i) => ({ pts: s, w: 11, name: "spoke" + i })),
+  { pts: [[1282, -220], [1420, -120], [1500, 60], [1560, 260]], w: 9, name: "desertrd" }, // into the Red Rock Desert
 ];
 export const TRAILS = [
   { pts: spiral, w: 7, name: "mountain" },
@@ -110,6 +131,17 @@ export const TRAILS = [
   { pts: [[-470, -300], [-430, -340], [-390, -330], [-350, -346]], w: 6 },
   // Canyon Run (south-east): a bumpy loop full of mud and jumps
   { pts: [[380, 352], [400, 394], [440, 420], [470, 460], [440, 498], [380, 500], [336, 470], [330, 420], [352, 384]], w: 8, loop: true, name: "canyon" },
+  // ---- the new lands
+  { pts: frostClimb, w: 8, name: "frost" }, // up Frostpine Peak
+  { pts: loopAround(1150, 330, 210, 160, 14, 0.2, 1), w: 9, loop: true, name: "dunes" }, // Red Rock Desert dune loop
+  { pts: [[1282, -220], [1220, -40], [1150, 170]], w: 8 }, // desert road to the dunes
+  { pts: [[1560, 260], [1600, 500], [1500, 760], [1300, 900], [1150, 760], [1200, 490]], w: 8, name: "redrock" }, // Red Rock canyon trail
+  { pts: loopAround(-1500, -450, 190, 230, 14, 0.18, 4), w: 7, loop: true, name: "woods" }, // Big Woods trails
+  { pts: [[-1291, -150], [-1330, -240], [-1340, -300]], w: 7 },
+  { pts: [[-1291, -150], [-1500, 60], [-1560, 300], [-1440, 520], [-1240, 640], [-1050, 700]], w: 7, name: "woods2" },
+  { pts: [[80, 880], [-120, 900], [-300, 880], [-430, 880]], w: 8, name: "lake" }, // to Big Bass Lake
+  { pts: loopAround(700, 1080, 200, 150, 14, 0.2, 7), w: 8, loop: true, name: "bayou" }, // Bayou Bog (mud everywhere!)
+  { pts: [[80, 1000], [300, 1040], [500, 1080]], w: 8 },
 ];
 
 // mud pits {x, z, r}
@@ -119,6 +151,10 @@ export const MUDS = [
   { x: -150, z: 132, r: 7 }, { x: 318, z: 42, r: 8 }, { x: 214, z: 236, r: 7 },
   { x: -470, z: -430, r: 9 }, { x: -496, z: -380, r: 7 }, { x: -380, z: -380, r: 8 }, // Timber Ridge
   { x: 470, z: 458, r: 11 }, { x: 384, z: 500, r: 8 }, { x: 330, z: 444, r: 9 }, { x: 410, z: 440, r: 14 }, // Canyon Run
+  // Bayou Bog: the muddiest place in the world
+  { x: 700, z: 1080, r: 26 }, { x: 560, z: 1000, r: 12 }, { x: 840, z: 1010, r: 13 }, { x: 880, z: 1140, r: 11 }, { x: 610, z: 1190, r: 14 }, { x: 760, z: 1200, r: 10 }, { x: 520, z: 1100, r: 9 },
+  // Big Woods
+  { x: -1500, z: -450, r: 15 }, { x: -1680, z: -420, r: 9 }, { x: -1420, z: -660, r: 10 }, { x: -1330, z: -300, r: 8 }, { x: -1520, z: 140, r: 9 },
 ];
 
 // jumps {x, z, yaw, len, w, h}. yaw = the way you drive up it (every jump has a clear landing!)
@@ -129,6 +165,11 @@ export const RAMPS = [
   { x: -45, z: -122, yaw: Math.PI, len: 9, w: 7, h: 2.6 }, { x: -45, z: -172, yaw: Math.PI, len: 9, w: 7, h: 3.0 }, // stunt field north of town
   { x: 352, z: 440, yaw: 0.2, len: 9, w: 7, h: 2.6 }, { x: 452, z: 400, yaw: 2.6, len: 8, w: 6, h: 2.2 }, // Canyon Run
   { x: -440, z: -380, yaw: -0.4, len: 8, w: 6, h: 2.2 }, // Timber Ridge
+  // Red Rock Desert: big sand jumps
+  { x: 1000, z: 330, yaw: 0, len: 10, w: 8, h: 3.4 }, { x: 1150, z: 330, yaw: Math.PI / 2, len: 11, w: 8, h: 4.0 }, { x: 1250, z: 420, yaw: 2.2, len: 9, w: 7, h: 3.0 },
+  { x: 1100, z: 230, yaw: -0.8, len: 9, w: 7, h: 2.8 }, { x: 1300, z: 300, yaw: -2.0, len: 12, w: 9, h: 4.6 },
+  // Bayou Bog
+  { x: 640, z: 1060, yaw: 1.2, len: 8, w: 6, h: 2.2 }, { x: 780, z: 1120, yaw: -2.0, len: 8, w: 6, h: 2.4 },
 ];
 
 // ---------------------------------------------------------------- racetracks (closed loops / a point-to-point)
@@ -176,6 +217,13 @@ export const PLACES = {
   hideout: { name: "Robber Hideout", x: -458, z: -262, icon: "🎭", color: "#9a6aff" },
   timber: { name: "Timber Ridge Trails", x: -470, z: -420, icon: "🌲", color: "#3a8a4a" },
   canyon: { name: "Canyon Run", x: 400, z: 470, icon: "🏜️", color: "#d08a4a" },
+  // the new lands
+  desert: { name: "Red Rock Desert", x: 1150, z: 330, icon: "🌵", color: "#e07a3a" },
+  frost: { name: "Frostpine Peak", x: -350, z: -1560, icon: "🏔️", color: "#cfe8ff" },
+  woods: { name: "Big Woods Trails", x: -1500, z: -450, icon: "🌲", color: "#2a7a3a" },
+  lake: { name: "Big Bass Lake", x: -450, z: 880, icon: "🎣", color: "#4ac0e0" },
+  bayou: { name: "Bayou Bog", x: 700, z: 1080, icon: "🐊", color: "#6a5030" },
+  bigloop: { name: "Big Loop Highway", x: 0, z: -1300, icon: "🛣️", color: "#8a8a8a" },
   goat: { name: "Goat Trail (4x4)", x: -360, z: 64, icon: "🐐", color: "#b0b0b0" },
   // pawn shops all around the map (sell the stuff in your backpack: npcs.js)
   pawn0: { name: "Pawn Shop (North of Town)", x: -31, z: -106, icon: "💰", color: "#d0a030" },

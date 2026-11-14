@@ -104,6 +104,14 @@ export function updateHud(g) {
 // ---------------------------------------------------------------- minimap + big map
 let base = null;
 export function setMapBase(c) { base = c; }
+// the big map can zoom + move: it shows `span` meters around (cx, cz)
+export const MAPV = { cx: 0, cz: 0, span: 1500, recenter: true };
+const clampN = (v, a, b) => (v < a ? a : v > b ? b : v);
+export function mapPan(cx, cz) { const h = MAPV.span / 2; MAPV.cx = clampN(cx, -HALF + h, HALF - h); MAPV.cz = clampN(cz, -HALF + h, HALF - h); }
+export function mapZoom(f, wx = MAPV.cx, wz = MAPV.cz) {
+  const s = clampN(MAPV.span * f, 300, HALF * 2), k = s / MAPV.span;
+  MAPV.span = s; mapPan(wx + (MAPV.cx - wx) * k, wz + (MAPV.cz - wz) * k);
+}
 const icons = () => {
   const out = [];
   for (const [id, p] of Object.entries(PLACES)) out.push({ id, x: p.x, z: p.z, icon: p.icon, color: p.color, name: p.name, big: !!p.r });
@@ -168,9 +176,12 @@ export function drawMini(g) {
   n.style.left = (R + Math.sin(a) * (R - 13)) * (c.clientWidth / W) + "px"; n.style.top = (R - Math.cos(a) * (R - 13)) * (c.clientWidth / W) - 8 + "px"; n.style.transform = "translateX(-50%)";
 }
 export function drawBigMap(g) {
-  const c = $("bigMap"), x = c.getContext("2d"), W = c.width, k = W / (HALF * 2);
-  x.drawImage(base, 0, 0, W, W);
-  const toS = (wx, wz) => [(wx + HALF) * k, (wz + HALF) * k];
+  const c = $("bigMap"), x = c.getContext("2d"), W = c.width;
+  if (MAPV.recenter) { MAPV.recenter = false; mapPan(g.px, g.pz); }
+  const s = MAPV.span, x0 = MAPV.cx - s / 2, z0 = MAPV.cz - s / 2, k = W / s, bk = base.width / (HALF * 2);
+  x.fillStyle = "#4a8a3a"; x.fillRect(0, 0, W, W);
+  x.drawImage(base, (x0 + HALF) * bk, (z0 + HALF) * bk, s * bk, s * bk, 0, 0, W, W);
+  const toS = (wx, wz) => [(wx - x0) * k, (wz - z0) * k];
   ICONS = icons();
   x.font = "18px sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
   for (const v of g.vehicles) { const [sx, sy] = toS(v.x, v.z); dot(x, sx, sy, 5, "#6ad0ff", "#0a2a4a", 2); }
@@ -189,5 +200,5 @@ export function drawBigMap(g) {
   $("mapLegend").innerHTML = ICONS.filter((i, n, a) => a.findIndex((o) => o.name === i.name) === n).map((i) => `<span>${i.icon} ${i.name}</span>`).join("") + `<span>🔵 your rides</span><span>🟨 trailers</span><span>🚓 cops</span><span>💰 pawn shops (sell your backpack stuff)</span>`;
 }
 // big map click → world spot
-export function mapToWorld(e) { const c = $("bigMap"), r = c.getBoundingClientRect(); return { x: ((e.clientX - r.left) / r.width) * HALF * 2 - HALF, z: ((e.clientY - r.top) / r.height) * HALF * 2 - HALF }; }
+export function mapToWorld(e) { const c = $("bigMap"), r = c.getBoundingClientRect(), s = MAPV.span; return { x: MAPV.cx - s / 2 + ((e.clientX - r.left) / r.width) * s, z: MAPV.cz - s / 2 + ((e.clientY - r.top) / r.height) * s }; }
 export function nearestIcon(x, z, max = 25) { let b = null, bd = max; for (const i of ICONS || icons()) { const d = Math.hypot(i.x - x, i.z - z); if (d < bd) { bd = d; b = i; } } return b; }

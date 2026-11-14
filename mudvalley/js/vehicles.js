@@ -19,6 +19,7 @@ export const VEHICLES = [
   { id: "sport300", name: "Viper 300 Sport Bike", price: 6500, top: 42, acc: 16, grip: 8.5, turn: 2.5, off: { dirt: 0.45, grass: 0.4, mud: 0.2 }, size: 1, tow: 0, color: 0x3ac04a, engine: 215, open: true, bike: true, crawl: 0.3, desc: "A real street sport bike with a full fairing. Quick and nimble on roads... NOT for mud!" },
   { id: "super1000", name: "Thunder 1000 Superbike", price: 19000, top: 60, acc: 22, grip: 9.2, turn: 2.4, off: { dirt: 0.35, grass: 0.3, mud: 0.15 }, size: 1, tow: 0, color: 0x1a4ad0, engine: 240, open: true, bike: true, crawl: 0.25, desc: "A 1000cc superbike. The fastest thing on two wheels. Hold on tight!" },
   { id: "sxs", name: "Rattler 1000 Side-by-Side", price: 17000, top: 39, acc: 15, grip: 8, turn: 2.4, off: { dirt: 1, grass: 1, mud: 0.9 }, size: 2, tow: 1, color: 0xc81e2a, engine: 150, open: true, air: 0.85, crawl: 0.93, desc: "A long-travel sport side-by-side: two bucket seats, a roll cage, huge suspension and 30-inch tires. Built to fly through the desert!" },
+  { id: "sxs4", name: "Rattler 1000 Crew 4-Door Side-by-Side", price: 21000, top: 37, acc: 13.5, grip: 8, turn: 2.1, off: { dirt: 1, grass: 1, mud: 0.88 }, size: 3, tow: 1, color: 0x2a6ad0, engine: 150, open: true, air: 0.8, crawl: 0.92, desc: "The 4-door, 4-seat side-by-side! A longer roll cage, 4 bucket seats and 4 half doors. Bring the whole crew to the desert!" },
   { id: "minitruck", name: "Mini Hauler", price: 2500, top: 24, acc: 8, grip: 7, turn: 2.3, off: { dirt: 0.85, grass: 0.8, mud: 0.6 }, size: 1, tow: 1, color: 0xf4f4f4, engine: 150, crawl: 0.6, desc: "A tiny work truck. Cheap, cute, and it even fits on a small trailer." },
   { id: "jeep", name: "Mud Hog 4x4", price: 5500, top: 31, acc: 10, grip: 7.5, turn: 2.0, off: { dirt: 0.97, grass: 0.93, mud: 0.86 }, size: 2, tow: 2, color: 0x2a7ad0, engine: 85, open: true, crawl: 0.95, desc: "Big tires, a snorkel and a light bar. Goes anywhere, pulls anything." },
   { id: "buggy", name: "Dune Hopper", price: 8000, top: 37, acc: 13.5, grip: 6.5, turn: 2.3, off: { dirt: 1, grass: 0.9, mud: 0.66 }, size: 2, tow: 1, color: 0xffd23a, engine: 140, open: true, air: 0.85, crawl: 0.75, desc: "A light dune buggy that flies off jumps. Fast on dirt!" },
@@ -55,6 +56,33 @@ export const NEONS = [null, 0x3ad0ff, 0xff3ad8, 0x6aff3a, 0xffd23a, 0xff3a3a, 0x
 export const BEDS = { crew: { y: 0.74, z: -2.55, front: -1.48, back: -3.62 }, pickup: { y: 0.72, z: -1.45, front: -0.42, back: -2.56 }, minitruck: { y: 0.56, z: -0.65, front: 0.44, back: -1.75 },
   ranch: { y: 0.8, z: -1.95, front: -0.8, back: -3.14 }, trailboss: { y: 1.2, z: -1.7, front: -0.66, back: -2.8 } };
 export const FLATBED_PRICE = 800;
+// truck bed lengths (Mud & Chrome → 🛻 Bed): the bed (and the wheelbase) gets shorter or longer
+export const BED_LENS = [{ name: "Short bed (5.5 ft)", d: -0.36, price: 400 }, { name: "Standard bed", d: 0, price: 0 }, { name: "Long bed (8 ft)", d: 0.5, price: 600 }];
+// wheel offset (Mud & Chrome → 🛞 Wheels): tucked in, stock, or poking out past the fenders
+export const OFFSETS = [{ name: "Tucked", d: -0.05, price: 150 }, { name: "Stock", d: 0, price: 0 }, { name: "Poke (+2 in)", d: 0.06, price: 250 }, { name: "Wide poke (+4 in)", d: 0.12, price: 400 }, { name: "Super poke (+6 in)", d: 0.2, price: 600 }];
+const bedD = (car) => (BED_LENS[car.bedLen ?? 1] || BED_LENS[1]).d;
+// the truck's bed after its length change (in the truck's own space)
+export function bedOf(car) { const B = BEDS[car.id], d = bedD(car); if (!B || !d) return B; return { y: B.y, front: B.front, back: B.back - d, z: B.z - d / 2 }; }
+// make the bed longer / shorter: the parts in front of the back wheel wells + behind them stretch, the wells + back wheels slide back
+function stretchBed(C, B, d) {
+  const rw = C.wheels.filter((w) => !w.front), wz = Math.min(...rw.map((w) => w.z)), r = Math.max(...rw.map((w) => w.r0));
+  const zA = B.front, zB = wz + r + 0.12, zC = wz - r - 0.12, zD = B.back + 0.15, s1 = Math.max(0.01, zA - zB), s2 = Math.max(0.01, zC - zD);
+  const d1 = (d * s1) / (s1 + s2), d2 = d - d1;
+  const f = (z) => (z >= zA ? z : z >= zB ? z - (d1 * (zA - z)) / s1 : z >= zC ? z - d1 : z >= zD ? z - d1 - (d2 * (zC - z)) / s2 : z - d);
+  const b = C.body; b.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(b.matrixWorld).invert(), rel = new THREE.Matrix4();
+  for (const o of [...b.children]) {
+    if (!o.isMesh) { o.position.z = f(o.position.z); continue; } // (little groups move as one piece)
+    const g = o.geometry.clone(); g.applyMatrix4(rel.multiplyMatrices(inv, o.matrixWorld));
+    const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, f(p.getZ(i)));
+    p.needsUpdate = true; g.computeVertexNormals(); g.computeBoundingSphere();
+    o.geometry = g; o.position.set(0, 0, 0); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1);
+  }
+  for (const w of rw) { w.z = f(w.z); w.pivot.position.z = w.z; }
+  if (C.hitch) C.hitch.z = f(C.hitch.z);
+  for (const p of C.pipes) p.z = f(p.z);
+  C.len += d;
+}
 // the flatbed mod: take the bed off, bolt on a flat steel deck with a headache rack, stake pockets and toolboxes
 function flatbed(C, B) {
   const b = C.body, keep = [], box = new THREE.Box3();
@@ -87,7 +115,7 @@ export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
-  return { uid, id, paint: v.color, rims: id === "sxs" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "sxs" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null };
+  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null };
 }
 // final driving numbers after upgrades
 export function tune(car) {
@@ -248,7 +276,8 @@ export function buildCar(car, opts = {}) {
   const C = { root, lift, body, paint, paint2, rimMat, rustMat, wheels: [], seat: V3(0.42, 0.9, 0.2), hitch: V3(0, 0.6, -2.5), len: 4.6, wid: 2.1, hood: null, pipes: [], rider: null, id: car.id, extras: {} };
   C.car = car;
   BUILD[car.id](C, v);
-  if (car.flatbed && BEDS[car.id]) flatbed(C, BEDS[car.id]);
+  if (BEDS[car.id] && bedD(car)) stretchBed(C, BEDS[car.id], bedD(car));
+  if (car.flatbed && BEDS[car.id]) flatbed(C, bedOf(car));
   C.rearZ = Math.min(...C.wheels.map((w) => w.z)); // (wheelies tip back around the back wheel)
   // engine upgrade parts, neon glow, rider
   C.scoop = new THREE.Group(); body.add(C.scoop);
@@ -290,6 +319,8 @@ export function applyLook(C, car) {
     if (w.model) continue;
     w.r = w.r0 * tk; w.spin.scale.set(car.tires === "mud" ? 1.15 : 1, tk, tk); w.knobs.visible = car.tires !== "street";
   }
+  const od = (OFFSETS[car.offset ?? 1] || OFFSETS[1]).d; // (wheel offset: the wheels poke out or tuck in)
+  for (const w of C.wheels) if (!w.bike) w.pivot.position.x = w.x + w.side * od;
   C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? 0 : car.lift) * 0.17; // (dirt bikes don't get lifted)
   C.liftY = C.lift.position.y;
   C.scoop.visible = car.engine >= 2; const bl = C.scoop.getObjectByName("blower"); if (bl) bl.visible = car.engine >= 4;
@@ -413,6 +444,51 @@ function pod(C, o, mat) {
   return loft(C.body, S, (q) => { const h = q.t - q.b, r = Math.min(0.08, h * 0.45), wt = q.w * (o.top ?? 0.82);
     return [[q.w * 0.92 - 0.03, q.b], [q.w * 0.92, q.b + 0.03], [q.w, q.b + h * 0.5], [wt, q.t - r], [wt - r, q.t], [-(wt - r), q.t], [-wt, q.t - r], [-q.w, q.b + h * 0.5], [-q.w * 0.92, q.b + 0.03], [-(q.w * 0.92 - 0.03), q.b]]; },
   (k) => (k === 9 ? 1 : 0), [mat || C.paint, M.dark], true);
+}
+
+// a sport side-by-side (UTV): molded hood + fenders, bucket seats, half doors, a roll cage with a roof, a cargo box,
+// LED headlights, long-travel A-arms with coil-over shocks, 30-inch tires on black wheels. four = the 4-door / 4-seat one
+function utv(C, four) {
+  const b = C.body, P = C.paint, F = four ? 0.45 : 0; // (the 4-door is 0.9 m longer: front half moves forward, back half moves back)
+  C.len = 3.5 + 2 * F; C.wid = 1.8; C.seat.set(0.36, 0.6, -0.12 + F); C.hitch.set(0, 0.5, -1.82 - F); C.hood = null;
+  bx(b, 1.0, 0.16, 2.9 + 2 * F, 0, 0.48, 0, M.dark); bx(b, 1.42, 0.06, 1.35 + 2 * F, 0, 0.6, -0.1, M.dark); // chassis + floor
+  pod(C, { zf: 1.78 + F, zb: 0.5 + F, w: 0.8, b: 0.6, tops: [[1.78 + F, 0.74], [1.55 + F, 0.94], [0.95 + F, 1.04], [0.5 + F, 1.1]], round: 0.28, top: 0.86 }); // hood + front fenders
+  pod(C, { zf: -0.72 - F, zb: -1.68 - F, w: 0.8, b: 0.6, tops: [[-0.72 - F, 0.98], [-1.05 - F, 1.02], [-1.68 - F, 0.94]], round: 0.16, top: 0.92 }); // rear fenders
+  // cargo box
+  const cz = -1.22 - F;
+  bx(b, 1.1, 0.05, 0.78, 0, 1.03, cz, M.dark); for (const s of [-1, 1]) bx(b, 0.05, 0.24, 0.78, s * 0.55, 1.16, cz, M.dark); bx(b, 1.1, 0.24, 0.05, 0, 1.16, cz - 0.38, M.dark); bx(b, 1.1, 0.24, 0.05, 0, 1.16, cz + 0.38, M.dark);
+  // cockpit: dash, steering wheel, bucket seats (2 or 4), a center console, half doors
+  bx(b, 1.36, 0.26, 0.28, 0, 1.0, 0.56 + F, M.dark);
+  const sw = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 6, 16), M.dark); sw.position.set(0.36, 1.12, 0.36 + F); sw.rotation.x = -0.9; b.add(sw); tube(b, V3(0.36, 1.0, 0.5 + F), V3(0.36, 1.12, 0.36 + F), 0.03, M.dark);
+  const rows = four ? [[F, 0], [F - 1.0, 0.08]] : [[0, 0]];
+  for (const [z0, up] of rows) for (const x of [-0.36, 0.36]) { bx(b, 0.46, 0.14, 0.5, x, 0.72 + up, -0.18 + z0, M.seat); bx(b, 0.46, 0.66, 0.12, x, 1.05 + up, -0.46 + z0, M.seat, 0.15); bx(b, 0.5, 0.12, 0.14, x, 1.4 + up, -0.52 + z0, M.seat, 0.15); }
+  bx(b, 0.2, 0.26, 0.8 + 2 * F, 0, 0.76, 0.0, M.dark);
+  if (four) bx(b, 1.36, 0.5, 0.06, 0, 1.0, F - 0.62, M.dark); // (a grab bar wall behind the front seats)
+  const doors = four ? [[0.33, 0.85], [-0.67, 0.8]] : [[-0.12, 0.95]];
+  for (const [dz, dl] of doors) for (const s of [-1, 1]) { bx(b, 0.05, 0.42, dl, s * 0.8, 0.86, dz, P); bx(b, 0.04, 0.3, dl * 0.74, s * 0.775, 0.84, dz, M.dark); }
+  // roll cage + roof
+  const zf = 0.18 + F, zr = four ? -1.2 : -0.62;
+  for (const s of [-1, 1]) {
+    tube(b, V3(s * 0.74, 1.05, 0.55 + F), V3(s * 0.66, 1.88, zf), 0.04, M.dark); tube(b, V3(s * 0.66, 1.88, zf), V3(s * 0.66, 1.88, zr), 0.04, M.dark);
+    tube(b, V3(s * 0.66, 1.88, zr), V3(s * 0.76, 0.98, zr - 0.16), 0.04, M.dark); tube(b, V3(s * 0.7, 1.4, zr - 0.08), V3(0, 1.05, zr - 0.12), 0.03, M.dark);
+    if (four) tube(b, V3(s * 0.66, 1.88, F - 0.6), V3(s * 0.78, 0.98, F - 0.66), 0.04, M.dark); // the middle (B-pillar) hoop
+  }
+  tube(b, V3(-0.66, 1.88, zf), V3(0.66, 1.88, zf), 0.04, M.dark); tube(b, V3(-0.66, 1.88, zr), V3(0.66, 1.88, zr), 0.04, M.dark);
+  if (four) tube(b, V3(-0.66, 1.88, F - 0.6), V3(0.66, 1.88, F - 0.6), 0.04, M.dark);
+  bx(b, 1.36, 0.035, zf - zr + 0.06, 0, 1.91, (zf + zr) / 2, M.dark); // roof
+  bx(b, 1.0, 0.08, 0.1, 0, 1.9, zf + 0.06, M.dark); bx(b, 0.96, 0.05, 0.03, 0, 1.9, zf + 0.12, M.light); // roof light bar
+  // front: grille, mean LED headlights, a tube bumper
+  bx(b, 0.9, 0.22, 0.05, 0, 0.8, 1.76 + F, M.dark);
+  for (const s of [-1, 1]) { bx(b, 0.3, 0.05, 0.06, s * 0.45, 0.92, 1.66 + F, M.light, 0, -s * 0.35); bx(b, 0.16, 0.04, 0.05, s * 0.6, 0.86, 1.6 + F, M.light, 0, -s * 0.5); bx(b, 0.12, 0.08, 0.05, s * 0.68, 0.95, -1.69 - F, M.tail); }
+  tube(b, V3(-0.55, 0.62, 1.9 + F), V3(0.55, 0.62, 1.9 + F), 0.04, M.dark); for (const s of [-1, 1]) tube(b, V3(s * 0.55, 0.62, 1.9 + F), V3(s * 0.45, 0.55, 1.6 + F), 0.04, M.dark);
+  // long-travel suspension: A-arms + coil-over shocks at every wheel
+  for (const z of [1.18 + F, -1.18 - F]) for (const s of [-1, 1]) {
+    tube(b, V3(s * 0.42, 0.46, z + 0.18), V3(s * 0.7, 0.36, z), 0.03, M.trim); tube(b, V3(s * 0.42, 0.46, z - 0.18), V3(s * 0.7, 0.36, z), 0.03, M.trim);
+    const zi = z - Math.sign(z) * 0.12;
+    tube(b, V3(s * 0.4, 1.0, zi), V3(s * 0.68, 0.44, z), 0.045, M.fork); tube(b, V3(s * 0.45, 0.88, zi + (z - zi) * 0.2), V3(s * 0.6, 0.6, zi + (z - zi) * 0.7), 0.06, M.red);
+  }
+  C.pipes.push(V3(0.35, 0.78, -1.7 - F));
+  for (const [x, z, f] of [[0.82, 1.18 + F, 1], [-0.82, 1.18 + F, 1], [0.82, -1.18 - F, 0], [-0.82, -1.18 - F, 0]]) wheel(C, x, z, 0.36, 0.3, f);
 }
 
 const BUILD = {
@@ -580,40 +656,8 @@ const BUILD = {
   super1000(C) { sportBike(C, 1.27, true); },
   // a sport side-by-side (UTV): molded hood + fenders, two bucket seats, half doors, a roll cage with a roof,
   // a cargo box, LED headlights, long-travel A-arms with coil-over shocks, 30-inch tires on black wheels
-  sxs(C) {
-    const b = C.body, P = C.paint;
-    C.len = 3.5; C.wid = 1.8; C.seat.set(0.36, 0.6, -0.12); C.hitch.set(0, 0.5, -1.82); C.hood = null;
-    bx(b, 1.0, 0.16, 2.9, 0, 0.48, 0, M.dark); bx(b, 1.42, 0.06, 1.35, 0, 0.6, -0.1, M.dark); // chassis + floor
-    pod(C, { zf: 1.78, zb: 0.5, w: 0.8, b: 0.6, tops: [[1.78, 0.74], [1.55, 0.94], [0.95, 1.04], [0.5, 1.1]], round: 0.28, top: 0.86 }); // hood + front fenders
-    pod(C, { zf: -0.72, zb: -1.68, w: 0.8, b: 0.6, tops: [[-0.72, 0.98], [-1.05, 1.02], [-1.68, 0.94]], round: 0.16, top: 0.92 }); // rear fenders
-    // cargo box
-    bx(b, 1.1, 0.05, 0.78, 0, 1.03, -1.22, M.dark); for (const s of [-1, 1]) bx(b, 0.05, 0.24, 0.78, s * 0.55, 1.16, -1.22, M.dark); bx(b, 1.1, 0.24, 0.05, 0, 1.16, -1.6, M.dark); bx(b, 1.1, 0.24, 0.05, 0, 1.16, -0.84, M.dark);
-    // cockpit: dash, steering wheel, two bucket seats, a center console, half doors
-    bx(b, 1.36, 0.26, 0.28, 0, 1.0, 0.56, M.dark);
-    const sw = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 6, 16), M.dark); sw.position.set(0.36, 1.12, 0.36); sw.rotation.x = -0.9; b.add(sw); tube(b, V3(0.36, 1.0, 0.5), V3(0.36, 1.12, 0.36), 0.03, M.dark);
-    for (const x of [-0.36, 0.36]) { bx(b, 0.46, 0.14, 0.5, x, 0.72, -0.18, M.seat); bx(b, 0.46, 0.66, 0.12, x, 1.05, -0.46, M.seat, 0.15); bx(b, 0.5, 0.12, 0.14, x, 1.4, -0.52, M.seat, 0.15); }
-    bx(b, 0.2, 0.26, 0.8, 0, 0.76, 0.0, M.dark);
-    for (const s of [-1, 1]) { bx(b, 0.05, 0.42, 0.95, s * 0.8, 0.86, -0.12, P); bx(b, 0.04, 0.3, 0.7, s * 0.775, 0.84, -0.12, M.dark); }
-    // roll cage + roof
-    for (const s of [-1, 1]) {
-      tube(b, V3(s * 0.74, 1.05, 0.55), V3(s * 0.66, 1.88, 0.18), 0.04, M.dark); tube(b, V3(s * 0.66, 1.88, 0.18), V3(s * 0.66, 1.88, -0.62), 0.04, M.dark);
-      tube(b, V3(s * 0.66, 1.88, -0.62), V3(s * 0.76, 0.98, -0.78), 0.04, M.dark); tube(b, V3(s * 0.7, 1.4, -0.7), V3(0, 1.05, -0.74), 0.03, M.dark);
-    }
-    tube(b, V3(-0.66, 1.88, 0.18), V3(0.66, 1.88, 0.18), 0.04, M.dark); tube(b, V3(-0.66, 1.88, -0.62), V3(0.66, 1.88, -0.62), 0.04, M.dark);
-    bx(b, 1.36, 0.035, 0.86, 0, 1.91, -0.22, M.dark); // roof
-    bx(b, 1.0, 0.08, 0.1, 0, 1.9, 0.24, M.dark); bx(b, 0.96, 0.05, 0.03, 0, 1.9, 0.3, M.light); // roof light bar
-    // front: grille, mean LED headlights, a tube bumper
-    bx(b, 0.9, 0.22, 0.05, 0, 0.8, 1.76, M.dark);
-    for (const s of [-1, 1]) { bx(b, 0.3, 0.05, 0.06, s * 0.45, 0.92, 1.66, M.light, 0, -s * 0.35); bx(b, 0.16, 0.04, 0.05, s * 0.6, 0.86, 1.6, M.light, 0, -s * 0.5); bx(b, 0.12, 0.08, 0.05, s * 0.68, 0.95, -1.69, M.tail); }
-    tube(b, V3(-0.55, 0.62, 1.9), V3(0.55, 0.62, 1.9), 0.04, M.dark); for (const s of [-1, 1]) tube(b, V3(s * 0.55, 0.62, 1.9), V3(s * 0.45, 0.55, 1.6), 0.04, M.dark);
-    // long-travel suspension: A-arms + coil-over shocks at every wheel
-    for (const z of [1.18, -1.18]) for (const s of [-1, 1]) {
-      tube(b, V3(s * 0.42, 0.46, z + 0.18), V3(s * 0.7, 0.36, z), 0.03, M.trim); tube(b, V3(s * 0.42, 0.46, z - 0.18), V3(s * 0.7, 0.36, z), 0.03, M.trim);
-      tube(b, V3(s * 0.4, 1.0, z * 0.9), V3(s * 0.68, 0.44, z), 0.045, M.fork); tube(b, V3(s * 0.45, 0.88, z * 0.92), V3(s * 0.6, 0.6, z * 0.97), 0.06, M.red);
-    }
-    C.pipes.push(V3(0.35, 0.78, -1.7));
-    for (const [x, z, f] of [[0.82, 1.18, 1], [-0.82, 1.18, 1], [0.82, -1.18, 0], [-0.82, -1.18, 0]]) wheel(C, x, z, 0.36, 0.3, f);
-  },
+  sxs(C) { utv(C, false); },
+  sxs4(C) { utv(C, true); }, // the 4-door: longer, 4 seats, 4 doors, a longer cage
   atv(C) { quad(C, 1, 0.36); },
   sportquad(C) { quad(C, 0.95, 0.34, { sport: true }); },
   bigquad(C) { quad(C, 1.18, 0.44, { racks: true }); },

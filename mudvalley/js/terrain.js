@@ -2,7 +2,7 @@
 // and answers "how high is the ground here?" and "is this road, dirt or mud?" for the driving physics.
 import * as THREE from "/create/vendor/three.module.js";
 import { bakeGroup } from "./vehicles.js";
-import { HALF, EDGE, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, POND, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY } from "./layout.js";
+import { HALF, EDGE, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, POND, LAKE, FROST, RING_R, SPOKES, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY } from "./layout.js";
 
 export const CELL = 5, N = (HALF * 2) / CELL; // the height grid: N x N squares of 5 m
 const V = N + 1;
@@ -34,17 +34,57 @@ export function fbm(x, z, oct = 4) {
   return s / n;
 }
 const gauss = (x, z, m) => m.h * Math.exp(-((x - m.x) ** 2 + (z - m.z) ** 2) / (2 * m.s * m.s));
+const WATERS = [POND, LAKE];
+
+// ---------------------------------------------------------------- the new lands outside the old valley
+// how much of each land a spot is in: [outside the valley, east desert, west woods, south plains, north mountains]
+const BW = [0, 0, 0, 0, 0];
+export function biome(x, z) {
+  const r = Math.hypot(x, z) || 1;
+  BW[0] = smooth(560, 820, Math.max(Math.abs(x), Math.abs(z)));
+  BW[1] = Math.max(0, x / r) ** 2; BW[2] = Math.max(0, -x / r) ** 2; BW[3] = Math.max(0, z / r) ** 2; BW[4] = Math.max(0, -z / r) ** 2;
+  return BW;
+}
+export const desertAt = (x, z) => { const b = biome(x, z); return b[0] * b[1]; };
+// 1 right next to the big highways (the hills and mountains make room for them), 0 far away
+function corridor(x, z) {
+  let d = Math.abs(Math.hypot(x, z) - RING_R);
+  for (const [[x0, z0], [x1, z1]] of SPOKES) {
+    const dx = x1 - x0, dz = z1 - z0, t = clamp(((x - x0) * dx + (z - z0) * dz) / (dx * dx + dz * dz), 0, 1);
+    d = Math.min(d, Math.hypot(x - x0 - dx * t, z - z0 - dz * t));
+  }
+  return 1 - smooth(25, 120, d);
+}
+function outerH(x, z) {
+  const b = biome(x, z), out = b[0];
+  if (out <= 0) return 0;
+  const cor = corridor(x, z);
+  let h = 0;
+  if (b[1] > 0.01) { // Red Rock Desert: flat sand, rolling dunes and tall red rock mesas
+    const n = fbm(x / 260 + 40, z / 260, 3), mesa = smooth(0.2, 0.27, n) * 38 + smooth(0.42, 0.47, n) * 22;
+    h += b[1] * (2 + 2.2 * Math.sin(x / 31 + Math.sin(z / 47) * 2) * Math.sin(z / 23) + mesa * (1 - 0.95 * cor));
+  }
+  if (b[4] > 0.01) { // Frostpine Mountains: big snowy ridges
+    const rg = 1 - Math.abs(fbm(x / 300 - 20, z / 300 + 9, 4));
+    h += b[4] * (8 + (rg * rg * 120 * smooth(700, 1100, -z) + gauss(x, z, FROST)) * (1 - 0.9 * cor));
+  }
+  if (b[2] > 0.01) h += b[2] * (6 + 24 * fbm(x / 160 - 3, z / 160 + 5, 3) * (1 - 0.6 * cor)); // the Big Woods: rolling forest hills
+  if (b[3] > 0.01) h += b[3] * (2 + 6 * fbm(x / 200 + 7, z / 200 - 1, 3)); // the south plains
+  return out * h;
+}
 
 // the natural land before roads get cut in
 function rawH(x, z) {
   let h = 3 + 4 * fbm(x / 150, z / 150, 3);
   h += smooth(150, 230, x) * 9 * fbm(x / 60 + 11, z / 60 - 7, 3); // bumpy off-road hills in the east
-  h += smooth(EDGE - 18, HALF, Math.max(Math.abs(x), Math.abs(z))) * 95; // big hills all around the edge of the valley
+  h += smooth(EDGE - 18, HALF, Math.max(Math.abs(x), Math.abs(z))) * 95; // big hills all around the edge of the map
+  h += outerH(x, z); // the new lands
   const mt = gauss(x, z, MOUNTAIN);
   h += mt + gauss(x, z, MANSION_HILL);
   h += smooth(0.08, 0.5, mt / MOUNTAIN.h) * (1 - smooth(0.8, 0.97, mt / MOUNTAIN.h)) * 9 * fbm(x / 34 + 5, z / 34 - 3, 3); // rocky bumps on the mountain sides
   const d = x - riverX(z);
   h -= 4 * Math.exp(-(d * d) / (2 * 35 * 35)); // the land dips down towards the river
+  if (h < 0.4) h = 0.4 - (0.4 - h) * 0.15; // (low spots stay just above the water: no surprise puddles)
   return h;
 }
 function flatW(x, z, f) { // 1 inside a flat area, fading to 0 around it
@@ -63,11 +103,13 @@ function landH(x, z) {
     const w = 1 - smooth(RIVER_W, RIVER_W + 16, d);
     h = Math.min(h, lerp(h, bed, w)), h = d < RIVER_W ? Math.min(h, bed) : h;
   }
-  // Lily Pond: a round bowl of water with a sandy shore
-  const dp = Math.hypot(x - POND.x, z - POND.z);
-  if (dp < POND.r + 14) {
-    const bed = dp < POND.r ? WATER_Y - 0.4 - 2.6 * (1 - (dp / POND.r) ** 2) : WATER_Y + 0.3 + 2.4 * smooth(POND.r, POND.r + 14, dp);
-    h = dp < POND.r ? bed : Math.min(h, bed);
+  // Lily Pond + Big Bass Lake: round bowls of water with sandy shores
+  for (const P of WATERS) {
+    const dp = Math.hypot(x - P.x, z - P.z), sh = P.r > 60 ? 30 : 14;
+    if (dp < P.r + sh) {
+      const bed = dp < P.r ? WATER_Y - 0.4 - (P.r > 60 ? 5 : 2.6) * (1 - (dp / P.r) ** 2) : WATER_Y + 0.3 + 2.4 * smooth(P.r, P.r + sh, dp);
+      h = dp < P.r ? bed : Math.min(h, bed);
+    }
   }
   return h;
 }
@@ -252,7 +294,9 @@ function flattenPaths() {
   }
 }
 function dig(m) { // a mud pit: flatten a little circle, then scoop out the middle
-  for (let j = 0; j < V; j++) for (let i = 0; i < V; i++) {
+  const i0 = Math.max(0, Math.floor((m.x - m.r - 8 + HALF) / CELL)), i1 = Math.min(V - 1, Math.ceil((m.x + m.r + 8 + HALF) / CELL));
+  const j0 = Math.max(0, Math.floor((m.z - m.r - 8 + HALF) / CELL)), j1 = Math.min(V - 1, Math.ceil((m.z + m.r + 8 + HALF) / CELL));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
     const x = -HALF + i * CELL, z = -HALF + j * CELL, d = Math.hypot(x - m.x, z - m.z);
     if (d > m.r + 7) continue;
     const k = j * V + i;
@@ -276,8 +320,9 @@ function paintSurfaces() {
     const x = -HALF + (i + 0.5) * SC, z = -HALF + (j + 0.5) * SC, h = hAt(x, z);
     let c = SURF.GRASS;
     if ((Math.abs(x) < 116 && Math.abs(z) < 106) || inCC(x, z)) c = SURF.TOWN;
-    else if (Math.abs(x - riverX(z)) < RIVER_W + 5 || Math.abs(Math.hypot(x - POND.x, z - POND.z) - POND.r - 3) < 6) c = SURF.SAND;
+    else if (Math.abs(x - riverX(z)) < RIVER_W + 5 || WATERS.some((P) => Math.abs(Math.hypot(x - P.x, z - P.z) - P.r - 3) < 6)) c = SURF.SAND;
     else if (h > 100 || slopeAt(x, z) > 0.95) c = SURF.ROCK;
+    else if (desertAt(x, z) > 0.45) c = SURF.SAND; // desert sand
     S[j * SN + i] = c;
   }
   const order = [["trail", SURF.DIRT], ["track", SURF.TRACK], ["road", SURF.ROAD], ["speedway", SURF.ROAD]];
@@ -416,7 +461,10 @@ function groundColor(x, z, h, out) {
   const n = fbm(x / 23, z / 23, 2);
   const i = clamp(Math.floor((x + HALF) / SC), 0, SN - 1), j = clamp(Math.floor((z + HALF) / SC), 0, SN - 1), s = S[j * SN + i];
   const sl = slopeAt(x, z);
-  if (s === SURF.SAND || s === SURF.WATER) out.setRGB(0.83, 0.75, 0.52);
+  const de = s === SURF.SAND || s === SURF.ROCK || s === SURF.GRASS ? desertAt(x, z) : 0;
+  if (de > 0.45 && (s === SURF.ROCK || sl > 0.45 || h > 17)) out.setRGB(0.55, 0.16, 0.07).lerp(tmpC.setRGB(0.74, 0.31, 0.12), 0.5 + 0.5 * Math.sin(h / 2.6)); // red rock mesas (with stripes)
+  else if (de > 0.45 && s === SURF.SAND) out.setRGB(0.8 + n * 0.04, 0.42 + n * 0.04, 0.2); // red desert sand
+  else if (s === SURF.SAND || s === SURF.WATER) out.setRGB(0.83, 0.75, 0.52);
   else if (s === SURF.DIRT || s === SURF.TRACK) out.setRGB(0.6, 0.45, 0.29);
   else if (s === SURF.MUD) out.setRGB(0.36, 0.25, 0.15);
   else if (s === SURF.ROAD) out.setRGB(0.42, 0.44, 0.38);
@@ -435,9 +483,9 @@ function groundColor(x, z, h, out) {
 export function buildGroundMeshes(scene) {
   makeTextures();
   const group = new THREE.Group(); scene.add(group);
-  // the land, cut into 36 chunks so the computer only draws what the camera sees
+  // the land, cut into 24 x 24 chunks so the computer only draws what the camera sees
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const CH = 6, cs = N / CH, col = new THREE.Color();
+  const CH = 24, cs = N / CH, col = new THREE.Color();
   for (let cj = 0; cj < CH; cj++) for (let ci = 0; ci < CH; ci++) {
     const pos = [], cols = [], idx = [];
     for (let j = 0; j <= cs; j++) for (let i = 0; i <= cs; i++) {
@@ -475,12 +523,12 @@ export function buildGroundMeshes(scene) {
     const water = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ color: 0x2f9fd8, map: TEX.water, transparent: true, opacity: 0.84, shininess: 90, specular: 0xaaddff }));
     water.receiveShadow = true; group.add(water); group.userData.water = TEX.water;
   }
-  // Lily Pond
-  {
-    const g = new THREE.CircleGeometry(POND.r + 4, 40); g.rotateX(-Math.PI / 2);
-    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 4, uv.getY(i) * 4);
+  // Lily Pond + Big Bass Lake
+  for (const P of WATERS) {
+    const g = new THREE.CircleGeometry(P.r + 4, P.r > 60 ? 72 : 40); g.rotateX(-Math.PI / 2);
+    const uv = g.attributes.uv, k = P.r / 8; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * k, uv.getY(i) * k);
     const pond = new THREE.Mesh(g, new THREE.MeshPhongMaterial({ color: 0x2aa0c8, map: TEX.water, transparent: true, opacity: 0.86, shininess: 90, specular: 0xaaddff }));
-    pond.position.set(POND.x, WATER_Y, POND.z); pond.receiveShadow = true; group.add(pond);
+    pond.position.set(P.x, WATER_Y, P.z); pond.receiveShadow = true; group.add(pond);
   }
   // mud pits: shiny brown puddles
   const mudMat = new THREE.MeshPhongMaterial({ map: TEX.mud, shininess: 60, specular: 0x5a4a3a });
