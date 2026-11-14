@@ -190,13 +190,17 @@ async function loadPacked(file) {
   {
     const buf = await (await fetch(new URL("../models/" + file, import.meta.url))).arrayBuffer();
     const n = new DataView(buf).getUint32(0, true), hdr = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, n))), base = 4 + n;
-    const out = { wheels: hdr.wheels, body: [], front: [], back: [], colors: hdr.colors, paint: hdr.paint || [], tire: hdr.tire || [] };
+    const out = { wheels: hdr.wheels, body: [], front: [], back: [], steerParts: [], axis: hdr.steer || null, colors: hdr.colors, paint: hdr.paint || [], tire: hdr.tire || [] };
+    // (the "steer" part: forks + handlebars, relative to the top of the steering axis. Tip it upright so it can turn
+    //  around its own up line: bikeModel tips it back again by the rake angle.)
+    const unrake = hdr.steer ? new THREE.Matrix4().makeRotationX(-hdr.steer.a) : null;
     for (const p of hdr.parts) {
       const pos = new Int16Array(buf, base + p.off, p.v * 3), idx = new Uint16Array(buf, base + p.off + p.v * 6, p.i);
       const f = new Float32Array(p.v * 3); for (let i = 0; i < f.length; i++) f[i] = pos[i] / 1000;
       let g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(f, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1));
       g = g.toNonIndexed(); g.computeVertexNormals(); // (flat shading: crisp edges)
-      out[p.group].push({ mat: p.mat, geo: g });
+      if (p.group === "steer") { g.applyMatrix4(unrake); g.computeVertexNormals(); out.steerParts.push({ mat: p.mat, geo: g }); }
+      else out[p.group].push({ mat: p.mat, geo: g });
     }
     return out;
   }
@@ -226,6 +230,12 @@ function realBike(C, size, B = BIKE) {
 function bikeModel(C, sc = 1, BIKE) {
   const b = C.body;
   for (const p of BIKE.body) { const m = new THREE.Mesh(p.geo, bikeMat(BIKE, p.mat, C)); m.scale.setScalar(sc); b.add(m); }
+  // the front end turns with the steering: a pivot at the top of the steering axis, tipped back by the rake angle
+  if (BIKE.axis && BIKE.steerParts.length) {
+    const piv = new THREE.Group(); piv.position.set(0, BIKE.axis.y * sc, BIKE.axis.z * sc); piv.rotation.x = BIKE.axis.a; piv.scale.setScalar(sc); b.add(piv);
+    const steer = new THREE.Group(); piv.add(steer); C.forks = [steer]; C.steerG = steer;
+    for (const p of BIKE.steerParts) { const m = new THREE.Mesh(p.geo, bikeMat(BIKE, p.mat, C)); m.castShadow = true; steer.add(m); }
+  }
   for (const k of ["front", "back"]) {
     const w0 = BIKE.wheels[k], w = { x: w0.x * sc, z: w0.z * sc, r: w0.r * sc }, pivot = new THREE.Group(); pivot.position.set(w.x, w.r, w.z);
     const spin = new THREE.Group(); pivot.add(spin); spin.scale.setScalar(sc);
@@ -921,9 +931,11 @@ function streetKit(C) {
 function streetKit250(C) {
   const b = C.body, k = C.len / 2.5, K = (v) => v * k;
   const hl = new THREE.Group(); hl.position.set(0, K(1.15), K(0.515)); hl.rotation.x = -0.3; b.add(hl);
+  const mir = new THREE.Group(); b.add(mir);
   bx(hl, K(0.22), K(0.15), K(0.06), 0, 0, 0, M.dark); bx(hl, K(0.17), K(0.1), K(0.03), 0, 0, K(0.03), M.light); // headlight on the plate
   for (const s of [-1, 1]) bx(hl, K(0.06), K(0.04), K(0.05), s * K(0.15), K(-0.06), K(0.02), M.yellowL || M.light); // front turn signals
-  for (const s of [-1, 1]) { tube(b, V3(s * K(0.28), K(1.22), K(0.38)), V3(s * K(0.34), K(1.4), K(0.36)), 0.012, M.dark); bx(b, K(0.12), K(0.08), 0.02, s * K(0.35), K(1.42), K(0.36), M.chrome); } // mirrors
+  for (const s of [-1, 1]) { tube(mir, V3(s * K(0.28), K(1.38), K(0.3)), V3(s * K(0.34), K(1.56), K(0.28)), 0.012, M.dark); bx(mir, K(0.12), K(0.08), 0.02, s * K(0.35), K(1.58), K(0.28), M.chrome); } // mirrors (on the handlebars)
+  if (C.steerG) { C.root.updateMatrixWorld(true); C.steerG.attach(hl); C.steerG.attach(mir); } // (they turn with the handlebars)
   const pl = new THREE.Group(); pl.position.set(0, K(1.08), K(-1.03)); pl.rotation.x = 0.35; b.add(pl); // (tilted like the fender)
   bx(pl, K(0.24), K(0.15), 0.02, 0, 0, 0, M.white); bx(pl, K(0.2), K(0.03), 0.025, 0, K(0.02), -0.002, M.dark); bx(pl, K(0.05), K(0.08), 0.02, 0, K(0.08), 0.01, M.dark); // license plate + its bracket
   bx(b, K(0.1), K(0.04), K(0.05), 0, K(1.125), K(-1.08), M.tail); // tail light under the fender tip
