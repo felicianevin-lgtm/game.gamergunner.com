@@ -4,7 +4,9 @@
 // "do what" from lists (your game's own parts and GUI) and it writes the code for you. 🤖 Ask an AI copies a full guide
 // (every command, the rules, the names in your game) to paste into an AI chat like Gemini or ChatGPT; pasting the AI's
 // answer back here drops the ``` marks and extra talk around the code. See scripts.js for what runs.
+// ⚡ Auto Build (locked with the same code as Ask an AI) writes the script from plain words, right here (autobuild.js).
 import { HELP, EXAMPLES, checkTypos } from "./scripts.js";
+import { autoScript } from "./autobuild.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -40,7 +42,7 @@ function build() {
     '<div class="script-ed hidden" id="scriptEd" role="dialog" aria-label="Script editor">' +
     '<div class="se-bar"><span class="se-ico">📜</span><input id="seName" maxlength="40" aria-label="Script name" spellcheck="false"><span class="se-on" id="seOn"></span>' +
     '<div class="se-drop"><button class="tb" type="button" id="seEx">📚 <span>Examples ▾</span></button><div class="se-menu hidden" id="seExMenu"></div></div>' +
-    '<button class="tb se-make" type="button" id="seMake">✨ <span>Make a script</span></button><button class="tb se-ai" type="button" id="seAi">🤖 <span>Ask an AI</span></button><button class="tb" type="button" id="seHelpBtn">❓ <span>Commands</span></button><button class="tb" type="button" id="seClose">✕ <span>Close</span></button></div>' +
+    '<button class="tb se-make" type="button" id="seMake">✨ <span>Make a script</span></button><button class="tb se-auto" type="button" id="seAuto">⚡ <span>Auto Build</span></button><button class="tb se-ai" type="button" id="seAi">🤖 <span>Ask an AI</span></button><button class="tb" type="button" id="seHelpBtn">❓ <span>Commands</span></button><button class="tb" type="button" id="seClose">✕ <span>Close</span></button></div>' +
     '<div class="se-body"><div class="se-code"><div class="se-gutter" id="seGut"></div><div class="se-wrap"><pre class="se-hl" id="seHl" aria-hidden="true"></pre>' +
     '<textarea id="seTa" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-label="Script code"></textarea></div></div>' +
     '<aside class="se-help" id="seHelp"></aside></div>' +
@@ -68,6 +70,7 @@ function build() {
   $("seHelpBtn").onclick = () => $("scriptEd").classList.toggle("no-help");
   $("seMake").onclick = openMaker;
   $("seAi").onclick = openAi;
+  $("seAuto").onclick = openAuto;
   ta.addEventListener("paste", (e) => { // (an AI's answer: keep just the code)
     const text = e.clipboardData && e.clipboardData.getData("text/plain");
     const code = text && codeFromAnswer(text);
@@ -190,10 +193,10 @@ export function aiGuide(want, info) {
 // 🔒 Ask an AI is locked with a code (only the owner of this studio uses it). It's a soft lock: the code is in the page.
 const AI_CODE = "2468";
 function aiUnlocked() { try { return sessionStorage.getItem("gv_ai_ok") === "1"; } catch { return false; } }
-function askCode(then) {
+function askCode(then, title = "🔒 Ask an AI") {
   const box = document.createElement("div");
   box.className = "se-maker";
-  box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Code"><h3>🔒 Ask an AI</h3><p>Type the code to open the script builder.</p>' +
+  box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Code"><h3>' + esc(title) + '</h3><p>Type the code to open the script builder.</p>' +
     '<form id="aiLock"><input id="aiCode" inputmode="numeric" maxlength="8" autocomplete="off" aria-label="Code" style="font-size:20px;letter-spacing:.2em;text-align:center;width:140px">' +
     '<p class="se-ai-msg" id="aiLockMsg"></p><div class="se-mk-btns"><button class="tb" type="button" id="aiLockNo">Close</button><button class="tb se-make">Open</button></div></form></div>';
   $("scriptEd").appendChild(box);
@@ -236,6 +239,69 @@ function openAi() {
     q("aiMsg").textContent = ok ? "✓ Copied! Now paste it into the AI chat." : "Select all the guide text above and copy it (Ctrl+C).";
   };
   q("aiWant").focus();
+}
+
+// ---------------------------------------------------------------- ⚡ Auto Build (type it in words, the code gets written)
+const AUTO_IDEAS = {
+  gui: ["When I click this, open and close the Shop and play a click sound.", "When I click this, give me super speed and say \"ZOOM!\""],
+  part: ["When the player touches this, kill them.", "Make it chase the player at speed 8. When I touch it, say \"Got you!\" and teleport me to Spawn.", "When the player gets close, hide it and play a door sound.", "Make it spin and turn it rainbow every second."],
+  game: ["When I press F, make the sky night.", "Every 5 seconds add 1 point. After 60 seconds I win.", "Make a tool that builds 40 trees and 15 rocks."],
+};
+function openAuto() {
+  if (!cur) return;
+  if (!aiUnlocked()) { askCode(openAuto, "🔒 Auto Build"); return; }
+  const kind = cur.kind === "game" ? "game" : cur.kind === "part" ? "part" : "gui";
+  const box = document.createElement("div");
+  box.className = "se-maker";
+  box.innerHTML = '<div class="se-mk-box se-ai-box" role="dialog" aria-label="Auto Build"><h3>⚡ Auto Build</h3>' +
+    '<p>Type what you want the script to do, in your own words. Use the names of your things (like they are in the Explorer). Auto Build writes the code for you, right here!</p>' +
+    '<label>What should the script do?<textarea id="abWant" rows="4" maxlength="800" placeholder="Example: ' + esc(AUTO_IDEAS[kind][0]) + '"></textarea></label>' +
+    '<p class="se-tip" style="margin:6px 0 2px">Ideas (click one):</p><div class="se-ab-ideas">' + AUTO_IDEAS[kind].map((x) => '<button type="button" class="se-ab-idea">' + esc(x) + "</button>").join("") + "</div>" +
+    '<div id="abOut"></div>' +
+    '<div class="se-mk-btns"><button class="tb" type="button" id="abNo">Close</button><button class="tb se-make" type="button" id="abGo">⚡ Build it!</button></div></div>';
+  $("scriptEd").appendChild(box);
+  const q = (id) => box.querySelector("#" + id);
+  box.querySelectorAll(".se-ab-idea").forEach((b) => (b.onclick = () => { q("abWant").value = b.textContent; q("abWant").focus(); }));
+  box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") box.remove(); if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) q("abGo").click(); });
+  q("abNo").onclick = () => { box.remove(); $("seTa").focus(); };
+  let busy = false;
+  q("abGo").onclick = () => {
+    if (busy) return;
+    const want = q("abWant").value.trim();
+    if (!want) { q("abOut").innerHTML = '<p class="se-ai-msg" style="color:#ffb35c!important">Type what you want first!</p>'; q("abWant").focus(); return; }
+    busy = true; let k = 0;
+    const tick = () => { // (a little "building..." bar, then the code)
+      k++;
+      q("abOut").innerHTML = '<p style="font:700 16px ui-monospace,Consolas,monospace;margin:10px 0">[' + "█".repeat(k).padEnd(10, "░") + "] " + ["Reading your words...", "Finding your things...", "Writing the code...", "Checking for typos..."][Math.min(3, Math.floor(k / 3))] + "</p>";
+      if (k < 10) { setTimeout(tick, 70); return; }
+      busy = false;
+      const r = autoScript(want, { kind: cur.kind, meName: cur.meName, things: cur.things ? cur.things() : [] });
+      if (r.empty) {
+        q("abOut").innerHTML = '<p class="se-ai-msg" style="color:#ffb35c!important">Hmm, I didn\'t understand that one. Try words like: when I click this / touch / press F / every 5 seconds, then open, hide, spin, chase, teleport, say, play a sound, win, build 20 trees.</p>' +
+          (r.missed.length ? '<p class="se-tip">❓ ' + r.missed.map(esc).join("<br>❓ ") + "</p>" : "");
+        return;
+      }
+      const typo = checkTypos(r.code);
+      q("abOut").innerHTML = '<pre class="se-mk-code" id="abCode"></pre>' +
+        '<p class="se-tip">' + r.got.map((g) => "✅ " + esc(g)).join("<br>") + (r.missed.length ? "<br>" + r.missed.map((m) => "❓ Didn't get " + esc(m)).join("<br>") : "") + (typo ? "<br>⚠ " + esc(typo) : "") + "</p>" +
+        '<div class="se-mk-btns"><button class="tb" type="button" id="abRep">♻️ Replace my script</button><button class="tb se-make" type="button" id="abAdd">➕ Add to my script</button></div>';
+      q("abCode").textContent = r.code.trim();
+      const put = (replace) => {
+        const ta = $("seTa");
+        box.remove(); ta.focus();
+        if (replace) { if (ta.value.trim() && !confirm("Replace everything in this script with the Auto Build code?")) return; ta.select(); }
+        else ta.setSelectionRange(ta.value.length, ta.value.length);
+        const add = replace || !ta.value.trim() ? r.code : (ta.value.endsWith("\n") ? "" : "\n") + "\n" + r.code;
+        if (!document.execCommand("insertText", false, add)) { if (replace) ta.value = add; else ta.value += add; }
+        paint(); changed();
+        $("seStatus").className = "se-status good"; $("seStatus").textContent = "⚡ Auto Build wrote your script! Press ▶ Play to try it.";
+      };
+      q("abAdd").onclick = () => put(false);
+      q("abRep").onclick = () => put(true);
+    };
+    tick();
+  };
+  q("abWant").focus();
 }
 
 // ---------------------------------------------------------------- ✨ Make a script (writes the code for you)
