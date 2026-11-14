@@ -566,8 +566,8 @@ const BUILD = {
   // a pit bike + a 125: the real dirt bike, smaller
   pitbike(C) { if (BIKE) return realBike(C, 0.72); BUILD.bike(C); },
   bike125(C) { if (BIKE) return realBike(C, 0.86); BUILD.bike(C); },
-  sport300(C) { sportBike(C, 1, false); },
-  super1000(C) { sportBike(C, 1.06, true); },
+  sport300(C) { sportBike(C, 1.2, false); },
+  super1000(C) { sportBike(C, 1.27, true); },
   atv(C) { quad(C, 1, 0.36); },
   sportquad(C) { quad(C, 0.95, 0.34, { sport: true }); },
   bigquad(C) { quad(C, 1.18, 0.44, { racks: true }); },
