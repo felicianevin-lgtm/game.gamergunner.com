@@ -162,8 +162,8 @@ function buildLocal(s) {
         const n = 3 + Math.floor(d * 3);
         for (let i = 0; i < n; i++) {
           const L = 8 + r() * 4, back = r() < 0.5;
-          const sp = 3 + d * 4;
-          box("belt", 0, y, z + L / 2, 4, 0.8, L, 0x333340, back ? { bx: 0, bz: -sp } : { bx: (r() < 0.5 ? -1 : 1) * sp, bz: 0 });
+          const sp = 1 + d * 1.5; // (slow: a gentle push, 1 to 2.5 m/s; sideways ones are slower still)
+          box("belt", 0, y, z + L / 2, 5, 0.8, L, 0x333340, back ? { bx: 0, bz: -sp } : { bx: (r() < 0.5 ? -1 : 1) * sp * 0.7, bz: 0 });
           if (r() < 0.3 + d * 0.5) kill(R(-1, 1), y + 0.4, z + L / 2, 1.2, 0.8, 0.6);
           z += L; z += 1.5 + d * 2;
         }

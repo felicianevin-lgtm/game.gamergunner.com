@@ -83,7 +83,8 @@ function setBox(p) { p.minX = p.x - p.w / 2; p.maxX = p.x + p.w / 2; p.minY = p.
 function buildStage(s) {
   const st = stage(s), g = new THREE.Group(), parts = [];
   for (const d of st.parts) {
-    const p = { ...d, bx: d.x, by: d.y, bz: d.z, dx: 0, dy: 0, dz: 0, state: 0, timer: 0, solid: SOLID.has(d.k) };
+    const p = { ...d, ox: d.x, oy: d.y, oz: d.z, // (where it started: o = origin; bx / bz are a conveyor's push)
+      dx: 0, dy: 0, dz: 0, state: 0, timer: 0, solid: SOLID.has(d.k) };
     if (p.k === "spin") {
       const bar = new THREE.Group(); bar.position.set(p.x, p.y, p.z);
       const m = new THREE.Mesh(new THREE.BoxGeometry(p.len * 2, 0.5, 0.5), mat(0xff2a2a, "kill")); m.castShadow = true; bar.add(m);
@@ -372,7 +373,7 @@ function updateParts(dt) {
   for (const b of partsNow) {
     b.dx = b.dy = b.dz = 0;
     if (b.mv) {
-      const off = b.mv.amp * Math.sin(T * b.mv.sp + b.mv.ph), nx = b.bx + (b.mv.ax === "x" ? off : 0), nz = b.bz + (b.mv.ax === "z" ? off : 0);
+      const off = b.mv.amp * Math.sin(T * b.mv.sp + b.mv.ph), nx = b.ox + (b.mv.ax === "x" ? off : 0), nz = b.oz + (b.mv.ax === "z" ? off : 0);
       b.dx = nx - b.x; b.dz = nz - b.z; b.x = nx; b.z = nz; setBox(b); b.mesh.position.set(b.x, b.y, b.z);
     }
     if (b.k === "spin") { b.a += b.sp * dt; b.mesh.rotation.y = -b.a; }
@@ -382,7 +383,7 @@ function updateParts(dt) {
       else if (b.state === 2) { b.timer -= dt; if (b.timer <= 0) { b.state = 0; b.gone = false; b.mesh.visible = true; b.mesh.material.opacity = 0.85; } }
     } else if (b.k === "fall") {
       if (b.state === 1) { b.timer -= dt; b.mesh.position.x = b.x + (Math.random() - 0.5) * 0.08; if (b.timer <= 0) { b.state = 2; b.vy = 0; b.timer = 3; } }
-      else if (b.state === 2) { b.vy -= 30 * dt; const dy = b.vy * dt; b.y += dy; b.dy = dy; setBox(b); b.mesh.position.set(b.x, b.y, b.z); b.timer -= dt; if (b.timer < 1.6) { b.gone = true; b.mesh.visible = false; } if (b.timer <= 0) { b.state = 0; b.gone = false; b.y = b.by; setBox(b); b.mesh.position.set(b.x, b.y, b.z); b.mesh.visible = true; } }
+      else if (b.state === 2) { b.vy -= 30 * dt; const dy = b.vy * dt; b.y += dy; b.dy = dy; setBox(b); b.mesh.position.set(b.x, b.y, b.z); b.timer -= dt; if (b.timer < 1.6) { b.gone = true; b.mesh.visible = false; } if (b.timer <= 0) { b.state = 0; b.gone = false; b.y = b.oy; setBox(b); b.mesh.position.set(b.x, b.y, b.z); b.mesh.visible = true; } }
     } else if (b.k === "belt") { b.tex.offset.y -= (b.speed / 2) * dt; }
     else if (b.k === "pad" && b.ring) { b.pop = Math.max(0, (b.pop || 0) - dt * 3); b.ring.scale.setScalar(1 + Math.sin(T * 5) * 0.1 + b.pop * 0.6); }
     else if (b.k === "check" && b.glow) b.glow.material.opacity = b.s <= S.cp ? 0.1 : 0.15 + Math.sin(T * 3) * 0.08;
