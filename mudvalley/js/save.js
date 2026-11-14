@@ -45,7 +45,8 @@ export function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } c
 export function wipe() { try { localStorage.removeItem(KEY); } catch {} }
 export const uid = () => S.nextId++;
 // garage room: your best house decides how many vehicles you can own
-export const slots = () => Math.max(...S.houses.map((id) => (HOUSES.find((h) => h.id === id) || HOUSES[0]).slots));
+// every house you own adds its garage room (own them all = room for a LOT of rides)
+export const slots = () => S.houses.reduce((n, id) => n + (HOUSES.find((h) => h.id === id) || HOUSES[0]).slots, 0);
 export const carByUid = (u) => S.cars.find((c) => c.uid === u);
 export function pay(n) { S.money += Math.round(n); S.stats.earned += Math.max(0, Math.round(n)); }
 export function spend(n) { if (S.money < n) return false; S.money -= n; return true; }

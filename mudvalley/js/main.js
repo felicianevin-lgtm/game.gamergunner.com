@@ -612,8 +612,8 @@ export const GAME = {
   // sell a house back for 60% of what it cost (you need room left for all your rides)
   sellHouse(h) {
     if (!S.houses.includes(h.id) || !h.price) return false;
-    const rest = S.houses.filter((x) => x !== h.id), room = Math.max(...rest.map((id) => (HOUSES.find((q) => q.id === id) || HOUSES[0]).slots));
-    if (S.cars.length > room) { SFX.nope(); H.toast("Too many rides!", "Your other houses only fit " + room + " rides. Sell " + (S.cars.length - room) + " first.", "warn", 3500); return false; }
+    const rest = S.houses.filter((x) => x !== h.id), room = rest.reduce((n, id) => n + (HOUSES.find((q) => q.id === id) || HOUSES[0]).slots, 0);
+    if (S.cars.length > room) { SFX.nope(); H.toast("Too many rides!", "Your other garages only fit " + room + " rides. Sell " + (S.cars.length - room) + " first.", "warn", 3500); return false; }
     S.houses = rest;
     if (S.home === h.id) S.home = rest.reduce((a, id) => ((HOUSES.find((q) => q.id === id) || HOUSES[0]).slots > (HOUSES.find((q) => q.id === a) || HOUSES[0]).slots ? id : a), "lot");
     const cash = Math.round(h.price * 0.6); pay(cash); houseSigns(); SFX.cash(); H.bumpMoney(); H.toast("🏠 Sold " + h.name, "+" + money(cash), "cash", 3000); save(); return true;
@@ -636,7 +636,7 @@ export const GAME = {
     const need = [o.frame, o.motor, o.tires, "p_seat", ...(fr && fr.body ? ["p_body"] : []), ...(o.lift ? ["p_lift"] : [])];
     const cnt = {}; for (const id of need) cnt[id] = (cnt[id] || 0) + 1;
     if (!fr || !mo || !ti || Object.entries(cnt).some(([id, k]) => have(id) < k)) { SFX.nope(); H.toast("Missing parts!", "Check the list: you need every part.", "warn"); return false; }
-    if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Sell a ride or buy a bigger house first.", "warn"); SFX.nope(); return false; }
+    if (S.cars.length >= slots()) { H.toast("All your garages are full!", "Sell a ride or buy another house first.", "warn"); SFX.nope(); return false; }
     for (const id of need) addPart(id, -1);
     const s = newCar(fr.model, uid()); Object.assign(s, { paint: o.color ?? s.paint, engine: mo.lv, maxEngine: mo.lv, tires: ti.tires, ownTires: ["street", ti.tires], lift: o.lift ? 1 : 0, maxLift: o.lift ? 1 : 0, rust: 0, built: true,
       rims: o.rims || "chrome", neon: o.neon || 0, ownNeon: [0, o.neon || 0], name: String(o.name || "").trim().slice(0, 24) || undefined, flatbed: !!(o.flat && BEDS[fr.model]), ownFlat: !!(o.flat && BEDS[fr.model]) });
