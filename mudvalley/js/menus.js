@@ -17,7 +17,7 @@ import * as IN from "./input.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { sxs: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵";
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);

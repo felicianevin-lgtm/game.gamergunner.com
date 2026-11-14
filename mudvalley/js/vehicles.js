@@ -18,6 +18,7 @@ export const VEHICLES = [
   { id: "bike125", name: "Scrambler 125 Dirt Bike", price: 1400, top: 24, acc: 13, grip: 7, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xe0203a, engine: 200, open: true, bike: true, crawl: 0.87, desc: "A 125cc two-stroke dirt bike. Between a pit bike and a full-size bike: light, snappy, great on trails." },
   { id: "sport300", name: "Viper 300 Sport Bike", price: 6500, top: 42, acc: 16, grip: 8.5, turn: 2.5, off: { dirt: 0.45, grass: 0.4, mud: 0.2 }, size: 1, tow: 0, color: 0x3ac04a, engine: 215, open: true, bike: true, crawl: 0.3, desc: "A real street sport bike with a full fairing. Quick and nimble on roads... NOT for mud!" },
   { id: "super1000", name: "Thunder 1000 Superbike", price: 19000, top: 60, acc: 22, grip: 9.2, turn: 2.4, off: { dirt: 0.35, grass: 0.3, mud: 0.15 }, size: 1, tow: 0, color: 0x1a4ad0, engine: 240, open: true, bike: true, crawl: 0.25, desc: "A 1000cc superbike. The fastest thing on two wheels. Hold on tight!" },
+  { id: "sxs", name: "Rattler 1000 Side-by-Side", price: 17000, top: 39, acc: 15, grip: 8, turn: 2.4, off: { dirt: 1, grass: 1, mud: 0.9 }, size: 2, tow: 1, color: 0xc81e2a, engine: 150, open: true, air: 0.85, crawl: 0.93, desc: "A long-travel sport side-by-side: two bucket seats, a roll cage, huge suspension and 30-inch tires. Built to fly through the desert!" },
   { id: "minitruck", name: "Mini Hauler", price: 2500, top: 24, acc: 8, grip: 7, turn: 2.3, off: { dirt: 0.85, grass: 0.8, mud: 0.6 }, size: 1, tow: 1, color: 0xf4f4f4, engine: 150, crawl: 0.6, desc: "A tiny work truck. Cheap, cute, and it even fits on a small trailer." },
   { id: "jeep", name: "Mud Hog 4x4", price: 5500, top: 31, acc: 10, grip: 7.5, turn: 2.0, off: { dirt: 0.97, grass: 0.93, mud: 0.86 }, size: 2, tow: 2, color: 0x2a7ad0, engine: 85, open: true, crawl: 0.95, desc: "Big tires, a snorkel and a light bar. Goes anywhere, pulls anything." },
   { id: "buggy", name: "Dune Hopper", price: 8000, top: 37, acc: 13.5, grip: 6.5, turn: 2.3, off: { dirt: 1, grass: 0.9, mud: 0.66 }, size: 2, tow: 1, color: 0xffd23a, engine: 140, open: true, air: 0.85, crawl: 0.75, desc: "A light dune buggy that flies off jumps. Fast on dirt!" },
@@ -51,8 +52,8 @@ export const LIFT_COST = [0, 400, 800, 1200];
 export const NEONS = [null, 0x3ad0ff, 0xff3ad8, 0x6aff3a, 0xffd23a, 0xff3a3a, 0xffffff];
 // trucks with a bed a dirt bike or quad can ride in (bed floor height + the middle of the bed, in the truck's own space)
 // (front/back = where the bed starts + ends: the flatbed mod swaps everything in there for a steel deck)
-export const BEDS = { crew: { y: 1.1, z: -2.55, front: -1.48, back: -3.62 }, pickup: { y: 1.02, z: -1.45, front: -0.42, back: -2.56 }, minitruck: { y: 0.82, z: -0.65, front: 0.44, back: -1.75 },
-  ranch: { y: 1.12, z: -1.95, front: -0.8, back: -3.14 }, trailboss: { y: 1.5, z: -1.7, front: -0.66, back: -2.8 } };
+export const BEDS = { crew: { y: 0.74, z: -2.55, front: -1.48, back: -3.62 }, pickup: { y: 0.72, z: -1.45, front: -0.42, back: -2.56 }, minitruck: { y: 0.56, z: -0.65, front: 0.44, back: -1.75 },
+  ranch: { y: 0.8, z: -1.95, front: -0.8, back: -3.14 }, trailboss: { y: 1.2, z: -1.7, front: -0.66, back: -2.8 } };
 export const FLATBED_PRICE = 800;
 // the flatbed mod: take the bed off, bolt on a flat steel deck with a headache rack, stake pockets and toolboxes
 function flatbed(C, B) {
@@ -86,7 +87,7 @@ export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
-  return { uid, id, paint: v.color, rims: "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null };
+  return { uid, id, paint: v.color, rims: id === "sxs" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "sxs" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null };
 }
 // final driving numbers after upgrades
 export function tune(car) {
@@ -344,15 +345,24 @@ function shell(C, o, mats) {
   (k, A, B) => (k === 9 ? 2 : k === 2 || k === 6 ? (A.g && B.g && tall(A) && tall(B) ? 1 : 0) : k >= 3 && k <= 5 ? ((A.g || B.g) && steep(A, B) && (k === 4 || tall(A) || tall(B)) ? 1 : 0) : 0),
   mats || [C.paint, M.glass, M.dark], true);
 }
-// a pickup bed (an open U: outside skin, rail caps, a liner inside) with arches for the back wheels
+// a pickup bed: an open box with an outside skin, rail caps, a dark liner, a DEEP floor down by the frame, and the back
+// wheel wells bulging up inside it on both sides (like a real truck). The front wall + inside of the tailgate are lined too.
 function bedShell(C, o) {
-  const zs = new Set([o.zf, o.zb]); for (let z = o.zf; z > o.zb; z -= 0.1) zs.add(+z.toFixed(3));
-  for (const [zw, r] of o.wheels || []) for (let k = -12; k <= 12; k++) zs.add(+(zw + (k / 12) * (r + 0.08)).toFixed(3));
-  const Z = [...zs].filter((z) => z <= o.zf && z >= o.zb).sort((a, b) => b - a), w = o.w, wb = w - 0.03, i = w - 0.09;
-  const S = Z.map((z) => { let bot = o.b; for (const [zw, r] of o.wheels || []) { const R = r + 0.08, d = z - zw; if (Math.abs(d) < R) bot = Math.max(bot, r + Math.sqrt(R * R - d * d)); } return { z, b: Math.min(bot, o.floor - 0.04) }; });
-  const mats = [C.paint, M.trim, M.dark, M.liner];
-  return loft(C.body, S, (q) => [[wb - 0.05, q.b], [wb, q.b + 0.05], [w, o.rail], [i, o.rail], [i, o.floor], [-i, o.floor], [-i, o.rail], [-w, o.rail], [-wb, q.b + 0.05], [-(wb - 0.05), q.b]],
-    (k) => (k === 9 ? 2 : k === 2 || k === 6 ? 1 : k >= 3 && k <= 5 ? 3 : 0), mats, false);
+  const zs = new Set([o.zf, o.zb]); for (let z = o.zf; z > o.zb; z -= 0.08) zs.add(+z.toFixed(3));
+  for (const [zw, r] of o.wheels || []) for (let k = -14; k <= 14; k++) zs.add(+(zw + (k / 14) * (r + 0.1)).toFixed(3));
+  const Z = [...zs].filter((z) => z <= o.zf && z >= o.zb).sort((a, b) => b - a), w = o.w, wb = w - 0.03, i = w - 0.08, ww = o.well ?? 0.28;
+  const S = Z.map((z) => {
+    let arch = 0; for (const [zw, r] of o.wheels || []) { const R = r + 0.08, d = z - zw; if (Math.abs(d) < R) arch = Math.max(arch, r + Math.sqrt(R * R - d * d)); }
+    const wt = arch ? Math.min(o.rail - 0.12, Math.max(o.floor, arch + 0.04)) : o.floor; // (the wheel well top)
+    return { z, wt, b: Math.min(Math.max(o.b, arch), wt - 0.03, o.rail - 0.15) };
+  });
+  const mats = [C.paint, M.trim, M.dark, M.liner], f = o.floor;
+  const S2 = loft(C.body, S, (q) => [[wb - 0.05, q.b], [wb, q.b + 0.05], [w, o.rail], [i, o.rail], [i, q.wt], [i - ww, q.wt], [i - ww, f], [-(i - ww), f], [-(i - ww), q.wt], [-i, q.wt], [-i, o.rail], [-w, o.rail], [-wb, q.b + 0.05], [-(wb - 0.05), q.b]],
+    (k) => (k === 13 ? 2 : k === 2 || k === 10 ? 1 : k >= 3 && k <= 9 ? 3 : 0), mats, false);
+  bx(C.body, i * 2, o.rail - f, 0.04, 0, (o.rail + f) / 2, o.zf - 0.02, M.liner); // the front wall (inside)
+  bx(C.body, i * 2, o.rail - f, 0.03, 0, (o.rail + f) / 2, o.zb + 0.03, M.liner); // the inside of the tailgate
+  bx(C.body, (i - ww) * 2, f - Math.min(...S.map((q) => q.b)) + 0.02, (o.zf - o.zb) * 0.98, 0, (f + Math.min(...S.map((q) => q.b))) / 2, (o.zf + o.zb) / 2, M.dark); // under the floor
+  return S2;
 }
 // join the cross-sections into meshes (one per material), smooth curves + sharp creases
 function loft(parent, S, sec, matOf, mats, caps) {
@@ -412,7 +422,7 @@ const BUILD = {
     C.len = 5.2; C.wid = 2.1; C.seat.set(0.42, 0.95, 0.3); C.hitch.set(0, 0.62, -2.62); C.hood = V3(0, 1.47, 1.75);
     bx(b, 1.5, 0.24, 4.9, 0, 0.5, 0, M.dark); // frame
     const S = shell(C, { zf: 2.6, zb: -0.38, w: 1.0, b: 0.62, s: 1.4, hood: 1.44, cowl: 1.48, roof: 2.04, ws: 0.95, wt: 0.66, rb: -0.28, wheels: [[1.6, 0.52]], nose: 0.1, drop: 0.04, roofW: 0.9, hoodW: 0.98, taper: 0.03 });
-    bedShell(C, { zf: -0.42, zb: -2.56, w: 1.0, b: 0.62, rail: 1.4, floor: 1.02, wheels: [[-1.55, 0.52]] });
+    bedShell(C, { zf: -0.42, zb: -2.56, w: 1.0, b: 0.62, rail: 1.4, floor: 0.72, wheels: [[-1.55, 0.52]] });
     bx(b, 1.96, 0.76, 0.07, 0, 1.02, -2.555, P); bx(b, 1.82, 0.36, 0.06, 0, 1.2, -0.46, P); // tailgate + bed front
     backGlass(C, S, 0.08); seam(C, S, 0.88); seam(C, S, -0.32); handle(C, S, -0.14);
     for (const s of [-1, 1]) { const q = at(S, 0.82); bx(b, 0.06, 0.22, 0.18, s * (q.w + 0.13), q.s + 0.14, 0.82, M.chrome); bx(b, 0.14, 0.03, 0.03, s * (q.w + 0.06), q.s + 0.05, 0.84, M.chrome); }
@@ -514,7 +524,7 @@ const BUILD = {
     bx(b, 1.6, 0.4, 4.6, 0, 1.25, 0, M.dark);
     for (const z of [1.55, -1.55]) { bx(b, 2.4, 0.18, 0.3, 0, 1.15, z, M.trim); for (const s of [-1, 1]) { tube(b, V3(s * 0.7, 1.2, z + 0.2), V3(s * 1.0, 2.2, z + 0.1), 0.09, M.chrome); tube(b, V3(s * 0.7, 1.2, z - 0.2), V3(s * 1.0, 2.2, z - 0.1), 0.09, M.chrome); } }
     const S = shell(C, { zf: 2.42, zb: -0.4, w: 1.1, b: 2.0, s: 2.72, hood: 2.78, cowl: 2.84, roof: 3.45, ws: 1.05, wt: 0.55, rb: -0.32, wheels: [], nose: 0.18, drop: 0.06, roofW: 0.98, hoodW: 1.05 });
-    bedShell(C, { zf: -0.44, zb: -2.42, w: 1.1, b: 2.0, rail: 2.72, floor: 2.3, wheels: [] }); bx(b, 2.16, 0.72, 0.07, 0, 2.36, -2.415, P);
+    bedShell(C, { zf: -0.44, zb: -2.42, w: 1.1, b: 2.0, rail: 2.72, floor: 2.06, wheels: [] }); bx(b, 2.16, 0.72, 0.07, 0, 2.36, -2.415, P);
     backGlass(C, S); seam(C, S, 0.95); seam(C, S, -0.3); handle(C, S, -0.12); mirror(C, S, 0.9, true); truckGrille(C, S, { y: 2.74, w: 1.6, h: 0.5, bars: 3 });
     for (const s of [-1, 1]) for (let i = 0; i < 4; i++) bx(b, 0.04, 0.22, 0.8 - i * 0.15, s * 1.11, 2.35 + (i % 2) * 0.12, 1.2 - i * 0.6, [M.tail, M.flame][i % 2]); // flame stripes
     bx(b, 2.3, 0.3, 0.3, 0, 2.1, 2.5, M.chrome); bx(b, 2.3, 0.3, 0.3, 0, 2.1, -2.5, M.chrome);
@@ -530,7 +540,7 @@ const BUILD = {
     C.len = 6.65; C.wid = 2.12; C.seat.set(0.45, 1.02, 0.1); C.hitch.set(0, 0.62, -3.76); C.hood = V3(0, 1.57, 2.1);
     bx(b, 1.5, 0.22, 6.3, 0, 0.5, -0.45, M.dark); // frame
     const S = shell(C, { zf: 3.0, zb: -1.44, w: 1.03, b: 0.62, s: 1.4, hood: 1.52, cowl: 1.58, roof: 2.04, ws: 1.18, wt: 0.4, rb: -1.32, wheels: [[1.92, 0.52]], nose: 0.2, drop: 0.06, roofW: 0.9, hoodW: 0.99, taper: 0.05 });
-    bedShell(C, { zf: -1.48, zb: -3.62, w: 1.03, b: 0.62, rail: 1.42, floor: 1.1, wheels: [[-2.4, 0.52]] }); // (a 7 ft bed)
+    bedShell(C, { zf: -1.48, zb: -3.62, w: 1.03, b: 0.62, rail: 1.42, floor: 0.74, wheels: [[-2.4, 0.52]] }); // (a 7 ft bed)
     bx(b, 2.02, 0.8, 0.07, 0, 1.02, -3.615, P); bx(b, 0.4, 0.05, 0.03, 0, 1.3, -3.655, M.dark); bx(b, 1.88, 0.32, 0.06, 0, 1.26, -1.5, P); // tailgate + bed front
     backGlass(C, S); pillar(C, S, -0.42, M.dark, 0.14); pillar(C, S, -1.36, P, 0.16);
     for (const z of [1.13, -0.42, -1.36]) seam(C, S, z); handle(C, S, -0.22); handle(C, S, -1.16); mirror(C, S, 1.02, true);
@@ -568,6 +578,42 @@ const BUILD = {
   bike125(C) { if (BIKE) return realBike(C, 0.86); BUILD.bike(C); },
   sport300(C) { sportBike(C, 1.2, false); },
   super1000(C) { sportBike(C, 1.27, true); },
+  // a sport side-by-side (UTV): molded hood + fenders, two bucket seats, half doors, a roll cage with a roof,
+  // a cargo box, LED headlights, long-travel A-arms with coil-over shocks, 30-inch tires on black wheels
+  sxs(C) {
+    const b = C.body, P = C.paint;
+    C.len = 3.5; C.wid = 1.8; C.seat.set(0.36, 0.6, -0.12); C.hitch.set(0, 0.5, -1.82); C.hood = null;
+    bx(b, 1.0, 0.16, 2.9, 0, 0.48, 0, M.dark); bx(b, 1.42, 0.06, 1.35, 0, 0.6, -0.1, M.dark); // chassis + floor
+    pod(C, { zf: 1.78, zb: 0.5, w: 0.8, b: 0.6, tops: [[1.78, 0.74], [1.55, 0.94], [0.95, 1.04], [0.5, 1.1]], round: 0.28, top: 0.86 }); // hood + front fenders
+    pod(C, { zf: -0.72, zb: -1.68, w: 0.8, b: 0.6, tops: [[-0.72, 0.98], [-1.05, 1.02], [-1.68, 0.94]], round: 0.16, top: 0.92 }); // rear fenders
+    // cargo box
+    bx(b, 1.1, 0.05, 0.78, 0, 1.03, -1.22, M.dark); for (const s of [-1, 1]) bx(b, 0.05, 0.24, 0.78, s * 0.55, 1.16, -1.22, M.dark); bx(b, 1.1, 0.24, 0.05, 0, 1.16, -1.6, M.dark); bx(b, 1.1, 0.24, 0.05, 0, 1.16, -0.84, M.dark);
+    // cockpit: dash, steering wheel, two bucket seats, a center console, half doors
+    bx(b, 1.36, 0.26, 0.28, 0, 1.0, 0.56, M.dark);
+    const sw = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.025, 6, 16), M.dark); sw.position.set(0.36, 1.12, 0.36); sw.rotation.x = -0.9; b.add(sw); tube(b, V3(0.36, 1.0, 0.5), V3(0.36, 1.12, 0.36), 0.03, M.dark);
+    for (const x of [-0.36, 0.36]) { bx(b, 0.46, 0.14, 0.5, x, 0.72, -0.18, M.seat); bx(b, 0.46, 0.66, 0.12, x, 1.05, -0.46, M.seat, 0.15); bx(b, 0.5, 0.12, 0.14, x, 1.4, -0.52, M.seat, 0.15); }
+    bx(b, 0.2, 0.26, 0.8, 0, 0.76, 0.0, M.dark);
+    for (const s of [-1, 1]) { bx(b, 0.05, 0.42, 0.95, s * 0.8, 0.86, -0.12, P); bx(b, 0.04, 0.3, 0.7, s * 0.775, 0.84, -0.12, M.dark); }
+    // roll cage + roof
+    for (const s of [-1, 1]) {
+      tube(b, V3(s * 0.74, 1.05, 0.55), V3(s * 0.66, 1.88, 0.18), 0.04, M.dark); tube(b, V3(s * 0.66, 1.88, 0.18), V3(s * 0.66, 1.88, -0.62), 0.04, M.dark);
+      tube(b, V3(s * 0.66, 1.88, -0.62), V3(s * 0.76, 0.98, -0.78), 0.04, M.dark); tube(b, V3(s * 0.7, 1.4, -0.7), V3(0, 1.05, -0.74), 0.03, M.dark);
+    }
+    tube(b, V3(-0.66, 1.88, 0.18), V3(0.66, 1.88, 0.18), 0.04, M.dark); tube(b, V3(-0.66, 1.88, -0.62), V3(0.66, 1.88, -0.62), 0.04, M.dark);
+    bx(b, 1.36, 0.035, 0.86, 0, 1.91, -0.22, M.dark); // roof
+    bx(b, 1.0, 0.08, 0.1, 0, 1.9, 0.24, M.dark); bx(b, 0.96, 0.05, 0.03, 0, 1.9, 0.3, M.light); // roof light bar
+    // front: grille, mean LED headlights, a tube bumper
+    bx(b, 0.9, 0.22, 0.05, 0, 0.8, 1.76, M.dark);
+    for (const s of [-1, 1]) { bx(b, 0.3, 0.05, 0.06, s * 0.45, 0.92, 1.66, M.light, 0, -s * 0.35); bx(b, 0.16, 0.04, 0.05, s * 0.6, 0.86, 1.6, M.light, 0, -s * 0.5); bx(b, 0.12, 0.08, 0.05, s * 0.68, 0.95, -1.69, M.tail); }
+    tube(b, V3(-0.55, 0.62, 1.9), V3(0.55, 0.62, 1.9), 0.04, M.dark); for (const s of [-1, 1]) tube(b, V3(s * 0.55, 0.62, 1.9), V3(s * 0.45, 0.55, 1.6), 0.04, M.dark);
+    // long-travel suspension: A-arms + coil-over shocks at every wheel
+    for (const z of [1.18, -1.18]) for (const s of [-1, 1]) {
+      tube(b, V3(s * 0.42, 0.46, z + 0.18), V3(s * 0.7, 0.36, z), 0.03, M.trim); tube(b, V3(s * 0.42, 0.46, z - 0.18), V3(s * 0.7, 0.36, z), 0.03, M.trim);
+      tube(b, V3(s * 0.4, 1.0, z * 0.9), V3(s * 0.68, 0.44, z), 0.045, M.fork); tube(b, V3(s * 0.45, 0.88, z * 0.92), V3(s * 0.6, 0.6, z * 0.97), 0.06, M.red);
+    }
+    C.pipes.push(V3(0.35, 0.78, -1.7));
+    for (const [x, z, f] of [[0.82, 1.18, 1], [-0.82, 1.18, 1], [0.82, -1.18, 0], [-0.82, -1.18, 0]]) wheel(C, x, z, 0.36, 0.3, f);
+  },
   atv(C) { quad(C, 1, 0.36); },
   sportquad(C) { quad(C, 0.95, 0.34, { sport: true }); },
   bigquad(C) { quad(C, 1.18, 0.44, { racks: true }); },
@@ -584,7 +630,7 @@ const BUILD = {
     C.len = 3.6; C.wid = 1.5; C.seat.set(0.3, 0.72, 0.95); C.hitch.set(0, 0.45, -1.85); C.hood = null;
     bx(b, 1.2, 0.2, 3.4, 0, 0.42, 0, M.dark);
     const S = shell(C, { zf: 1.78, zb: 0.48, w: 0.74, b: 0.42, s: 1.12, hood: 1.15, cowl: 1.17, roof: 1.84, ws: 1.72, wt: 1.38, rb: 0.56, wheels: [[1.05, 0.34]], nose: 0.05, drop: 0.05, roofW: 0.68, hoodW: 0.72, taper: 0.03 });
-    bedShell(C, { zf: 0.44, zb: -1.75, w: 0.74, b: 0.42, rail: 1.05, floor: 0.82, wheels: [[-1.0, 0.34]] });
+    bedShell(C, { zf: 0.44, zb: -1.75, w: 0.74, b: 0.42, rail: 1.05, floor: 0.56, wheels: [[-1.0, 0.34]], well: 0.2 });
     bx(b, 1.44, 0.6, 0.06, 0, 0.75, -1.745, P); bx(b, 1.3, 0.22, 0.06, 0, 0.94, 0.4, P);
     backGlass(C, S, 0.06); seam(C, S, 1.6); seam(C, S, 0.6); handle(C, S, 0.7); mirror(C, S, 1.6);
     for (const s of [-1, 1]) { bx(b, 0.22, 0.14, 0.04, s * 0.5, 0.82, 1.79, M.light); bx(b, 0.14, 0.22, 0.05, s * 0.62, 0.85, -1.76, M.tail); }
@@ -598,7 +644,7 @@ const BUILD = {
     C.len = 6.3; C.wid = 2.6; C.seat.set(0.45, 1.08, 0.45); C.hitch.set(0, 0.68, -3.25); C.hood = V3(0, 1.62, 2.3);
     bx(b, 1.6, 0.26, 6.0, 0, 0.62, 0, M.dark);
     const S = shell(C, { zf: 3.14, zb: -0.76, w: 1.04, b: 0.68, s: 1.46, hood: 1.58, cowl: 1.64, roof: 2.12, ws: 1.34, wt: 0.6, rb: -0.64, wheels: [[2.05, 0.56]], nose: 0.2, drop: 0.06, roofW: 0.92, hoodW: 1.0, taper: 0.05 });
-    bedShell(C, { zf: -0.8, zb: -3.14, w: 1.04, b: 0.68, rail: 1.46, floor: 1.12, wheels: [] });
+    bedShell(C, { zf: -0.8, zb: -3.14, w: 1.04, b: 0.68, rail: 1.46, floor: 0.8, wheels: [[-1.95, 0.56]] });
     bx(b, 2.04, 0.78, 0.07, 0, 1.07, -3.135, P); bx(b, 1.9, 0.32, 0.06, 0, 1.3, -0.84, P);
     for (const s of [-1, 1]) { const f = new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.64, 0.36, 20, 1, false, 0, Math.PI), P); f.rotation.z = Math.PI / 2; f.position.set(s * 1.2, 0.5, -1.95); b.add(f); } // wide back fenders
     backGlass(C, S); pillar(C, S, 0.3, M.dark, 0.14);
@@ -616,7 +662,7 @@ const BUILD = {
     C.len = 5.7; C.wid = 2.5; C.seat.set(0.45, 1.6, 0.25); C.hitch.set(0, 1.0, -2.95); C.hood = V3(0, 2.07, 1.9);
     bx(b, 1.5, 0.3, 5.2, 0, 1.0, 0, M.dark); for (const z of [1.75, -1.65]) { bx(b, 1.9, 0.2, 0.25, 0, 0.75, z, M.trim); for (const s of [-1, 1]) tube(b, V3(s * 0.5, 0.8, z), V3(s * 0.45, 1.15, z + 0.25), 0.07, M.red); }
     const S = shell(C, { zf: 2.85, zb: -0.62, w: 1.03, b: 1.15, s: 1.92, hood: 2.0, cowl: 2.06, roof: 2.62, ws: 1.05, wt: 0.35, rb: -0.52, wheels: [[1.75, 0.74]], nose: 0.18, drop: 0.05, roofW: 0.9, hoodW: 0.98 });
-    bedShell(C, { zf: -0.66, zb: -2.8, w: 1.03, b: 1.15, rail: 1.92, floor: 1.5, wheels: [[-1.65, 0.74]] });
+    bedShell(C, { zf: -0.66, zb: -2.8, w: 1.03, b: 1.15, rail: 1.92, floor: 1.2, wheels: [[-1.65, 0.74]] });
     bx(b, 2.0, 0.78, 0.07, 0, 1.53, -2.795, P); bx(b, 1.88, 0.42, 0.06, 0, 1.71, -0.7, P);
     backGlass(C, S); seam(C, S, 0.95); seam(C, S, -0.3); handle(C, S, -0.1); mirror(C, S, 0.88, true);
     flare(C, S, 1.75, 0.74, M.dark, 0.09); flare(C, S, -1.65, 0.74, M.dark, 0.09);
@@ -634,7 +680,7 @@ const BUILD = {
     C.len = 5.6; C.wid = 2.5; C.seat.set(0.4, 1.02, -0.2); C.hitch = null; C.hood = V3(0, 1.5, 1.7);
     bx(b, 1.4, 0.26, 4.8, 0, 0.85, 0, M.dark);
     const S = shell(C, { zf: 2.72, zb: -0.95, w: 1.0, b: 0.95, s: 1.5, hood: 1.42, cowl: 1.6, roof: 2.25, ws: 0.72, wt: 0.12, rb: -0.85, wheels: [[1.8, 0.66]], nose: 0.5, drop: 0.14, roofW: 0.84, hoodW: 0.95 });
-    bedShell(C, { zf: -0.98, zb: -2.62, w: 1.0, b: 0.95, rail: 1.45, floor: 1.2, wheels: [[-1.75, 0.66]] });
+    bedShell(C, { zf: -0.98, zb: -2.62, w: 1.0, b: 0.95, rail: 1.45, floor: 1.0, wheels: [[-1.75, 0.66]] });
     bx(b, 1.96, 0.46, 0.06, 0, 1.2, -2.615, P);
     flare(C, S, 1.8, 0.66, P, 0.13); flare(C, S, -1.75, 0.66, P, 0.13); backGlass(C, S); seam(C, S, 0.6); handle(C, S, -0.7);
     for (const s of [-1, 1]) { tube(b, V3(s * 0.8, 1.6, -1.0), V3(s * 0.8, 2.2, -1.9), 0.05, M.trim); tube(b, V3(s * 0.8, 2.2, -1.9), V3(s * 0.8, 1.45, -2.6), 0.05, M.trim); }

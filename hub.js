@@ -722,7 +722,7 @@
       };
       drawIdeas();
       // 🏆 Mud Valley builds: review them, pick 3 winners (they show up in the game's dealership)
-      var MV_NAMES = { atv: "Quad", bike: "Dirt bike", sportquad: "Sport quad", bigquad: "Big quad", bike450: "Race dirt bike", pickup: "Pickup", jeep: "Jeep", buggy: "Dune buggy", sports: "Sports car", hyper: "Hypercar", minitruck: "Mini truck", ranch: "Ranch truck", trailboss: "Lifted truck", prerunner: "Prerunner", monster: "Monster truck", swamp: "Swamp truck", dumper: "Dump truck", crew: "Crew cab pickup", foxhatch: "80s hatchback", pitbike: "Pit bike", bike125: "125 dirt bike", sport300: "300 sport bike", super1000: "1000 superbike" };
+      var MV_NAMES = { atv: "Quad", bike: "Dirt bike", sportquad: "Sport quad", bigquad: "Big quad", bike450: "Race dirt bike", pickup: "Pickup", jeep: "Jeep", buggy: "Dune buggy", sports: "Sports car", hyper: "Hypercar", minitruck: "Mini truck", ranch: "Ranch truck", trailboss: "Lifted truck", prerunner: "Prerunner", monster: "Monster truck", swamp: "Swamp truck", dumper: "Dump truck", crew: "Crew cab pickup", foxhatch: "80s hatchback", sxs: "Side-by-side", pitbike: "Pit bike", bike125: "125 dirt bike", sport300: "300 sport bike", super1000: "1000 superbike" };
       var mvRow = function (x, win) {
         var col = "#" + (x.paint || 0).toString(16).padStart(6, "0");
         return '<div class="person"><span class="person-main"><span class="avatar" style="background:' + col + ';border-radius:8px"></span><span><b>' + esc(x.name) + "</b><small>" + esc(MV_NAMES[x.base] || x.base) + " by " + esc(x.by) +
