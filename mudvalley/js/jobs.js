@@ -87,7 +87,7 @@ export class Jobs {
     const bonus = [];
     if (!j.late) { const b = round5(base * 0.3 * Math.max(0, 1 - j.t / j.time)); if (b > 0) { bonus.push(["Speed bonus", b]); pay += b; } }
     if (j.crashes === 0) { const b = round5(base * 0.15); bonus.push([j.type === "taxi" ? "Smooth ride tip" : "No crashes", b]); pay += b; }
-    if (j.type === "pizza" && ["bike", "atv", "bike450", "sportquad", "bigquad"].includes(this.api.vehicleId())) { const b = round5(base * 0.25); bonus.push(["Bike tip", b]); pay += b; }
+    if (j.type === "pizza" && ["bike", "atv", "bike450", "sportquad", "bigquad", "pitbike", "sport300", "super1000"].includes(this.api.vehicleId())) { const b = round5(base * 0.25); bonus.push(["Bike tip", b]); pay += b; }
     this.active = null;
     this.api.ended(j, true, pay, bonus);
   }

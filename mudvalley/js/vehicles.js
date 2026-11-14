@@ -14,6 +14,9 @@ export const VEHICLES = [
   { id: "sportquad", name: "Sand Viper Sport Quad", price: 3500, top: 30, acc: 15, grip: 7.5, turn: 2.6, off: { dirt: 1, grass: 0.95, mud: 0.75 }, size: 1, tow: 0, color: 0xe0203a, engine: 165, open: true, quad: true, crawl: 0.86, desc: "A light, fast sport quad. Wheelies (T) and burnouts (hold W + S)!" },
   { id: "bigquad", name: "Big Muddy Quad", price: 4800, top: 24, acc: 12, grip: 8, turn: 2.3, off: { dirt: 1, grass: 1, mud: 0.95 }, size: 1, tow: 1, color: 0x4a6a2a, engine: 110, open: true, quad: true, crawl: 0.97, desc: "A big 4x4 quad with racks and huge mud tires. Nothing stops it." },
   { id: "bike450", name: "Thumper 450", price: 4200, top: 33, acc: 17, grip: 7.2, turn: 2.6, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 1, tow: 0, color: 0x2a7ad0, engine: 175, open: true, bike: true, crawl: 0.9, desc: "A race dirt bike. Faster than the Dirt Rocket and SUPER good at wheelies." },
+  { id: "pitbike", name: "Pit Rat 110 Pit Bike", price: 900, top: 19, acc: 11, grip: 7, turn: 2.9, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xffd23a, engine: 230, open: true, bike: true, crawl: 0.85, desc: "A little 110cc pit bike. Small, light and SO much fun in the dirt." },
+  { id: "sport300", name: "Viper 300 Sport Bike", price: 6500, top: 42, acc: 16, grip: 8.5, turn: 2.5, off: { dirt: 0.45, grass: 0.4, mud: 0.2 }, size: 1, tow: 0, color: 0x3ac04a, engine: 215, open: true, bike: true, crawl: 0.3, desc: "A real street sport bike with a full fairing. Quick and nimble on roads... NOT for mud!" },
+  { id: "super1000", name: "Thunder 1000 Superbike", price: 19000, top: 60, acc: 22, grip: 9.2, turn: 2.4, off: { dirt: 0.35, grass: 0.3, mud: 0.15 }, size: 1, tow: 0, color: 0x1a4ad0, engine: 240, open: true, bike: true, crawl: 0.25, desc: "A 1000cc superbike. The fastest thing on two wheels. Hold on tight!" },
   { id: "minitruck", name: "Mini Hauler", price: 2500, top: 24, acc: 8, grip: 7, turn: 2.3, off: { dirt: 0.85, grass: 0.8, mud: 0.6 }, size: 1, tow: 1, color: 0xf4f4f4, engine: 150, crawl: 0.6, desc: "A tiny work truck. Cheap, cute, and it even fits on a small trailer." },
   { id: "jeep", name: "Mud Hog 4x4", price: 5500, top: 31, acc: 10, grip: 7.5, turn: 2.0, off: { dirt: 0.97, grass: 0.93, mud: 0.86 }, size: 2, tow: 2, color: 0x2a7ad0, engine: 85, open: true, crawl: 0.95, desc: "Big tires, a snorkel and a light bar. Goes anywhere, pulls anything." },
   { id: "buggy", name: "Dune Hopper", price: 8000, top: 37, acc: 13.5, grip: 6.5, turn: 2.3, off: { dirt: 1, grass: 0.9, mud: 0.66 }, size: 2, tow: 1, color: 0xffd23a, engine: 140, open: true, air: 0.85, crawl: 0.75, desc: "A light dune buggy that flies off jumps. Fast on dirt!" },
@@ -24,7 +27,7 @@ export const VEHICLES = [
   { id: "prerunner", name: "Desert Runner Trophy Truck", price: 28000, top: 42, acc: 14, grip: 7, turn: 2.1, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 2, tow: 0, color: 0xff7a1a, engine: 105, air: 0.85, crawl: 0.82, desc: "A race truck with long springs. Flies over bumps and jumps at full speed." },
   { id: "swamp", name: "Swamp Crawler 6x6", price: 32000, top: 28, acc: 9, grip: 8, turn: 1.6, off: { dirt: 1, grass: 1, mud: 1 }, size: 9, tow: 2, color: 0x4a5a3a, engine: 55, crawl: 1, desc: "A giant 6-wheel-drive army-style truck. Mud, rivers, mountains... nothing stops it." },
   { id: "hauler", name: "Big Bertha Hauler", price: 15000, top: 30, acc: 6.5, grip: 7, turn: 1.5, off: { dirt: 0.72, grass: 0.62, mud: 0.42 }, size: 9, tow: 2, color: 0x6a3ad0, engine: 50, crawl: 0.35, desc: "A giant semi truck. Slow to start, but pulls the big flatbed full of cars." },
-  { id: "crew", name: "Ridgeback 1500 Crew Cab", price: 14000, top: 38, acc: 11, grip: 8, turn: 1.9, off: { dirt: 0.85, grass: 0.78, mud: 0.58 }, size: 2, tow: 2, color: 0x9aa0aa, engine: 78, crawl: 0.62, desc: "A big, modern full-size crew cab pickup. Chrome grille, four doors, tows anything." },
+  { id: "crew", name: "Ridgeback 1500 Crew Cab (7 ft bed)", price: 14000, top: 38, acc: 11, grip: 8, turn: 1.9, off: { dirt: 0.85, grass: 0.78, mud: 0.58 }, size: 2, tow: 2, color: 0x9aa0aa, engine: 78, crawl: 0.62, desc: "A big, modern full-size crew cab pickup. Chrome grille, four doors, tows anything." },
   { id: "foxhatch", name: "Street Fox 5.0 Hatch", price: 11000, top: 46, acc: 15, grip: 8.5, turn: 2.2, off: { dirt: 0.45, grass: 0.38, mud: 0.22 }, size: 2, tow: 0, color: 0xe0203a, engine: 105, crawl: 0.3, desc: "A boxy 80s V8 hatchback. Light, loud and fast. Burnouts all day!" },
   { id: "monster", name: "Stomper Monster Truck", price: 22000, top: 33, acc: 11, grip: 7.5, turn: 1.8, off: { dirt: 1, grass: 1, mud: 0.93 }, size: 9, tow: 2, color: 0x2ac0a0, engine: 60, crawl: 1, desc: "HUGE wheels. Climbs anything, crushes mud, does big jumps." },
   // police cars (you get these when you join the police; they never show up at the dealership)
@@ -47,7 +50,7 @@ export const LIFT_COST = [0, 400, 800, 1200];
 export const NEONS = [null, 0x3ad0ff, 0xff3ad8, 0x6aff3a, 0xffd23a, 0xff3a3a, 0xffffff];
 // trucks with a bed a dirt bike or quad can ride in (bed floor height + the middle of the bed, in the truck's own space)
 // (front/back = where the bed starts + ends: the flatbed mod swaps everything in there for a steel deck)
-export const BEDS = { crew: { y: 1.1, z: -2.2, front: -1.48, back: -3.0 }, pickup: { y: 1.02, z: -1.45, front: -0.42, back: -2.56 }, minitruck: { y: 0.82, z: -0.65, front: 0.44, back: -1.75 },
+export const BEDS = { crew: { y: 1.1, z: -2.55, front: -1.48, back: -3.62 }, pickup: { y: 1.02, z: -1.45, front: -0.42, back: -2.56 }, minitruck: { y: 0.82, z: -0.65, front: 0.44, back: -1.75 },
   ranch: { y: 1.12, z: -1.95, front: -0.8, back: -3.14 }, trailboss: { y: 1.5, z: -1.7, front: -0.66, back: -2.8 } };
 export const FLATBED_PRICE = 800;
 // the flatbed mod: take the bed off, bolt on a flat steel deck with a headache rack, stake pockets and toolboxes
@@ -82,7 +85,7 @@ export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
-  return { uid, id, paint: v.color, rims: "chrome", tires: v.quad || v.bike || id === "monster" || id === "swamp" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null };
+  return { uid, id, paint: v.color, rims: "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null };
 }
 // final driving numbers after upgrades
 export function tune(car) {
@@ -158,12 +161,12 @@ const BIKE_MAT = {
   color_2829873: () => M.seat, color_2828838: () => M.tire, color_0: (C) => C.rimMat, color_15277357: () => M.chrome,
   color_10988977: () => M.frame, color_12561038: () => M.fork, color_14077624: () => M.engine, color_6383466: () => M.trim, color_16448250: () => M.white,
 };
-function bikeModel(C) {
+function bikeModel(C, sc = 1) {
   const b = C.body;
-  for (const p of BIKE.body) b.add(new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)));
+  for (const p of BIKE.body) { const m = new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)); m.scale.setScalar(sc); b.add(m); }
   for (const k of ["front", "back"]) {
-    const w = BIKE.wheels[k], pivot = new THREE.Group(); pivot.position.set(w.x, w.r, w.z);
-    const spin = new THREE.Group(); pivot.add(spin);
+    const w0 = BIKE.wheels[k], w = { x: w0.x * sc, z: w0.z * sc, r: w0.r * sc }, pivot = new THREE.Group(); pivot.position.set(w.x, w.r, w.z);
+    const spin = new THREE.Group(); pivot.add(spin); spin.scale.setScalar(sc);
     for (const p of BIKE[k]) { const m = new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)); m.castShadow = true; spin.add(m); }
     const knobs = new THREE.Group(); spin.add(knobs);
     C.root.add(pivot);
@@ -515,24 +518,24 @@ const BUILD = {
   crew(C) {
     // a modern full-size crew cab pickup: tall hood, big grille, four doors, tow mirrors, a real open bed
     const b = C.body, P = C.paint;
-    C.len = 6.0; C.wid = 2.12; C.seat.set(0.45, 1.02, 0.1); C.hitch.set(0, 0.62, -3.12); C.hood = V3(0, 1.57, 2.1);
-    bx(b, 1.5, 0.22, 5.6, 0, 0.5, -0.1, M.dark); // frame
+    C.len = 6.65; C.wid = 2.12; C.seat.set(0.45, 1.02, 0.1); C.hitch.set(0, 0.62, -3.76); C.hood = V3(0, 1.57, 2.1);
+    bx(b, 1.5, 0.22, 6.3, 0, 0.5, -0.45, M.dark); // frame
     const S = shell(C, { zf: 3.0, zb: -1.44, w: 1.03, b: 0.62, s: 1.4, hood: 1.52, cowl: 1.58, roof: 2.04, ws: 1.18, wt: 0.4, rb: -1.32, wheels: [[1.92, 0.52]], nose: 0.2, drop: 0.06, roofW: 0.9, hoodW: 0.99, taper: 0.05 });
-    bedShell(C, { zf: -1.48, zb: -3.0, w: 1.03, b: 0.62, rail: 1.42, floor: 1.1, wheels: [[-1.88, 0.52]] });
-    bx(b, 2.02, 0.8, 0.07, 0, 1.02, -2.995, P); bx(b, 0.4, 0.05, 0.03, 0, 1.3, -3.035, M.dark); bx(b, 1.88, 0.32, 0.06, 0, 1.26, -1.5, P); // tailgate + bed front
+    bedShell(C, { zf: -1.48, zb: -3.62, w: 1.03, b: 0.62, rail: 1.42, floor: 1.1, wheels: [[-2.4, 0.52]] }); // (a 7 ft bed)
+    bx(b, 2.02, 0.8, 0.07, 0, 1.02, -3.615, P); bx(b, 0.4, 0.05, 0.03, 0, 1.3, -3.655, M.dark); bx(b, 1.88, 0.32, 0.06, 0, 1.26, -1.5, P); // tailgate + bed front
     backGlass(C, S); pillar(C, S, -0.42, M.dark, 0.14); pillar(C, S, -1.36, P, 0.16);
     for (const z of [1.13, -0.42, -1.36]) seam(C, S, z); handle(C, S, -0.22); handle(C, S, -1.16); mirror(C, S, 1.02, true);
-    flare(C, S, 1.92, 0.52, M.trim, 0.05); flare(C, S, -1.88, 0.52, M.trim, 0.05);
+    flare(C, S, 1.92, 0.52, M.trim, 0.05); flare(C, S, -2.4, 0.52, M.trim, 0.05);
     truckGrille(C, S, { y: 1.44, w: 1.5, h: 0.6, bars: 3, cross: true });
     for (const s of [-1, 1]) {
       bx(b, 0.3, 0.18, 0.05, s * 0.84, 1.33, 2.99, M.light); bx(b, 0.32, 0.035, 0.06, s * 0.84, 1.22, 3.0, M.white); // headlights + LED strip
       bx(b, 0.16, 0.08, 0.05, s * 0.7, 0.72, 3.18, M.light); // fog lights
-      bx(b, 0.1, 0.46, 0.06, s * 0.98, 1.17, -3.0, M.tail); bx(b, 0.2, 0.06, 2.6, s * 1.08, 0.6, -0.15, M.trim); // taillights, running boards
+      bx(b, 0.1, 0.46, 0.06, s * 0.98, 1.17, -3.62, M.tail); bx(b, 0.2, 0.06, 2.6, s * 1.08, 0.6, -0.15, M.trim); // taillights, running boards
     }
     bx(b, 2.08, 0.3, 0.26, 0, 0.74, 3.06, M.chrome); bx(b, 1.7, 0.16, 0.22, 0, 0.52, 3.0, M.dark);
-    bx(b, 2.08, 0.26, 0.24, 0, 0.68, -3.1, M.chrome); bx(b, 0.18, 0.18, 0.3, 0, 0.6, -3.24, M.dark); bx(b, 0.32, 0.05, 0.04, 0, 1.99, -1.46, M.tail);
-    C.pipes.push(V3(-0.75, 0.52, -3.08));
-    for (const [x, z, f] of [[0.86, 1.92, 1], [-0.86, 1.92, 1], [0.86, -1.88, 0], [-0.86, -1.88, 0]]) wheel(C, x, z, 0.46, 0.34, f);
+    bx(b, 2.08, 0.26, 0.24, 0, 0.68, -3.72, M.chrome); bx(b, 0.18, 0.18, 0.3, 0, 0.6, -3.86, M.dark); bx(b, 0.32, 0.05, 0.04, 0, 1.99, -1.46, M.tail);
+    C.pipes.push(V3(-0.75, 0.52, -3.7));
+    for (const [x, z, f] of [[0.86, 1.92, 1], [-0.86, 1.92, 1], [0.86, -2.4, 0], [-0.86, -2.4, 0]]) wheel(C, x, z, 0.46, 0.34, f);
   },
   // a boxy 80s V8 hatchback coupe (four little headlights, a slanted hatch, a lip spoiler)
   foxhatch(C) {
@@ -551,6 +554,13 @@ const BUILD = {
     C.pipes.push(V3(0.55, 0.32, -2.3), V3(-0.55, 0.32, -2.3));
     for (const [x, z, f] of [[0.78, 1.38, 1], [-0.78, 1.38, 1], [0.78, -1.3, 0], [-0.78, -1.3, 0]]) wheel(C, x, z, 0.34, 0.26, f);
   },
+  // a pit bike: the real dirt bike, but kid-sized
+  pitbike(C) {
+    if (BIKE) { C.len = 1.8; C.wid = 0.7; C.seat.set(0, 0.62, -0.12); C.hitch = null; C.hood = null; bikeModel(C, 0.72); C.realBike = true; return; }
+    BUILD.bike(C);
+  },
+  sport300(C) { sportBike(C, 1, false); },
+  super1000(C) { sportBike(C, 1.06, true); },
   atv(C) { quad(C, 1, 0.36); },
   sportquad(C) { quad(C, 0.95, 0.34, { sport: true }); },
   bigquad(C) { quad(C, 1.18, 0.44, { racks: true }); },
@@ -692,6 +702,36 @@ function quad(C, s, wr, o = {}) {
   for (const [x, z, f] of [[0.55, 0.62, 1], [-0.55, 0.62, 1], [0.55, -0.62, 0], [-0.55, -0.62, 0]]) wheel(C, x * s * (o.sport ? 1.08 : 1), z * s, wr, 0.3 * s * (o.racks ? 1.25 : 1), f);
 }
 function P2(C) { return C.paint2; }
+// a street sport bike: a pointy fairing with a windscreen, a fat tank, a sporty seat, an up-swept tail, cast wheels,
+// gold forks, a silver twin-spar frame and a big exhaust. big = the 1000cc superbike (wider, bigger pipe, winglets)
+function sportBike(C, k, big) {
+  const b = C.body, P = C.paint, K = (v) => v * k;
+  C.len = K(2.05); C.wid = 0.75; C.seat.set(0, K(0.74), K(-0.3)); C.hitch = null; C.hood = null;
+  // frame, engine, swingarm
+  for (const s of [-1, 1]) { tube(b, V3(s * K(0.15), K(0.82), K(0.5)), V3(s * K(0.16), K(0.55), K(-0.22)), K(0.045), M.frame); tube(b, V3(s * K(0.1), K(0.34), K(-0.72)), V3(s * K(0.12), K(0.46), K(-0.18)), K(0.04), M.frame); }
+  bx(b, K(0.34), K(0.34), K(0.5), 0, K(0.46), K(0.05), M.engine); bx(b, K(0.3), K(0.18), K(0.3), 0, K(0.66), K(0.18), M.dark, -0.5);
+  // the bodywork
+  pod(C, { zf: K(1.0), zb: K(0.3), w: K(0.25), b: K(0.5), tops: [[K(1.0), K(0.68)], [K(0.86), K(0.86)], [K(0.55), K(1.0)], [K(0.3), K(0.96)]], round: K(0.28), top: 0.7 }); // nose fairing
+  pod(C, { zf: K(0.6), zb: K(-0.12), w: K(big ? 0.31 : 0.29), b: K(0.3), tops: [[K(0.6), K(0.64)], [K(0.2), K(0.7)], [K(-0.12), K(0.6)]], round: K(0.14) }); // side panels + belly pan
+  pod(C, { zf: K(0.36), zb: K(-0.14), w: K(0.21), b: K(0.74), tops: [[K(0.36), K(0.95)], [K(0.15), K(1.01)], [K(-0.14), K(0.9)]], round: K(0.12) }); // tank
+  pod(C, { zf: K(-0.12), zb: K(-0.52), w: K(0.15), b: K(0.76), tops: [[K(-0.12), K(0.84)], [K(-0.52), K(0.88)]], round: K(0.06) }, M.seat); // seat
+  pod(C, { zf: K(-0.46), zb: K(-1.0), w: K(0.15), b: K(0.74), tops: [[K(-0.46), K(0.92)], [K(-1.0), K(1.02)]], round: K(0.22), top: 0.7 }); // tail
+  bx(b, K(0.34), K(0.26), 0.02, 0, K(1.06), K(0.66), M.glass, -0.95); // windscreen
+  for (const s of [-1, 1]) { bx(b, K(0.1), K(0.035), 0.03, s * K(0.07), K(0.76), K(0.99), M.light, -0.4); bx(b, K(0.07), K(0.05), K(0.03), s * K(0.26), K(0.98), K(0.62), M.dark); }
+  bx(b, K(0.13), K(0.035), 0.03, 0, K(0.95), K(-1.01), M.tail); bx(b, K(0.2), K(0.04), K(0.2), 0, K(0.68), K(-0.92), M.dark); // taillight, license plate holder
+  if (big) for (const s of [-1, 1]) bx(b, 0.015, K(0.08), K(0.2), s * K(0.27), K(0.66), K(0.75), M.dark); // winglets
+  // exhaust: a big can up by the tail
+  tube(b, V3(K(0.12), K(0.3), K(0.2)), V3(K(0.16), K(0.5), K(-0.5)), K(0.04), M.chrome);
+  const can = cy(b, K(big ? 0.08 : 0.07), K(0.45), K(0.19), K(0.58), K(-0.7), M.chrome, 12, Math.PI / 2 - 0.25); can.name = "can";
+  // front end: gold forks, clip-on bars, a front fender (they all turn with the front wheel)
+  const fork = new THREE.Group(); fork.position.set(0, 0, K(0.7)); b.add(fork); C.forks = [fork];
+  for (const s of [-1, 1]) tube(fork, V3(s * K(0.09), K(0.31), 0), V3(s * K(0.09), K(0.92), K(-0.24)), K(0.035), M.fork);
+  for (const s of [-1, 1]) tube(fork, V3(s * K(0.09), K(0.9), K(-0.24)), V3(s * K(0.3), K(0.88), K(-0.3)), K(0.022), M.dark);
+  bx(fork, K(0.14), K(0.04), K(0.42), 0, K(0.66), K(0.02), P, 0.15);
+  // cast wheels (5 spokes) on fat street tires
+  wheel(C, 0, K(0.7), K(0.31), K(0.14), 1, { bike: true }); wheel(C, 0, K(-0.7), K(0.31), K(big ? 0.2 : 0.18), 0, { bike: true });
+  for (const w of C.wheels) { w.knobs.visible = false; w.street = true; }
+}
 // a police car: white doors, a push bar and a red + blue light bar on the roof
 function police(C, fast) {
   // a police sedan (the fast one is lower and sleeker): black + white doors, push bar, light bar
