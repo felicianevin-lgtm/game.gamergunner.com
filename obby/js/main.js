@@ -199,21 +199,23 @@ function die(why) {
 
 // ---------------------------------------------------------------- input
 const keys = new Set(); let jumpPressed = false, jumpHeld = false;
+const CODES = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", ArrowUp: "w", ArrowDown: "s", ArrowLeft: "a", ArrowRight: "d", Space: " ", KeyR: "r", KeyF: "f", KeyQ: "q", KeyC: "c", ShiftLeft: "shift", ShiftRight: "shift", ControlLeft: "control", ControlRight: "control", Escape: "escape" };
+const keyName = (e) => CODES[e.code] || (e.key || "").toLowerCase();
 addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
-  const k = e.key.toLowerCase(); audio();
+  const k = keyName(e); audio();
   if (k === " " || k === "arrowup" || k === "arrowdown") e.preventDefault();
   if (panelOpen() && k === "escape") { closePanel(); return; }
   if (k === " " && !e.repeat) { jumpPressed = true; jumpHeld = true; }
   if (!e.repeat) { if (k === "r") { if (!P.fly) die(); } if (k === "f") toggleCarpet(); }
-  keys.add(k === "arrowup" ? "w" : k === "arrowdown" ? "s" : k === "arrowleft" ? "a" : k === "arrowright" ? "d" : k);
+  keys.add(k);
 });
-addEventListener("keyup", (e) => { const k = e.key.toLowerCase(); if (k === " ") jumpHeld = false; keys.delete(k === "arrowup" ? "w" : k === "arrowdown" ? "s" : k === "arrowleft" ? "a" : k === "arrowright" ? "d" : k); });
+addEventListener("keyup", (e) => { const k = keyName(e); if (k === " ") jumpHeld = false; keys.delete(k); });
 addEventListener("blur", () => { keys.clear(); jumpHeld = false; });
 // mouse: drag to look (left or right button), right-click (no drag) = push a player, wheel = zoom
 let drag = null;
 canvas.addEventListener("pointerdown", (e) => {
-  audio(); canvas.focus();
+  audio(); canvas.focus(); if (panelOpen()) closePanel(); // (clicking the game closes a menu so you can move again)
   if (e.pointerType === "touch") return touchDown(e);
   drag = { x: e.clientX, y: e.clientY, b: e.button, moved: 0 }; canvas.setPointerCapture(e.pointerId);
 });
@@ -438,7 +440,6 @@ function connect(i = 0) {
     else if (m.t === "look") { const o = others.get(m.id); if (o) setOtherLook(o, m.k); }
     else if (m.t === "oblv") { const o = others.get(m.id); if (o) { o.stage = m.l; o.won = !!m.w; drawPlayers(); } }
     else if (m.t === "obpush") gotPushed(m.id);
-    else if (m.t === "obdev") { if (m.ok) { devOk = true; SFX.check(); devPanel(); } else { SFX.nope(); toast("🛠 Wrong dev code", "warn"); } }
   };
   ws.onclose = () => { if (c.skip) return; if (conn === c) { conn = null; clearOthers(); } $("net").textContent = welcomed ? "🔴 Disconnected, trying again..." : "🔴 Offline"; clearTimeout(connTimer); connTimer = setTimeout(() => connect(0), 6000); };
 }
@@ -473,7 +474,7 @@ function drawPlayers() {
 }
 // pushing (only on the Magic Carpet): right-click someone near the mouse
 function pushAt(sx, sy, tap) {
-  if (!P.fly) { if (!tap) { toast(S.carpet ? "🧞 Get on your Magic Carpet (F) to push people!" : "🧞 Beat stage 200 to get the Magic Carpet. Then you can push people off!", "warn"); SFX.nope(); } return; }
+  if (!P.fly) { if (!tap && S.carpet) { toast("🧞 Get on your Magic Carpet (F) to push people!", "warn"); SFX.nope(); } return; }
   let best = null, bd = 70 * 70; const v = new THREE.Vector3();
   for (const [id, o] of others) {
     if (!o.seen || o.fly) continue;
@@ -578,13 +579,14 @@ function helpPanel() {
     <p>🎨 Get further to unlock shirts and hats. 📍 Go back to any stage you've reached.</p>`);
 }
 // the dev menu (the code is checked by the server): skip to any stage, get the Magic Carpet
-let devOk = false;
+const DEV_CODE = "2468";
+let devOk = (() => { try { return sessionStorage.getItem("ob_dev") === "1"; } catch { return false; } })();
 function devPanel() {
   if (!devOk) {
     openPanel(`<h2>🛠 DEV MENU</h2><p>Type the dev code:</p><p><input id="devCode" type="password" autocomplete="off" style="font:inherit;font-size:20px;padding:8px 12px;border-radius:10px;border:0;width:180px"> <button type="button" class="big" data-a="unlock" style="font-size:18px;padding:8px 22px">Unlock</button></p>`, (b) => {
       if (b.dataset.a !== "unlock") return;
-      if (!conn) { toast("🛠 The dev menu needs the internet (you're offline)", "warn"); return; }
-      conn.send({ t: "obdev", c: $("devCode").value.trim() });
+      if ($("devCode").value.trim() === DEV_CODE) { devOk = true; try { sessionStorage.setItem("ob_dev", "1"); } catch {} SFX.check(); devPanel(); }
+      else { SFX.nope(); toast("🛠 Wrong dev code", "warn"); $("devCode").value = ""; }
     });
     setTimeout(() => { const i = $("devCode"); if (i) { i.focus(); i.onkeydown = (e) => { if (e.key === "Enter") document.querySelector('#panel [data-a="unlock"]').click(); }; } }, 30);
     return;
