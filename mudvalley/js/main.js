@@ -1058,8 +1058,10 @@ const EYE = new THREE.Vector3(), LOOKV = new THREE.Vector3();
 function fpCamera(c) {
   const head = c && c.m.rider ? c.m.rider.head : G.me.p.head;
   head.updateWorldMatrix(true, false); head.getWorldPosition(EYE); EYE.y += c ? 0.08 : 0.1;
-  if (c) EYE.addScaledVector(LOOKV.set(Math.sin(c.b.yaw), 0, Math.cos(c.b.yaw)), 0.12);
-  const pitch = (cam.pitch - 0.28) * 1.3, yaw = cam.yaw;
+  const v = c && vehicleById(c.s.id), open = !!(v && (v.bike || v.quad));
+  // (on a dirt bike or quad: 0.5 m back + a little up, looking a bit down, so you see the handlebars + mirrors)
+  if (c) { EYE.addScaledVector(LOOKV.set(Math.sin(c.b.yaw), 0, Math.cos(c.b.yaw)), open ? -0.5 : 0.12); }
+  const pitch = (cam.pitch - 0.28) * 1.3 + (open ? 0.38 : 0), yaw = cam.yaw;
   camera.position.copy(EYE); camera.lookAt(EYE.x + Math.sin(yaw) * Math.cos(pitch), EYE.y - Math.sin(pitch), EYE.z + Math.cos(yaw) * Math.cos(pitch));
 }
 function updateCamera(dt) {
