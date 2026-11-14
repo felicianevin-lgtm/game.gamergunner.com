@@ -22,6 +22,7 @@ import { RELAY, account } from "/create/js/net.js";
 import { Interiors, buildingById, JAIL_SPOT, POCKET, rvBuilding } from "./interiors.js";
 import { MP } from "./mp.js";
 import { Camp, campItem, campModel, CAMP_MAX } from "./camp.js";
+import { Traffic } from "./traffic.js";
 import { FX } from "./fx.js";
 import { SFX, audio, setMuted, engine } from "./sfx.js";
 import { S, save, uid, slots, pay, spend, money, wipe } from "./save.js";
@@ -64,7 +65,7 @@ const G = {
   // fast travel to your home (from the phone)
   goHome(h) { if (crime.noTeleport()) return; const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
 };
-let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs, drops, camp;
+let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs, drops, camp, traffic;
 const cam = { yaw: Math.PI, pitch: 0.3, zoom: 1, x: 0, y: 5, z: 0, tx: 0, ty: 0, tz: 0, snap: true };
 
 // ---------------------------------------------------------------- your vehicles + trailers in the world
@@ -907,6 +908,7 @@ function tick(dt) {
   if (G.race) raceTick(dt);
   jobs.update(dt);
   crime.update(dt);
+  traffic.update(dt, inside() || !!G.race || THUMB);
   if (inside()) heist.update(dt);
   npcs.update(dt, inside() || !!G.race);
   drops.update(dt);
@@ -1128,7 +1130,7 @@ function draw(dt) {
   }
   if (G.placing) { const sp = placeSpot(), gh = G.placing.ghost; gh.position.set(sp.x, groundAt(sp.x, sp.z), sp.z); gh.rotation.y = sp.yaw; }
   { const fp = fpOn(); if (!c) G.me.p.root.visible = !fp; else if (c.m.rider) c.m.rider.root.visible = !fp; } // (first person: you don't see your own head)
-  crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); camp.draw(G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
+  crime.draw(dt, G.time); traffic.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); camp.draw(G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
   if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
   if (G.tow && G.tow.towCar.smoke) { G.tow.towCar.smoke.children.forEach((s, i) => { s.position.y = 1 + ((G.time * 0.8 + i * 0.4) % 1.6); s.scale.setScalar(0.6 + ((G.time * 0.8 + i * 0.4) % 1.6) * 0.6); }); }
@@ -1232,6 +1234,8 @@ async function boot() {
   heist = new Heist({ scene, crime, interiors, me: () => G.me.w, toast: H.toast, banner: H.banner, bumpMoney: H.bumpMoney,
     aim() { G.aimT = 0.3; const w = G.me.w; if (w.moving < 0.5) w.yaw = heist.aimYaw(); } });
   camp = new Camp(scene);
+  // everyday traffic on the paved roads (traffic.js)
+  traffic = new Traffic({ scene, crime, me: () => crime.api.me(), friends: () => (mp && mp.on ? mp.list() : []), many: () => (quality ? 7 : 4), shake: (k) => { G.shake = Math.max(G.shake, k); } });
   G.pins = [];
   mp = new MP({
     scene, toast: H.toast, look: () => lookFor(S.role, S.gear.mask),
@@ -1332,6 +1336,7 @@ const MV = {
   render() { draw(DT); },
   freeze(v = true) { G.frozen = v; },
   actions() { const a = actions(); return { E: a.E && a.E.text, F: a.F && a.F.text, T: a.T && a.T.text }; },
+  get traffic() { return traffic; },
   press(k) { const a = actions(); if (a[k]) { a[k].fn(); return a[k].text; } return null; },
   enter(id) { const c = [...G.CARS.values()].find((v) => v.s.id === id && !v.on); if (c) { if (mine()) exitCar(); enterCar(c); } return !!c; },
   exit() { exitCar(); },
