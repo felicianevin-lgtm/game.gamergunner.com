@@ -866,7 +866,8 @@ function tick(dt) {
       } else if (h) { h.t = Math.max(0, h.t - dt * 0.5); }
     } else { G.hold = null; if (eTap && A.E && !G.race) A.E.fn(); }
     if (IN.pressed("KeyT") && A.T && !G.race) A.T.fn();
-    if (IN.pressed("KeyQ") && !G.race) useItem();
+    if (IN.pressed("KeyQ") && !G.race) { if (G.placing && A.Q) A.Q.fn(); else useItem(); }
+    if (IN.pressed("KeyV")) toggleFP();
     if (IN.pressed("KeyX") && !G.race && !c) cycleItem();
     if (IN.pressed("KeyG")) { if (c && c.police) { G.siren = !G.siren; SFX.click(); H.toast(G.siren ? "🚨 Siren ON" : "Siren off", "", "", 1200); } else if (c) SFX.nope(); }
     if (IN.pressed("KeyH")) (c && ["hauler", "monster"].includes(c.s.id) ? SFX.hornBig : SFX.horn)();
@@ -1047,6 +1048,20 @@ function raceTick(dt) {
 }
 
 // ---------------------------------------------------------------- camera + drawing
+// first person: see the world through your own eyes (V or the 👁️ button)
+const fpOn = () => !!G.fp && G.mode !== "side" && G.mode !== "map";
+function toggleFP() {
+  G.fp = !G.fp; camera.near = G.fp ? 0.06 : 0.3; camera.updateProjectionMatrix(); cam.snap = true; SFX.click();
+  H.toast(G.fp ? "👁️ First person" : "🎥 Third person", "Press V (or 👁️) to switch back", "", 1600);
+}
+const EYE = new THREE.Vector3(), LOOKV = new THREE.Vector3();
+function fpCamera(c) {
+  const head = c && c.m.rider ? c.m.rider.head : G.me.p.head;
+  head.updateWorldMatrix(true, false); head.getWorldPosition(EYE); EYE.y += c ? 0.08 : 0.1;
+  if (c) EYE.addScaledVector(LOOKV.set(Math.sin(c.b.yaw), 0, Math.cos(c.b.yaw)), 0.12);
+  const pitch = (cam.pitch - 0.28) * 1.3, yaw = cam.yaw;
+  camera.position.copy(EYE); camera.lookAt(EYE.x + Math.sin(yaw) * Math.cos(pitch), EYE.y - Math.sin(pitch), EYE.z + Math.cos(yaw) * Math.cos(pitch));
+}
 function updateCamera(dt) {
   const c = mine(), t = c ? c.b : G.me.w;
   const tw = c ? myTrailer() || (G.tow && G.tow.hitched === c.b ? G.tow : null) : null;
@@ -1091,8 +1106,8 @@ function updateCamera(dt) {
   cam.x += (px - cam.x) * k; cam.y += (py - cam.y) * k; cam.z += (pz - cam.z) * k;
   cam.tx += (tx - cam.tx) * k; cam.ty += (ty - cam.ty) * k; cam.tz += (tz - cam.tz) * k; cam.snap = false;
   const sh = G.shake; G.shake = Math.max(0, G.shake - dt * 2.5);
-  camera.position.set(cam.x + (Math.random() - 0.5) * sh * 0.5, cam.y + (Math.random() - 0.5) * sh * 0.5, cam.z);
-  camera.lookAt(cam.tx, cam.ty, cam.tz);
+  if (fpOn()) fpCamera(c);
+  else { camera.position.set(cam.x + (Math.random() - 0.5) * sh * 0.5, cam.y + (Math.random() - 0.5) * sh * 0.5, cam.z); camera.lookAt(cam.tx, cam.ty, cam.tz); }
   sky.sky.position.copy(camera.position);
   sky.follow(t.x, t.y, t.z);
 }
@@ -1110,6 +1125,7 @@ function draw(dt) {
     else p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
   }
   if (G.placing) { const sp = placeSpot(), gh = G.placing.ghost; gh.position.set(sp.x, groundAt(sp.x, sp.z), sp.z); gh.rotation.y = sp.yaw; }
+  { const fp = fpOn(); if (!c) G.me.p.root.visible = !fp; else if (c.m.rider) c.m.rider.root.visible = !fp; } // (first person: you don't see your own head)
   crime.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); camp.draw(G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
   if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
@@ -1222,11 +1238,29 @@ async function boot() {
     myRide() { const c = mine(); return c ? { x: c.m.root.position.x, y: c.m.root.position.y, z: c.m.root.position.z, yaw: c.b.yaw, C: c.m } : null; },
     me() { const c = mine(), p = inside() ? G.me.w : mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint } : null }; },
     // what you have out near you, so friends see it too: parked rides, trailers, your camp (closest first)
+    // (things riding along with the ride you're driving, like a bike in your truck bed or your hitched trailer and the
+    //  rides on it, are sent relative to your ride: x/z/yaw/y in its own space, towing = 1, so friends see them move with you)
     parked() {
       const me = mapPos(), my = mine(), out = [], d = (x, z) => Math.hypot(x - me.x, z - me.z);
       if (inside()) return [];
-      for (const c of G.CARS.values()) if (c !== my && !c.on && !c.s.bed && d(c.b.x, c.b.z) < 250) out.push([d(c.b.x, c.b.z), "c", c.s.id, c.s.paint, c.b.x, c.b.z, c.b.yaw, 0]);
-      for (const t of G.TRS.values()) { const h = !!(my && t.hitched === my.b); if (h || (!t.hitched && d(t.x, t.z) < 250)) out.push([h ? -1 : d(t.x, t.z), "t", t.T.id, t.s.color ?? 0x4a4e58, t.x, t.z, t.yaw, h]); }
+      const wp = new THREE.Vector3(), wd = new THREE.Vector3();
+      const world = (root) => { root.updateWorldMatrix(true, false); root.getWorldPosition(wp); root.getWorldDirection(wd); return { x: wp.x, y: wp.y, z: wp.z, yaw: Math.atan2(wd.x, wd.z) }; };
+      const rel = (p) => { const r = my.m.root.position, yw = my.b.yaw, dx = p.x - r.x, dz = p.z - r.z, cs = Math.cos(yw), sn = Math.sin(yw); return { x: dx * cs - dz * sn, z: dx * sn + dz * cs, y: p.y - r.y, yaw: p.yaw - yw }; };
+      const withMe = (c) => !!(my && c.on && (c.on.bed ? c.on.truck === my : c.on.hitched === my.b));
+      for (const c of G.CARS.values()) {
+        if (c === my) continue;
+        if (c.on) { // (in a truck bed or on a trailer)
+          const p = world(c.m.root);
+          if (withMe(c)) { const l = rel(p); out.push([-1, "c", c.s.id, c.s.paint, l.x, l.z, l.yaw, 1, l.y]); }
+          else if (d(p.x, p.z) < 250) out.push([d(p.x, p.z), "c", c.s.id, c.s.paint, p.x, p.z, p.yaw, 0, p.y]);
+          continue;
+        }
+        if (d(c.b.x, c.b.z) < 250) out.push([d(c.b.x, c.b.z), "c", c.s.id, c.s.paint, c.b.x, c.b.z, c.b.yaw, 0]);
+      }
+      for (const t of G.TRS.values()) {
+        if (my && t.hitched === my.b) { const l = rel(world(t.model.root)); out.push([-2, "t", t.T.id, t.s.color ?? 0x4a4e58, l.x, l.z, l.yaw, 1, l.y]); }
+        else if (!t.hitched && d(t.x, t.z) < 250) out.push([d(t.x, t.z), "t", t.T.id, t.s.color ?? 0x4a4e58, t.x, t.z, t.yaw, 0]);
+      }
       for (const it of S.camp.set) if (d(it.x, it.z) < 250) out.push([d(it.x, it.z), "p", it.id, it.c ?? 0xff6a3a, it.x, it.z, it.yaw || 0, 0]);
       return out.sort((a, b) => a[0] - b[0]).map((q) => q.slice(1));
     },
@@ -1261,6 +1295,7 @@ async function boot() {
   $("bPhone").addEventListener("click", () => { audio(); UI.phone(); });
   $("bMap").addEventListener("click", () => { audio(); UI.map(); });
   $("bMute").addEventListener("click", () => { audio(); GAME.muted(!S.muted); });
+  $("bView").addEventListener("click", () => { toggleFP(); $("canvas").focus(); });
   $("jailBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); audio(); crime.jailTry(); });
   if (S.driving && G.CARS.has(S.driving) && !G.CARS.get(S.driving).on) { const c = G.CARS.get(S.driving); G.me.car = c; G.me.p.root.visible = false; cam.yaw = c.b.yaw; }
   for (const c of G.CARS.values()) if (c.m.rider) c.m.rider.root.visible = c === mine();

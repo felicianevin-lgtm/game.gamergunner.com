@@ -10,7 +10,7 @@ export const ACTIONS = [
   ["KeyW", "Gas / walk forward"], ["KeyS", "Brake / back up"], ["KeyA", "Steer / walk left"], ["KeyD", "Steer / walk right"],
   ["Space", "Jump / handbrake"], ["ShiftLeft", "Run"], ["KeyE", "Use / talk / open"], ["KeyF", "Get in / out"],
   ["KeyT", "Hitch / wheelie / close door"], ["KeyQ", "Use your item"], ["KeyX", "Switch item"], ["KeyH", "Horn"],
-  ["KeyG", "Siren"], ["KeyR", "Reset your ride"], ["KeyM", "Map"], ["KeyP", "Phone"],
+  ["KeyG", "Siren"], ["KeyR", "Reset your ride"], ["KeyM", "Map"], ["KeyP", "Phone"], ["KeyV", "First person view"],
   ["ArrowLeft", "Camera left"], ["ArrowRight", "Camera right"], ["ArrowUp", "Camera up"], ["ArrowDown", "Camera down"],
 ];
 const CKEY = "mv_controls";

@@ -24,7 +24,8 @@ const newCode = () => String(10000000 + Math.floor(Math.random() * 89999999));
 const ROLES = ["civ", "robber", "cop"];
 // your parked rides / trailers / camp near you, as short text (the relay's "mvpark", 12 at most): kind|id|color|x|z|yaw|towing
 // kind: c = a ride, t = a trailer, p = camp stuff. towing = 1: that trailer is hooked to the ride you're driving
-const parkText = (k, id, c, x, z, yaw, h) => [k, id, hex(c ?? 0x888888), Math.round(x * 10) / 10, Math.round(z * 10) / 10, (Math.round(Math.atan2(Math.sin(yaw), Math.cos(yaw)) * 100) / 100), h ? 1 : 0].join("|");
+// (an 8th part, y, is the height: for rides up in a truck bed or on a trailer deck)
+const parkText = (k, id, c, x, z, yaw, h, y) => [k, id, hex(c ?? 0x888888), Math.round(x * 10) / 10, Math.round(z * 10) / 10, (Math.round(Math.atan2(Math.sin(yaw), Math.cos(yaw)) * 100) / 100), h ? 1 : 0, ...(y === undefined ? [] : [Math.round(y * 100) / 100])].join("|");
 function parkModel(it) {
   if (it.k === "c") { if (vehicleById(it.id).id !== it.id) return null; const m = buildCar({ id: it.id, paint: it.c, rims: "chrome", tires: "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0 }); if (m.rider) m.rider.root.visible = false; return m.root; }
   if (it.k === "t") { if (!trailerById(it.id)) return null; const m = buildTrailer(it.id, it.c); if (m.awning) m.awning.visible = !it.h; return m.root; }
@@ -121,7 +122,7 @@ export class MP {
   disposePark(p) { for (const e of p.parkM || []) if (e) this.api.scene.remove(e.root); p.parkM = []; }
   // a friend's parked rides, trailers and camp (only rebuilds the ones that changed)
   setPark(p, list) {
-    const items = list.slice(0, 14).map((t) => { const a = String(t).split("|"); return a.length === 7 ? { k: a[0], id: a[1], c: unhex(a[2]), x: +a[3], z: +a[4], yaw: +a[5], h: a[6] === "1", key: a[0] + a[1] + a[2] + a[6] } : null; }).filter((it) => it && Number.isFinite(it.x) && Number.isFinite(it.z));
+    const items = list.slice(0, 14).map((t) => { const a = String(t).split("|"); return a.length === 7 || a.length === 8 ? { k: a[0], id: a[1], c: unhex(a[2]), x: +a[3], z: +a[4], yaw: +a[5], h: a[6] === "1", y: a.length === 8 ? +a[7] : null, key: a[0] + a[1] + a[2] + a[6] } : null; }).filter((it) => it && Number.isFinite(it.x) && Number.isFinite(it.z));
     p.parkM = p.parkM || [];
     for (let i = 0; i < Math.max(items.length, p.parkM.length); i++) {
       const it = items[i], e = p.parkM[i];
@@ -129,7 +130,7 @@ export class MP {
       if (!it) continue;
       if (!p.parkM[i]) { const root = parkModel(it); if (!root) continue; this.api.scene.add(root); p.parkM[i] = { key: it.key, root, it }; }
       const E = p.parkM[i]; E.it = it;
-      if (!it.h) { E.root.position.set(it.x, groundAt(it.x, it.z) + (it.k === "p" ? 0 : 0.05), it.z); E.root.rotation.set(0, it.yaw, 0); }
+      if (!it.h) { E.root.position.set(it.x, Number.isFinite(it.y) && it.y !== null ? it.y : groundAt(it.x, it.z) + (it.k === "p" ? 0 : 0.05), it.z); E.root.rotation.set(0, it.yaw, 0); }
     }
     p.parkM.length = items.length;
   }
@@ -196,7 +197,8 @@ export class MP {
     this.parkT = (this.parkT ?? 0) - dt; this.parkAge = (this.parkAge || 0) + dt;
     if (this.parkT <= 0 && this.api.parked) {
       this.parkT = 1;
-      const l = this.api.parked().slice(0, 10).map((q) => parkText(...q)), str = l.join(";");
+      const l = []; let size = 30; for (const q of this.api.parked()) { const t = parkText(...q); if (size + t.length + 3 > 500 || l.length >= 12) break; l.push(t); size += t.length + 3; } // (a relay message is 512 bytes at most)
+      const str = l.join(";");
       if (str !== this.parkSent || this.parkAge > 10) { this.parkSent = str; this.parkAge = 0; this.send({ t: "mvpark", l }); }
     }
   }
@@ -230,9 +232,9 @@ export class MP {
       if (p.car) { p.car.root.position.set(p.x, p.y + 0.06, p.z); p.car.root.rotation.set(0, p.r, 0); animateCar(p.car, { speed: p.walk ? 8 : 0, steer: 0 }, dt); p.tag.position.set(p.x, p.y + 3.4, p.z); }
       else { const g = myRoom ? p.y : Math.max(p.y, groundAt(p.x, p.z) - 0.2); p.model.root.position.set(p.x, g, p.z); p.model.root.rotation.y = p.r; p.model.pose(p.walk ? "walk" : "stand", time); p.tag.position.set(p.x, g + 2.5, p.z); }
       p.tag.material.opacity = p.away ? 0.4 : 1;
-      for (const e of p.parkM || []) if (e && e.it.h) { // (the trailer they're towing rides along behind their truck)
-        const T = trailerById(e.it.id), back = (p.car ? p.car.len / 2 + 0.5 : 3) + (T ? T.len : 5), x = p.x - Math.sin(p.r) * back, z = p.z - Math.cos(p.r) * back;
-        e.root.visible = !!p.car; e.root.position.set(x, groundAt(x, z) + 0.05, z); e.root.rotation.set(0, p.r, 0);
+      for (const e of p.parkM || []) if (e && e.it.h) { // (their trailer, the bike in their truck bed...: placed relative to their ride)
+        const it = e.it, cs = Math.cos(p.r), sn = Math.sin(p.r), x = p.x + it.x * cs + it.z * sn, z = p.z - it.x * sn + it.z * cs;
+        e.root.visible = !!p.car; e.root.position.set(x, it.y !== null ? p.y + 0.06 + it.y : groundAt(x, z) + 0.05, z); e.root.rotation.set(0, p.r + it.yaw, 0);
       }
     }
   }

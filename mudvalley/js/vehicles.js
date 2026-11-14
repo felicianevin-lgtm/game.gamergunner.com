@@ -700,7 +700,7 @@ const BUILD = {
   pitbike(C) { if (BIKE) return realBike(C, 0.72); BUILD.bike(C); },
   bike125(C) { if (BIKE) return realBike(C, 0.86); BUILD.bike(C); },
   bike125f(C) { if (XBIKE.b125 || BIKE) return realBike(C, 0.9, XBIKE.b125 || BIKE); BUILD.bike(C); },
-  dual250(C) { if (XBIKE.b250 || BIKE) realBike(C, 0.97, XBIKE.b250 || BIKE); else BUILD.bike(C); streetKit(C); },
+  dual250(C) { if (XBIKE.b250 || BIKE) realBike(C, 0.97, XBIKE.b250 || BIKE); else BUILD.bike(C); if (C.realBike) streetKit250(C); else streetKit(C); },
   sport300(C) { sportBike(C, 1.2, false); },
   super1000(C) { sportBike(C, 1.27, true); },
   // a sport side-by-side (UTV): molded hood + fenders, two bucket seats, half doors, a roll cage with a roof,
@@ -915,6 +915,19 @@ function streetKit(C) {
   for (const s of [-1, 1]) { tube(b, V3(s * 0.26, r + L * 0.37, fz - 0.42), V3(s * 0.32, r + L * 0.45, fz - 0.44), 0.012, M.dark); bx(b, 0.12, 0.08, 0.02, s * 0.33, r + L * 0.46, fz - 0.44, M.chrome); } // mirrors
   for (const s of [-1, 1]) { bx(b, 0.07, 0.05, 0.05, s * 0.16, r + L * 0.28, fz + 0.1, M.yellowL || M.light); bx(b, 0.07, 0.05, 0.05, s * 0.13, r + L * 0.2, rz - 0.22, M.tail); } // turn signals
   bx(b, 0.24, 0.15, 0.02, 0, r + L * 0.13, rz - 0.3, M.white); bx(b, 0.2, 0.03, 0.025, 0, r + L * 0.15, rz - 0.3, M.dark); bx(b, 0.12, 0.05, 0.05, 0, r + L * 0.2, rz - 0.26, M.tail); // plate + tail light
+}
+// the street-legal kit placed exactly on the 250 model (measured from models/bike250.bin, k = its size):
+// the headlight sits right on the front number plate, the license plate tucks up under the rear fender
+function streetKit250(C) {
+  const b = C.body, k = C.len / 2.5, K = (v) => v * k;
+  const hl = new THREE.Group(); hl.position.set(0, K(1.15), K(0.515)); hl.rotation.x = -0.3; b.add(hl);
+  bx(hl, K(0.22), K(0.15), K(0.06), 0, 0, 0, M.dark); bx(hl, K(0.17), K(0.1), K(0.03), 0, 0, K(0.03), M.light); // headlight on the plate
+  for (const s of [-1, 1]) bx(hl, K(0.06), K(0.04), K(0.05), s * K(0.15), K(-0.06), K(0.02), M.yellowL || M.light); // front turn signals
+  for (const s of [-1, 1]) { tube(b, V3(s * K(0.28), K(1.22), K(0.38)), V3(s * K(0.34), K(1.4), K(0.36)), 0.012, M.dark); bx(b, K(0.12), K(0.08), 0.02, s * K(0.35), K(1.42), K(0.36), M.chrome); } // mirrors
+  const pl = new THREE.Group(); pl.position.set(0, K(1.08), K(-1.03)); pl.rotation.x = 0.35; b.add(pl); // (tilted like the fender)
+  bx(pl, K(0.24), K(0.15), 0.02, 0, 0, 0, M.white); bx(pl, K(0.2), K(0.03), 0.025, 0, K(0.02), -0.002, M.dark); bx(pl, K(0.05), K(0.08), 0.02, 0, K(0.08), 0.01, M.dark); // license plate + its bracket
+  bx(b, K(0.1), K(0.04), K(0.05), 0, K(1.125), K(-1.08), M.tail); // tail light under the fender tip
+  for (const s of [-1, 1]) bx(b, K(0.06), K(0.04), K(0.05), s * K(0.14), K(1.1), K(-1.0), M.tail); // back turn signals
 }
 // an electric mountain bike (fat = the fat-tire one): a thin frame, a battery on the down tube, a hub motor in the back wheel
 function ebike(C, fat) {
