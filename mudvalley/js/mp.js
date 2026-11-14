@@ -74,6 +74,7 @@ export class MP {
       case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; break;
       case "mvrole": { const p = this.players.get(m.id); if (p) { const r = ROLES[m.r] || "civ", w = m.w | 0; if (p.role !== r || p.wanted !== w) { p.role = r; p.wanted = w; this.retag(p); } } break; }
       case "mvzap": { const p = this.players.get(m.id); if (p) A.zapped(p, m.k); break; }
+      case "mvbump": { const p = this.players.get(m.id); if (p && Array.isArray(m.v) && A.bumped) A.bumped(p, +m.v[0] || 0, +m.v[1] || 0); break; }
       case "shot": { const p = this.players.get(m.id); if (p && Array.isArray(m.p) && Array.isArray(m.x)) A.shot(m.p, m.x, m.w); break; }
       case "leave": { const p = this.players.get(m.id); if (p) { this.say("", p.n + " left.", "sys"); this.removePlayer(m.id); } break; }
       case "away": { const p = this.players.get(m.id); if (p) p.away = true; break; }
@@ -116,6 +117,18 @@ export class MP {
   // your career + wanted stars (sent when they change, and every few seconds for people who just joined)
   sendRole(now) { if (!this.on) return; const r = ROLES.indexOf(S.role), w = S.wanted | 0; if (now || r !== this.lastRole || w !== this.lastWanted) { this.lastRole = r; this.lastWanted = w; this.roleT = 5; this.send({ t: "mvrole", r: Math.max(0, r), w }); } }
   zap(id, k) { this.send({ t: "mvzap", id, k }); }
+  bump(id, vx, vz) { if (this.on) this.send({ t: "mvbump", id, v: [Math.round(vx * 10) / 10, Math.round(vz * 10) / 10] }); }
+  // friends' cars as bump circles: [{ id, x, z, r, len }]
+  carCircles() {
+    const out = [];
+    for (const p of this.players.values()) {
+      if (!p.car || p.x === undefined || p.away) continue;
+      const len = p.car.len, wid = p.car.wid, fx = Math.sin(p.r), fz = Math.cos(p.r);
+      if (len <= 3) out.push({ id: p.id, x: p.x, z: p.z, y: p.y, r: Math.max(len, wid) * 0.45 });
+      else for (const s of [0.26, -0.26]) out.push({ id: p.id, x: p.x + fx * len * s, z: p.z + fz * len * s, y: p.y, r: wid * 0.52 });
+    }
+    return out;
+  }
   shot(p, x, w) { if (this.on) this.send({ t: "shot", p: p.map((v) => Math.round(v * 10) / 10), x: x.map((v) => Math.round(v * 10) / 10), w, h: 0 }); }
   sendLook() {
     const L = this.api.look();

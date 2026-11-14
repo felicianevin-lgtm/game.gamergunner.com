@@ -4,17 +4,51 @@ export const look = { dx: 0, dy: 0, zoom: 0, lastT: -99 }; // camera drag since 
 export const stick = { id: null, x: 0, y: 0, ox: 0, oy: 0 };
 export const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window || new URLSearchParams(location.search).has("touch");
 let blockKeys = () => false;
+// ---- your own controls (📱 Phone → ⚙️ Settings → 🎮 Controls). The game still thinks in its normal keys; a key you
+// picked is turned into the normal one here, and a normal key you moved somewhere else stops doing that thing.
+export const ACTIONS = [
+  ["KeyW", "Gas / walk forward"], ["KeyS", "Brake / back up"], ["KeyA", "Steer / walk left"], ["KeyD", "Steer / walk right"],
+  ["Space", "Jump / handbrake"], ["ShiftLeft", "Run"], ["KeyE", "Use / talk / open"], ["KeyF", "Get in / out"],
+  ["KeyT", "Hitch / wheelie / close door"], ["KeyQ", "Use your item"], ["KeyX", "Switch item"], ["KeyH", "Horn"],
+  ["KeyG", "Siren"], ["KeyR", "Reset your ride"], ["KeyM", "Map"], ["KeyP", "Phone"],
+  ["ArrowLeft", "Camera left"], ["ArrowRight", "Camera right"], ["ArrowUp", "Camera up"], ["ArrowDown", "Camera down"],
+];
+const CKEY = "mv_controls";
+export const controls = (() => { try { return Object.assign({ keys: {}, sens: 1, invert: false }, JSON.parse(localStorage.getItem(CKEY) || "{}")); } catch { return { keys: {}, sens: 1, invert: false }; } })();
+let trans = {};
+function rebuildKeys() {
+  trans = {}; const used = new Set(ACTIONS.map(([d]) => controls.keys[d] || d));
+  for (const [d] of ACTIONS) { const u = controls.keys[d] || d; if (u !== d) trans[u] = d; if (!used.has(d)) trans[d] = "-"; }
+}
+rebuildKeys();
+export function saveControls() { try { localStorage.setItem(CKEY, JSON.stringify(controls)); } catch {} rebuildKeys(); }
+export const keyOf = (d) => controls.keys[d] || d;
+// set an action's key (if another action had it, they swap)
+export function bindKey(d, code) {
+  const other = ACTIONS.find(([x]) => x !== d && keyOf(x) === code);
+  if (other) controls.keys[other[0]] = keyOf(d);
+  controls.keys[d] = code;
+  for (const [x] of ACTIONS) if (controls.keys[x] === x) delete controls.keys[x];
+  saveControls();
+}
+export function resetControls() { controls.keys = {}; controls.sens = 1; controls.invert = false; saveControls(); }
+export const keyName = (c) => ({ Space: "Space", ShiftLeft: "Shift", ShiftRight: "R-Shift", ControlLeft: "Ctrl", AltLeft: "Alt", Tab: "Tab", Enter: "Enter", Backspace: "Back", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", CapsLock: "Caps" })[c] || c.replace(/^Key/, "").replace(/^Digit/, "").replace(/^Numpad/, "Num ");
+let capture = null;
+export function captureKey(cb) { capture = cb; }
+const tr = (c) => trans[c] || c;
 
 export function initInput(canvas, opts = {}) {
   blockKeys = opts.block || blockKeys;
   addEventListener("keydown", (e) => {
+    if (capture) { e.preventDefault(); e.stopPropagation(); const cb = capture; capture = null; cb(e.code); return; } // (picking a new key)
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
     if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(e.code)) e.preventDefault();
-    if (!e.repeat) tapped.add(e.code);
-    held.add(e.code);
-    opts.onKey && opts.onKey(e.code);
-  });
-  addEventListener("keyup", (e) => held.delete(e.code));
+    const code = tr(e.code); if (code === "-") return;
+    if (!e.repeat) tapped.add(code);
+    held.add(code);
+    opts.onKey && opts.onKey(code);
+  }, true);
+  addEventListener("keyup", (e) => held.delete(tr(e.code)));
   addEventListener("blur", () => held.clear());
   // mouse: hold a button and move to look around
   let drag = null;

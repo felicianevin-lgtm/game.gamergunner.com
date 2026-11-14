@@ -729,7 +729,7 @@ function tick(dt) {
   // bumping into other vehicles / trailers
   const me = c ? c.b : G.me.w;
   if (c) carVsStuff(c.b);
-  else for (const o of G.CARS.values()) if (!o.on) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true);
+  else { for (const o of G.CARS.values()) if (!o.on) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true); if (mp && mp.on) for (const k of mp.carCircles()) bumpPair(G.me.w, 0.4, k, k.r, true); }
   for (const t of G.TRS.values()) { stepTrailer(t, dt); stepDoor(t, dt); }
   stepGarageDoors(dt);
   driveInTrailers();
@@ -768,7 +768,24 @@ function rescue() {
   const rc = crime.call && crime.call.robber.car.b; if (rc && lost(rc, rc.y)) { const p = nearestRoad(rc.x || 0, rc.z || 0); Object.assign(rc, { x: p.x, z: p.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, y: groundAt(p.x, p.z) }); }
 }
 // push the driven vehicle off parked ones (a simple version of bumpPair that moves the car body)
+// crashing into your friends' cars in a lobby: you bounce off on your screen, and they get shoved on theirs
+const bumpT = new Map();
+function friendCars(b) {
+  if (!mp || !mp.on) return;
+  for (const k of mp.carCircles()) for (const a of carCircles(b)) {
+    const dx = a.x - k.x, dz = a.z - k.z, d = Math.hypot(dx, dz), m = a.r + k.r;
+    if (d >= m || d < 1e-4 || Math.abs(b.y - k.y) > 2.5) continue;
+    const nx = dx / d, nz = dz / d; b.x += nx * (m - d); b.z += nz * (m - d);
+    const vn = b.vx * nx + b.vz * nz;
+    if (vn < 0) {
+      b.vx -= nx * vn * 1.4; b.vz -= nz * vn * 1.4; b.hit = Math.max(b.hit, -vn);
+      const now = performance.now();
+      if (-vn > 2 && now - (bumpT.get(k.id) || 0) > 250) { bumpT.set(k.id, now); mp.bump(k.id, -nx * -vn * 0.9, -nz * -vn * 0.9); }
+    }
+  }
+}
 function carVsStuff(b) {
+  friendCars(b);
   for (const o of G.CARS.values()) {
     if (o.b === b || o.on) continue;
     for (const a of carCircles(b)) for (const k of carCircles(o.b)) {
@@ -861,10 +878,11 @@ function updateCamera(dt) {
   const tw = c ? myTrailer() || (G.tow && G.tow.hitched === c.b ? G.tow : null) : null;
   let dist = (c ? 4.5 + c.m.len * 1.05 + (tw ? (tw.T ? tw.T.len : tw.len) * 0.8 : 0) : 6) * cam.zoom;
   // drag to look around; while driving it swings back behind you after a moment
-  cam.yaw -= IN.look.dx * 0.006; cam.pitch = clamp(cam.pitch + IN.look.dy * 0.004, -0.05, 1.25);
+  const sens = IN.controls.sens || 1, inv = IN.controls.invert ? -1 : 1; // (📱 Settings → 🎮 Controls: camera speed + flip up/down)
+  cam.yaw -= IN.look.dx * 0.006 * sens; cam.pitch = clamp(cam.pitch + IN.look.dy * 0.004 * sens * inv, -0.05, 1.25);
   IN.look.dx = IN.look.dy = 0;
   const ak = IN.arrowLook(); // arrow keys turn the camera too
-  if (ak.x || ak.y) { cam.yaw -= ak.x * dt * 2.4; cam.pitch = clamp(cam.pitch - ak.y * dt * 1.2, -0.05, 1.25); IN.look.lastT = performance.now(); }
+  if (ak.x || ak.y) { cam.yaw -= ak.x * dt * 2.4 * sens; cam.pitch = clamp(cam.pitch - ak.y * dt * 1.2 * sens * inv, -0.05, 1.25); IN.look.lastT = performance.now(); }
   if (IN.look.zoom) { cam.zoom = clamp(cam.zoom * (IN.look.zoom > 0 ? 1.12 : 0.89), 0.55, 2); IN.look.zoom = 0; }
   const dragging = performance.now() - IN.look.lastT < 1300;
   if (c && !dragging && G.mode !== "side") {
@@ -1025,6 +1043,12 @@ async function boot() {
     pin(who, x, z) { G.pins.push({ x, z, name: who }); if (G.pins.length > 5) G.pins.shift(); GAME.setWaypoint({ x, z, name: who + "’s pin 📍" }); },
     changed() { UI.mpChanged && UI.mpChanged(); $("bPhone").classList.toggle("dot", mp.unread > 0); },
     zapped: (p, k) => crime.zappedBy(p, k), shot: (p, x, w) => crime.friendShot(p, x, w),
+    // a friend rammed you: your ride gets shoved (on foot you just stumble)
+    bumped(p, vx, vz) {
+      const c = mine(); const sp = Math.hypot(vx, vz);
+      if (c) { c.b.vx += vx; c.b.vz += vz; c.b.yawRate += (Math.random() - 0.5) * sp * 0.15; } else { G.me.w.vx = (G.me.w.vx || 0) + vx * 0.6; G.me.w.vz = (G.me.w.vz || 0) + vz * 0.6; }
+      if (sp > 3) { SFX.crash(sp / 3); G.shake = Math.min(1, sp / 20); const q = mapPos(); fx.sparks(q.x, q.y + 0.8, q.z, 10); }
+    },
   });
   // little red rings where robbers can rob things outside (only robbers see them)
   G.robMarks = ROB_SPOTS.filter((sp) => !sp.room).map((sp) => { const m = makeMarker(scene, sp.x, sp.z, 1.4, "#ff4a4a", sp.icon); m.icon.scale.set(1.6, 1.6, 1); m.icon.position.y = 2.6; m.spot = sp; m.g.visible = false; return m; });

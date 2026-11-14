@@ -13,6 +13,7 @@ import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } fr
 import { QUICK } from "./mp.js";
 import { itemById, packCap } from "./npcs.js";
 import { PARTS, partById, KINDS, SHIP_FEE, have } from "./parts.js";
+import * as IN from "./input.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
@@ -44,11 +45,11 @@ function close() {
 let onAct = () => {};
 function wire() {
   for (const box of ["sideBox", "modalBox"]) $(box).addEventListener("click", (e) => {
-    const b = e.target.closest("[data-a]"); if (!b || b.disabled) return;
+    const b = e.target.closest("[data-a]"); if (!b || b.disabled || b.type === "range") return;
     if (b.dataset.a === "close") { SFX.click(); close(); return; }
     onAct(b.dataset.a, b.dataset.v, b);
   });
-  $("sideBox").addEventListener("input", (e) => { if (e.target.dataset.a) onAct(e.target.dataset.a, e.target.value, e.target, true); });
+  for (const box of ["sideBox", "modalBox"]) $(box).addEventListener("input", (e) => { if (e.target.dataset.a) onAct(e.target.dataset.a, e.target.value, e.target, true); });
 }
 
 // ---------------------------------------------------------------- dealership
@@ -236,6 +237,7 @@ const DEV_CODE = "2468";
 let devUnlocked = false;
 const devOpen = () => { if (devUnlocked) return true; try { return sessionStorage.getItem("mv_dev") === "1"; } catch { return false; } };
 let sdTab = "frame", vpTab = "frame";
+let waitKey = null;
 function phone(view = "home") {
   SFX.phone();
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
@@ -248,7 +250,17 @@ function phone(view = "home") {
   if (view === "houses") html = `<h2>🏠 HOUSES</h2>${back}<div class="list" style="margin-top:10px">${HOUSES.filter((h) => h.price).map((h) => `<div class="item"><span class="ico">🏠</span><span class="nm"><b>${esc(h.name)}${S.houses.includes(h.id) ? '<span class="tag">YOURS</span>' : ""}</b><small>${h.slots} rides · ${esc(h.desc)}</small></span><span class="pr">${money(h.price)}</span><button type="button" class="small" data-a="gpsHouse" data-v="${h.id}">📍</button></div>`).join("")}</div>`;
   if (view === "gps") html = `<h2>📍 PLACES</h2>${back}<div class="list" style="margin-top:10px">${Object.entries(PLACES).map(([id, p]) => `<button type="button" class="item" data-a="gpsPlace" data-v="${id}"><span class="ico">${p.icon}</span><span class="nm"><b>${esc(p.name)}</b></span><span class="pr">📍</span></button>`).join("")}</div>`;
   if (view === "stats") html = `<h2>📊 STATS</h2>${back}<div class="list" style="margin-top:10px">${[["💵", "Money earned", money(S.stats.earned)], ["💼", "Jobs done", S.stats.jobs], ["🏁", "Races", S.stats.races], ["🏆", "Race wins", Object.values(S.wins).reduce((a, b) => a + b, 0)], ["🚀", "Big airs", S.stats.bigAir], ["🚗", "Rides owned", S.cars.length], ["🏠", "Houses", S.houses.length - 1], ["🐟", "Fish caught", S.stats.fish], ["🦹", "Robberies", S.stats.robberies], ["💰", "Loot stashed", money(S.stats.stolen)], ["🚔", "Times busted", S.stats.busted], ["👮", "Arrests", S.cop.arrests]].map(([i, n, v]) => `<div class="item"><span class="ico">${i}</span><span class="nm"><b>${n}</b></span><span class="pr">${v}</span></div>`).join("")}</div>`;
-  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div>
+  if (view === "controls") {
+    const C = IN.controls;
+    html = `<h2>🎮 CONTROLS</h2><button type="button" class="small" data-a="view" data-v="settings">← Settings</button>
+      <p class="sub">Tap <b>Change</b>, then press the key you want. If another action already uses that key, they swap.</p>
+      ${waitKey ? `<p class="note" style="font-size:18px;color:#ffd23a"><b>Press a key for "${esc(IN.ACTIONS.find((a) => a[0] === waitKey)[1])}"...</b> (Esc to cancel)</p>` : ""}
+      <div class="list">${IN.ACTIONS.map(([d, name]) => `<div class="item"><span class="nm"><b>${esc(name)}</b></span><kbd style="min-width:54px;text-align:center;font-size:15px">${esc(IN.keyName(IN.keyOf(d)))}</kbd><button type="button" class="small" data-a="rebind" data-v="${d}">${waitKey === d ? "..." : "Change"}</button></div>`).join("")}</div>
+      <h3>Camera</h3><p class="note">Camera speed (mouse + arrow keys): <b id="sensLbl">${Math.round(C.sens * 100)}%</b></p><input type="range" min="30" max="250" step="10" value="${Math.round(C.sens * 100)}" data-a="sens">
+      <div class="btns"><button type="button" class="small" data-a="invert">${C.invert ? "✓ Up/down is flipped" : "Flip camera up/down"}</button></div>
+      <div class="btns"><button type="button" class="small" data-a="resetKeys">↺ Put all controls back to normal</button></div>`;
+  }
+  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="view" data-v="controls">🎮 Controls</button></div><div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div>
     <h3>Texting friends</h3><p class="note">Quick texts and “send my location” always work in a lobby. Typing your own texts is <b>${S.chatOn ? "ON" : "OFF"}</b> (it’s filtered: no links, no phone numbers, no bad words). A grown-up can turn it off here.</p><div class="btns"><button type="button" class="small" data-a="chatOn">${S.chatOn ? "Turn typing OFF" : "Turn typing ON"}</button></div><h3>Start over</h3><p class="note">This deletes your money, rides and houses in this browser.</p><div class="btns"><button type="button" class="small" data-a="wipe">🗑️ Reset my game</button></div><p class="note"><a class="back" href="../#/">← Back to GunnerVerse</a></p>`;
   if (view === "help") html = `<h2>❓ HELP</h2>${back}${helpHtml()}`;
   if (view === "career") html = careerHtml(back);
@@ -287,6 +299,14 @@ function phone(view = "home") {
   modal(html, "phone");
   if (view === "dev" && !devOpen()) { const i = document.getElementById("devCode"); if (i) { i.focus(); i.addEventListener("keydown", (e) => { if (e.key === "Enter") onAct("devUnlock"); }); } }
   onAct = (a, val) => {
+    if (a === "rebind") {
+      waitKey = val; SFX.click(); phone("controls");
+      IN.captureKey((code) => { const d = waitKey; waitKey = null; if (code !== "Escape" && d) { IN.bindKey(d, code); SFX.cash(); } phone("controls"); });
+      return;
+    }
+    if (a === "sens") { if (!(+val > 0)) return; IN.controls.sens = +val / 100; IN.saveControls(); const l = $("sensLbl"); if (l) l.textContent = val + "%"; return; }
+    if (a === "invert") { IN.controls.invert = !IN.controls.invert; IN.saveControls(); SFX.click(); phone("controls"); return; }
+    if (a === "resetKeys") { if (confirm("Put all the controls back to normal?")) { IN.resetControls(); SFX.click(); } phone("controls"); return; }
     if (a === "sdTab") { sdTab = val; SFX.click(); phone("skydrop"); return; }
     if (a === "sdAdd") { GM.cartAdd(val); phone("skydrop"); return; }
     if (a === "sdRm") { GM.cartRemove(+val); phone("skydrop"); return; }
