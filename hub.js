@@ -491,8 +491,8 @@
     api("/hub/play", { g: g.id }).catch(function () {});
     openFull(withRelay(g.url));
   }
-  // the game opens over the whole screen (full screen), right on top of GunnerVerse. Esc leaves full screen and shows a
-  // little bar to go back or go full screen again. If the game's own "back to GunnerVerse" link is used, it just closes.
+  // the game opens over the whole page, right on top of GunnerVerse (not full screen: the ⛶ button does that), with a
+  // little bar to go back or go full screen. If the game's own "back to GunnerVerse" link is used, it just closes.
   var fullBox = null;
   function openFull(url) {
     closeFull();
@@ -508,7 +508,6 @@
     fr.src = url;
     box.querySelector(".fp-back").onclick = closeFull;
     box.querySelector(".fp-fs").onclick = function () { goFull(box); fr.focus(); };
-    goFull(box);
   }
   function goFull(el) { try { var r = el.requestFullscreen ? el.requestFullscreen({ navigationUI: "hide" }) : el.webkitRequestFullscreen && el.webkitRequestFullscreen(); if (r && r.catch) r.catch(function () {}); } catch (x) {} }
   function closeFull() {

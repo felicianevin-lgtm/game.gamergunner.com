@@ -186,7 +186,7 @@ const cam = { yaw: Math.PI, pitch: 0.38, dist: 11, shake: 0 };
 function respawn(quiet) {
   const sp = spawnOf(S.cp);
   P.pos.set(sp.x, sp.y + 0.05, sp.z); P.vel.set(0, 0, 0); P.grounded = false; P.ground = null; P.stun = 0; P.pushed = 0; P.dead = 0;
-  P.face = sp.yaw; cam.yaw = sp.yaw + Math.PI; lastStageAt = Math.min(S.cp, STAGES); refreshWorld();
+  P.face = sp.yaw; cam.yaw = sp.yaw + Math.PI; me.root.visible = true; lastStageAt = Math.min(S.cp, STAGES); refreshWorld();
   if (!quiet) { flash("white"); }
 }
 function die(why) {
@@ -438,6 +438,7 @@ function connect(i = 0) {
     else if (m.t === "look") { const o = others.get(m.id); if (o) setOtherLook(o, m.k); }
     else if (m.t === "oblv") { const o = others.get(m.id); if (o) { o.stage = m.l; o.won = !!m.w; drawPlayers(); } }
     else if (m.t === "obpush") gotPushed(m.id);
+    else if (m.t === "obdev") { if (m.ok) { devOk = true; SFX.check(); devPanel(); } else { SFX.nope(); toast("🛠 Wrong dev code", "warn"); } }
   };
   ws.onclose = () => { if (c.skip) return; if (conn === c) { conn = null; clearOthers(); } $("net").textContent = welcomed ? "🔴 Disconnected, trying again..." : "🔴 Offline"; clearTimeout(connTimer); connTimer = setTimeout(() => connect(0), 6000); };
 }
@@ -576,6 +577,33 @@ function helpPanel() {
     <p>🧞 Beat <b>stage 200</b> to win the <b>Magic Carpet</b>: press <kbd>F</kbd> to fly anywhere (<kbd>Space</kbd> up, <kbd>Q</kbd> down, <kbd>Shift</kbd> fast), and <b>right-click</b> a player to push them off. They go back to their checkpoint!</p>
     <p>🎨 Get further to unlock shirts and hats. 📍 Go back to any stage you've reached.</p>`);
 }
+// the dev menu (the code is checked by the server): skip to any stage, get the Magic Carpet
+let devOk = false;
+function devPanel() {
+  if (!devOk) {
+    openPanel(`<h2>🛠 DEV MENU</h2><p>Type the dev code:</p><p><input id="devCode" type="password" autocomplete="off" style="font:inherit;font-size:20px;padding:8px 12px;border-radius:10px;border:0;width:180px"> <button type="button" class="big" data-a="unlock" style="font-size:18px;padding:8px 22px">Unlock</button></p>`, (b) => {
+      if (b.dataset.a !== "unlock") return;
+      if (!conn) { toast("🛠 The dev menu needs the internet (you're offline)", "warn"); return; }
+      conn.send({ t: "obdev", c: $("devCode").value.trim() });
+    });
+    setTimeout(() => { const i = $("devCode"); if (i) { i.focus(); i.onkeydown = (e) => { if (e.key === "Enter") document.querySelector('#panel [data-a="unlock"]').click(); }; } }, 30);
+    return;
+  }
+  let html = `<h2>🛠 DEV MENU</h2><p>Skip to any stage: <input id="devStage" type="number" min="1" max="${STAGES}" value="${Math.min(S.cp, STAGES)}" style="font:inherit;font-size:18px;padding:6px 10px;border-radius:10px;border:0;width:90px"> <button type="button" data-a="go" class="big" style="font-size:18px;padding:6px 20px">GO</button></p>
+    <p><button type="button" data-a="carpet" class="big" style="font-size:16px;padding:8px 18px">${S.carpet ? "🧞 Take away the Magic Carpet" : "🧞 Give me the Magic Carpet"}</button> <button type="button" data-a="finish" class="big" style="font-size:16px;padding:8px 18px">🏆 Go to the finish</button></p>`;
+  for (let z = 0; z < ZONES.length; z++) { html += `<div class="zoneh">${ZONES[z].name}</div><div class="grid">`; for (let s = z * 25 + 1; s <= z * 25 + 25; s++) html += `<button type="button" data-s="${s}" class="${s === Math.min(S.cp, STAGES) ? "cur" : ""}">${s}</button>`; html += `</div>`; }
+  openPanel(html, (b) => {
+    let s = +b.dataset.s || 0;
+    if (b.dataset.a === "go") s = clamp(Math.floor(+$("devStage").value || 1), 1, STAGES);
+    if (b.dataset.a === "finish") s = STAGES + 1;
+    if (b.dataset.a === "carpet") { S.carpet = !S.carpet; save(); if (!S.carpet && P.fly) toggleCarpet(); hud(); netLevel(); devPanel(); toast(S.carpet ? "🧞 You got the Magic Carpet! Press F to fly." : "🧞 Carpet taken away", "gold"); return; }
+    if (!s) return;
+    S.cp = s; S.best = Math.max(S.best, s); save();
+    if (P.fly) { P.fly = false; myCarpet.visible = false; $("bCarpet").classList.remove("on"); }
+    closePanel(); respawn(); netLevel(); hud(); toast(s > STAGES ? "🛠 Skipped to the finish" : "🛠 Skipped to stage " + s, "good");
+  });
+}
+$("bDev").onclick = () => { audio(); devPanel(); };
 $("bStages").onclick = () => { audio(); stagesPanel(); };
 $("bStyle").onclick = () => { audio(); stylePanel(); };
 $("bHelp").onclick = () => { audio(); helpPanel(); };
@@ -604,7 +632,11 @@ function core(dt, draw = true) {
   jumpPressed = false;
 }
 let last = performance.now();
-function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; core(dt); requestAnimationFrame(frame); }
+function frame(now) {
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+  try { core(dt); } catch (e) { console.error(e); jumpPressed = false; } // (a bug in one frame never freezes the whole game)
+  requestAnimationFrame(frame);
+}
 respawn(true); hud();
 requestAnimationFrame(frame);
 connect();
