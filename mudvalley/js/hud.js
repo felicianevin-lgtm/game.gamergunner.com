@@ -88,7 +88,8 @@ export function updateHud(g) {
   setT("itemName", g.item ? "✋ " + g.item : "");
   // race info
   $("raceHud").classList.toggle("hidden", !g.race);
-  if (g.race) { const r = g.race; setT("rPos", ordinal(r.place) + "/" + (r.ais.length + 1)); setT("rLap", r.T.closed ? Math.min(r.laps, r.lap + 1) + "/" + r.laps : "SPRINT"); setT("rTime", fmtTime(r.time)); }
+  if (g.race) { const r = g.race, lb = document.querySelector("#raceHud small"); if (lb) lb.textContent = r.def.drift ? "DRIFT POINTS" : "PLACE";
+    if (r.def.drift) setT("rPos", r.score.toLocaleString() + (r.chain > 0 ? " +" + Math.round(r.chain).toLocaleString() + " x" + r.combo : "")); else setT("rPos", ordinal(r.place) + "/" + (r.ais.length + 1)); setT("rLap", r.T.closed ? Math.min(r.laps, r.lap + 1) + "/" + r.laps : "SPRINT"); setT("rTime", fmtTime(r.time)); }
   // the arrow that points where to go
   const tg = g.target;
   $("arrow").classList.toggle("hidden", !tg);

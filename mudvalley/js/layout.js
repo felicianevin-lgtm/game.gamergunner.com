@@ -41,6 +41,7 @@ export const FLATS = [
   { x: 400, z: -318, hx: 108, hz: 52, y: 3, b: 30 }, // Copper Creek (the second town)
   { x: 452, z: 140, hx: 52, hz: 50, y: 2, b: 24 }, // Lily Pond
   { x: -458, z: -262, hx: 16, hz: 14, y: null, b: 14 }, // robber hideout in the woods
+  { x: 330, z: 725, hx: 115, hz: 82, y: null, b: 30 }, // Valley Drift Park
   // the new houses
   { x: 246, z: -138, hx: 16, hz: 26, y: null, b: 12 }, { x: 210, z: 58, hx: 14, hz: 14, y: null, b: 12 }, { x: -428, z: 138, hx: 18, hz: 16, y: null, b: 12 },
   { x: 474, z: 84, hx: 18, hz: 16, y: null, b: 12 }, { x: 234, z: 342, hx: 34, hz: 24, y: null, b: 14 }, { x: -318, z: -200, hx: 34, hz: 24, y: null, b: 14 },
@@ -110,6 +111,7 @@ export const ROADS = [
   { pts: [[496, -318], [498, -220], [486, -100], [474, 0], [446, 60], [396, 112], [388, 200], [410, 280], [380, 352], [280, 384], [170, 398], [80, 380], [50, 330], [48, 290]], w: 10, name: "loopS" },
   // the BIG LOOP + the 4 long roads out to it
   { pts: ring, w: 12, loop: true, name: "bigloop" },
+  { pts: [[80, 700], [160, 690], [228, 680]], w: 10 }, // to the drift park
   ...SPOKES.map((s, i) => ({ pts: s, w: 11, name: "spoke" + i })),
   { pts: [[1282, -220], [1420, -120], [1500, 60], [1560, 260]], w: 9, name: "desertrd" }, // into the Red Rock Desert
 ];
@@ -142,7 +144,11 @@ export const TRAILS = [
   { pts: [[80, 880], [-120, 900], [-300, 880], [-430, 880]], w: 8, name: "lake" }, // to Big Bass Lake
   { pts: loopAround(700, 1080, 200, 150, 14, 0.2, 7), w: 8, loop: true, name: "bayou" }, // Bayou Bog (mud everywhere!)
   { pts: [[80, 1000], [300, 1040], [500, 1080]], w: 8 },
+  // Big Woods Single Track: a skinny, twisty dirt bike trail right through the trees
+  { pts: [[-900, -128], [-905, -95], [-880, -60], [-850, -25], [-868, 12], [-910, 32], [-940, 70], [-915, 110], [-870, 130], [-832, 170], [-846, 215], [-890, 240], [-935, 266], [-960, 310], [-930, 350], [-880, 370], [-852, 410], [-892, 442], [-952, 432], [-1000, 400], [-1030, 352], [-1010, 302], [-1042, 252], [-1090, 232], [-1112, 182], [-1080, 132], [-1040, 100], [-1062, 50], [-1102, 20], [-1092, -30], [-1050, -70], [-1072, -105], [-1080, -128]], w: 3.2, name: "single" },
 ];
+// Valley Drift Park: a wide paved course full of hairpins (south of the valley)
+export const DRIFT_TRACK = [[240, 662], [330, 656], [418, 666], [432, 700], [402, 721], [352, 713], [322, 737], [362, 760], [424, 770], [420, 796], [330, 797], [250, 791], [228, 752], [270, 731], [262, 700], [234, 690]];
 
 // mud pits {x, z, r}
 export const MUDS = [
@@ -224,6 +230,8 @@ export const PLACES = {
   lake: { name: "Big Bass Lake", x: -450, z: 880, icon: "🎣", color: "#4ac0e0" },
   bayou: { name: "Bayou Bog", x: 700, z: 1080, icon: "🐊", color: "#6a5030" },
   bigloop: { name: "Big Loop Highway", x: 0, z: -1300, icon: "🛣️", color: "#8a8a8a" },
+  single: { name: "Big Woods Single Track", x: -900, z: -128, icon: "🌲", color: "#5ad87a", r: 6 },
+  drift: { name: "Valley Drift Park", x: 240, z: 662, icon: "💨", color: "#ff5ad8", r: 7 },
   goat: { name: "Goat Trail (4x4)", x: -360, z: 64, icon: "🐐", color: "#b0b0b0" },
   // pawn shops all around the map (sell the stuff in your backpack: npcs.js)
   pawn0: { name: "Pawn Shop (North of Town)", x: -31, z: -106, icon: "💰", color: "#d0a030" },

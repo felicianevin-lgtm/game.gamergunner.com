@@ -2,7 +2,7 @@
 // and answers "how high is the ground here?" and "is this road, dirt or mud?" for the driving physics.
 import * as THREE from "/create/vendor/three.module.js";
 import { bakeGroup } from "./vehicles.js";
-import { HALF, EDGE, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, POND, LAKE, FROST, RING_R, SPOKES, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY } from "./layout.js";
+import { HALF, EDGE, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, POND, LAKE, FROST, RING_R, SPOKES, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY, DRIFT_TRACK } from "./layout.js";
 
 export const CELL = 5, N = (HALF * 2) / CELL; // the height grid: N x N squares of 5 m
 const V = N + 1;
@@ -193,6 +193,8 @@ export function buildGround() {
   { let bi = 0, bd = 1e9; for (let i = 0; i < TRACKS.moto.n; i++) { const d = (TRACKS.moto.x[i] - 247) ** 2 + (TRACKS.moto.z[i] + 12) ** 2; if (d < bd) { bd = d; bi = i; } } TRACKS.moto.start0 = bi; }
   TRACKS.speedway = add({ pts: SPEEDWAY, w: 16 }, "speedway");
   TRACKS.summit = PATHS.find((p) => p.name === "mountain");
+  TRACKS.single = PATHS.find((p) => p.name === "single");
+  TRACKS.drift = add({ pts: DRIFT_TRACK, w: 15 }, "speedway");
   flattenPaths();
   for (const m of MUD_LIST) dig(m);
   // the road's height = the ground under it (bridges keep their deck height), so what you see is what you drive on

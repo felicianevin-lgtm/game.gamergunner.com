@@ -8,6 +8,8 @@ import { G } from "./physics.js";
 export const RACES = [
   { id: "moto", name: "Mud Valley Motocross", track: "moto", laps: 3, place: "moto", ai: ["bike", "atv", "buggy", "bike", "atv"], speed: 21, prize: [1500, 800, 400], desc: "3 laps of dirt, jumps and a mud pit! Best with a dirt bike, ATV or buggy." },
   { id: "speedway", name: "Valley Speedway GP", track: "speedway", laps: 3, place: "speedway", ai: ["sports", "sports", "hyper", "sports", "sports"], speed: 38, prize: [2500, 1200, 600], desc: "3 fast laps on smooth pavement. You'll want a sports car!" },
+  { id: "single", name: "Big Woods Single Track", track: "single", laps: 1, place: "single", ai: ["bike", "bike125", "pitbike", "bike450"], speed: 13, prize: [1800, 900, 450], desc: "A skinny, twisty dirt trail right through the trees! Dirt bikes only fit... watch out for the trunks!" },
+  { id: "drift", name: "Valley Drift Park", track: "drift", laps: 2, place: "drift", ai: [], drift: true, goal: [6000, 3500, 1500], prize: [3000, 1500, 700], speed: 0, desc: "Slide sideways for points! The longer and faster you drift, the bigger your combo. Best in a drift car. Hold Space to start a slide." },
   { id: "summit", name: "Summit Sprint", track: "summit", laps: 1, place: "summit", ai: ["jeep", "buggy", "monster", "atv"], speed: 17, prize: [2000, 1000, 500], desc: "Race up the twisty mountain trail all the way to the top! Off-road rides win here." },
 ];
 export const raceById = (id) => RACES.find((r) => r.id === id);
@@ -61,6 +63,7 @@ export class Race {
     this.scene = scene; this.def = def; this.api = api; this.T = prepTrack(def.track);
     this.state = "count"; this.t = -3.5; this.time = 0; this.ais = []; this.results = []; this.done = false;
     this.lap = 0; this.next = 1; this.lastCp = 0; this.pIdx = 0; this.finished = false; this.place = 0;
+    this.score = 0; this.chain = 0; this.combo = 1; this.slideT = 0; this.calm = 0; // (drift points)
     const T = this.T, half = T.w / 2 - 1.6;
     // the starting grid: two rows behind the start line
     const grid = [];
@@ -120,6 +123,19 @@ export class Race {
         if (!this.finished) this.placeHoop();
       }
     }
+    // drifting: points for sliding sideways (angle x speed), a combo that grows the longer you hold it
+    if (this.def.drift && going && !this.finished) {
+      const sp = Math.hypot(player.vx || 0, player.vz || 0), fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
+      const ang = sp > 1 ? Math.acos(clamp(Math.abs((player.vx * fx + player.vz * fz) / sp), -1, 1)) : 0;
+      if (sp > 7 && ang > 0.22 && ang < 1.7) {
+        this.calm = 0; this.slideT += dt; this.combo = Math.min(5, 1 + Math.floor(this.slideT / 1.5));
+        this.chain += dt * sp * ang * 14;
+      } else if (this.chain > 0) {
+        this.calm += dt;
+        if (sp < 4) { this.chain = 0; this.slideT = 0; this.combo = 1; this.calm = 0; ev.push({ type: "driftLost" }); } // (stopped / spun out: you lose it)
+        else if (this.calm > 0.7) { const got = Math.round(this.chain * this.combo); this.score += got; ev.push({ type: "drift", got, combo: this.combo }); this.chain = 0; this.slideT = 0; this.combo = 1; this.calm = 0; }
+      }
+    }
     // the computer racers
     const pp = this.progressOf(player.x, player.z);
     for (const a of this.ais) {
@@ -158,7 +174,8 @@ export class Race {
     return ev;
   }
   finishPlayer(ev) {
-    this.finished = true; this.finishPlace = this.results.length + 1;
+    if (this.def.drift) { this.score += Math.round(this.chain * this.combo); this.chain = 0; const g = this.def.goal; this.results.length = 0; this.results.push(...[]); this.finishPlace = this.score >= g[0] ? 1 : this.score >= g[1] ? 2 : this.score >= g[2] ? 3 : 4; }
+    this.finished = true; if (!this.def.drift) this.finishPlace = this.results.length + 1;
     this.results.push({ name: "YOU", time: this.time, ai: false });
     this.hoop.visible = false;
     ev.push({ type: "finish", place: this.finishPlace, time: this.time });

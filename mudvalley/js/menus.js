@@ -1,5 +1,5 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
-import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP, BED_LENS, OFFSETS } from "./vehicles.js";
+import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP, BED_LENS, OFFSETS, CAMBERS } from "./vehicles.js";
 import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
@@ -17,7 +17,7 @@ import * as IN from "./input.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵";
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -117,7 +117,8 @@ function customs() {
   if (cTab === "paint") body = `<p class="note">Paint job: <b>${money(PRICES.paint)}</b> each</p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === s.paint ? "on" : ""}" style="background:${hex(p)}" data-a="paint" data-v="${p}"></button>`).join("")}</div>`;
   if (cTab === "wheels") body = `<h3>Tires</h3><div class="opts">${TIRES.map((x) => `<button type="button" class="opt ${s.tires === x.id ? "on" : ""}" data-a="tires" data-v="${x.id}"><span>${x.name}<small>${x.desc}</small></span><em>${s.tires === x.id ? "✓" : x.price ? money(x.price) : "FREE"}</em></button>`).join("")}</div>
     <h3>Rims (${money(PRICES.rims)})</h3><div class="swatches">${RIMS.map((r) => `<button type="button" class="sw ${s.rims === r.id ? "on" : ""}" style="background:${hex(r.c)}" title="${r.name}" data-a="rims" data-v="${r.id}"></button>`).join("")}</div>
-    ${v.bike ? "" : `<h3>Wheel offset</h3><p class="note">How far the wheels stick out. Poke = wide and mean, tucked = tight under the fenders.</p><div class="opts">${OFFSETS.map((q, i) => `<button type="button" class="opt ${(s.offset ?? 1) === i ? "on" : ""}" data-a="offset" data-v="${i}"><span>${q.name}</span><em>${(s.offset ?? 1) === i ? "✓" : (s.ownOffset || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>`}`;
+    ${v.bike ? "" : `<h3>Wheel offset</h3><p class="note">How far the wheels stick out. Poke = wide and mean, tucked = tight under the fenders.</p><div class="opts">${OFFSETS.map((q, i) => `<button type="button" class="opt ${(s.offset ?? 1) === i ? "on" : ""}" data-a="offset" data-v="${i}"><span>${q.name}</span><em>${(s.offset ?? 1) === i ? "✓" : (s.ownOffset || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>
+    <h3>Camber</h3><p class="note">Tilts the tops of the wheels in. The stanced drift look!</p><div class="opts">${CAMBERS.map((q, i) => `<button type="button" class="opt ${(s.camber ?? 0) === i ? "on" : ""}" data-a="camber" data-v="${i}"><span>${q.name}</span><em>${(s.camber ?? 0) === i ? "✓" : (s.ownCamber || [0]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>`}`;
   if (cTab === "engine") body = `<p class="note">Faster engines = more top speed and quicker starts. Want it slower? Pick a lower level any time for free!</p><div class="opts">${ENGINE_COST.map((cost, i) => `<button type="button" class="opt ${s.engine === i ? "on" : ""}" data-a="engine" data-v="${i}"><span>${(v.bike ? ["Stock motor", "Stage 1", "Stage 2", "Stage 3", "Stage 4 RACE"] : ["Stock engine", "Stage 1 Turbo", "Stage 2 Turbo", "Stage 3 Super", "Stage 4 MONSTER (flames!)"])[i]}<small>${i ? "+" + i * 6 + "% top speed, +" + i * 10 + "% acceleration" : "The engine it came with"}${!v.bike && i >= 2 ? " · hood scoop" : ""}${!v.bike && i >= 3 ? " · big exhausts" : ""}</small></span><em>${s.engine === i ? "✓" : i <= (s.maxEngine || s.engine) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
   if (cTab === "speed") body = `<p class="note">The speed limiter makes your ride slower. Great for tricky trails, towing, or learning to drive. Free!</p>
     <h3>Top speed: <span id="limLbl">${mph(t.top)} mph</span> (${Math.round(s.limit * 100)}%)</h3><input type="range" min="30" max="100" step="5" value="${Math.round(s.limit * 100)}" data-a="limit">`;
@@ -144,6 +145,7 @@ function customs() {
     if (a === "buyScrub") GM.buyScrubber();
     if (a === "flat") GM.setFlatbed(val === "1");
     if (a === "bedLen") GM.setBedLen(+val);
+    if (a === "camber") { const i = +val, own = s.ownCamber || [0]; if (i !== (s.camber ?? 0) && GM.custom("camber", i, own.includes(i) ? 0 : CAMBERS[i].price)) s.ownCamber = [...new Set([...own, i])]; }
     if (a === "offset") { const i = +val, own = s.ownOffset || [1]; if (i !== (s.offset ?? 1) && GM.custom("offset", i, own.includes(i) ? 0 : OFFSETS[i].price)) s.ownOffset = [...new Set([...own, i])]; }
     if (a === "susp") GM.setSuspension(+val);
     if (a === "scrub") { const r = Math.max(0, rustOf(s) - 0.1); GM.custom("rust", r < 0.02 ? 0 : r, 0); GM.scrubFx(r < 0.02); }
@@ -256,6 +258,15 @@ function jobsPanel(fromPhone) {
 // ---------------------------------------------------------------- races
 function raceInfo(def) {
   const c = GM.mine(), best = S.best[def.id];
+  if (def.drift) {
+    modal(`<h2>💨 ${esc(def.name)}</h2><p class="sub">${esc(def.desc)}</p><p class="note">${def.laps} laps · just you vs. the scoreboard</p>
+      <div class="list">${["🥇", "🥈", "🥉"].map((m, i) => `<div class="item"><span class="ico">${m}</span><span class="nm"><b>${def.goal[i].toLocaleString()} points</b></span><span class="pr">${money(def.prize[i])}</span></div>`).join("")}</div>
+      <p class="note">🏆 Best score: <b>${best ? best.toLocaleString() : "none yet"}</b> · Gold medals: <b>${S.wins[def.id] || 0}</b></p>
+      <p class="note">Slide sideways to fill your drift. Keep it going for a bigger combo (up to x5). Stop or spin out and you lose it! Drive through the hoops.</p>
+      <div class="btns">${c ? `<button type="button" class="big" data-a="go">START DRIFTING</button><span class="note">In your ${esc(vehicleById(c.s.id).name)}</span>` : `<span class="note">Get in a car to drift!</span>`}</div>`);
+    onAct = (a) => { if (a === "go") GM.startRace(def.id); };
+    return;
+  }
   modal(`<h2>🏁 ${esc(def.name)}</h2><p class="sub">${esc(def.desc)}</p>
     <p class="note">${def.laps > 1 ? def.laps + " laps" : "Point to point"} · ${def.ai.length} other racers: ${def.ai.map((a) => ICON[a]).join(" ")}</p>
     <div class="list"><div class="item"><span class="ico">🥇</span><span class="nm"><b>1st place</b></span><span class="pr">${money(def.prize[0])}</span></div><div class="item"><span class="ico">🥈</span><span class="nm"><b>2nd place</b></span><span class="pr">${money(def.prize[1])}</span></div><div class="item"><span class="ico">🥉</span><span class="nm"><b>3rd place</b></span><span class="pr">${money(def.prize[2])}</span></div></div>
@@ -265,6 +276,14 @@ function raceInfo(def) {
   onAct = (a) => { if (a === "go") GM.startRace(def.id); };
 }
 function raceResults(r) {
+  if (r.def.drift) {
+    const p = r.finishPlace;
+    modal(`<h2>${p === 1 ? "🥇 GOLD!" : p === 2 ? "🥈 SILVER!" : p === 3 ? "🥉 BRONZE!" : "💨 NICE TRY"}</h2><p class="sub">${esc(r.def.name)} · <b>${r.score.toLocaleString()} points</b>${r.newBest ? " · <b style='color:#7aff5a'>NEW BEST!</b>" : ""}</p>
+      <div class="bank">+${money(r.prize || 0)}</div><p class="note">Gold ${r.def.goal[0].toLocaleString()} · Silver ${r.def.goal[1].toLocaleString()} · Bronze ${r.def.goal[2].toLocaleString()}</p>
+      <div class="btns"><button type="button" class="big" data-a="again">↻ Drift again</button><button type="button" class="mid" data-a="done">Done</button></div>`, "noX");
+    onAct = (a) => { const id = r.def.id; GM.quitRace(); close(); if (a === "again") GM.startRace(id); };
+    return;
+  }
   const st = r.standings(), me = st.findIndex((x) => !x.ai) + 1;
   modal(`<h2>${me === 1 ? "🏆 YOU WIN!" : "🏁 " + H.ordinal(me) + " PLACE"}</h2><p class="sub">${esc(r.def.name)} · Your time <b>${H.fmtTime(r.time)}</b>${r.newBest ? " · <b style='color:#7aff5a'>NEW BEST!</b>" : ""}</p>
     <div class="bank">+${money(r.prize || 0)}</div>
@@ -288,7 +307,7 @@ function phone(view = "home") {
     <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
-  if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? H.fmtTime(S.best[r.id]) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
+  if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? (r.drift ? S.best[r.id].toLocaleString() + " pts" : H.fmtTime(S.best[r.id])) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
   if (view === "houses") html = `<h2>🏠 HOUSES</h2>${back}<div class="list" style="margin-top:10px">${HOUSES.filter((h) => h.price).map((h) => `<div class="item"><span class="ico">🏠</span><span class="nm"><b>${esc(h.name)}${S.houses.includes(h.id) ? '<span class="tag">YOURS</span>' : ""}</b><small>${h.slots} rides · ${esc(h.desc)}</small></span><span class="pr">${money(h.price)}</span><button type="button" class="small" data-a="gpsHouse" data-v="${h.id}">📍</button></div>`).join("")}</div>`;
   if (view === "gps") html = `<h2>📍 PLACES</h2>${back}<div class="list" style="margin-top:10px">${Object.entries(PLACES).map(([id, p]) => `<button type="button" class="item" data-a="gpsPlace" data-v="${id}"><span class="ico">${p.icon}</span><span class="nm"><b>${esc(p.name)}</b></span><span class="pr">📍</span></button>`).join("")}</div>`;
   if (view === "stats") html = `<h2>📊 STATS</h2>${back}<div class="list" style="margin-top:10px">${[["💵", "Money earned", money(S.stats.earned)], ["💼", "Jobs done", S.stats.jobs], ["🏁", "Races", S.stats.races], ["🏆", "Race wins", Object.values(S.wins).reduce((a, b) => a + b, 0)], ["🚀", "Big airs", S.stats.bigAir], ["🚗", "Rides owned", S.cars.length], ["🏠", "Houses", S.houses.length - 1], ["🐟", "Fish caught", S.stats.fish], ["🦹", "Robberies", S.stats.robberies], ["💰", "Loot stashed", money(S.stats.stolen)], ["🚔", "Times busted", S.stats.busted], ["👮", "Arrests", S.cop.arrests]].map(([i, n, v]) => `<div class="item"><span class="ico">${i}</span><span class="nm"><b>${n}</b></span><span class="pr">${v}</span></div>`).join("")}</div>`;

@@ -959,11 +959,16 @@ function raceTick(dt) {
     else if (e.type === "cp") SFX.check();
     else if (e.type === "lap") { SFX.lap(); H.banner(e.lap === r.laps ? "FINAL LAP!" : "LAP " + e.lap, ""); }
     else if (e.type === "aiLand") fx.dust(e.a.x, e.a.y, e.a.z, 3);
+    else if (e.type === "drift") { SFX.check(); H.toast("💨 DRIFT +" + e.got.toLocaleString() + (e.combo > 1 ? " (x" + e.combo + " combo!)" : ""), "", "cash", 1300); }
+    else if (e.type === "driftLost") { SFX.nope(); H.toast("Spun out! Drift lost", "", "warn", 1200); }
     else if (e.type === "finish") {
       const prize = r.def.prize[e.place - 1] || 100;
       r.prize = prize; pay(prize); H.bumpMoney();
-      const best = S.best[r.def.id]; r.newBest = !best || e.time < best; if (r.newBest) S.best[r.def.id] = Math.round(e.time * 10) / 10;
-      if (e.place === 1) { S.wins[r.def.id] = (S.wins[r.def.id] || 0) + 1; SFX.win(); fx.confetti(p.x, p.y + 3, p.z, 120); H.banner("YOU WIN!", "+" + money(prize)); }
+      const best = S.best[r.def.id];
+      if (r.def.drift) { r.newBest = !best || r.score > best; if (r.newBest) S.best[r.def.id] = r.score; }
+      else { r.newBest = !best || e.time < best; if (r.newBest) S.best[r.def.id] = Math.round(e.time * 10) / 10; }
+      if (r.def.drift) { (e.place <= 3 ? SFX.win : SFX.lap)(); if (e.place === 1) { S.wins[r.def.id] = (S.wins[r.def.id] || 0) + 1; fx.confetti(p.x, p.y + 3, p.z, 120); } H.banner(["🥇 GOLD!", "🥈 SILVER!", "🥉 BRONZE!", "NICE DRIFTING!"][e.place - 1], r.score.toLocaleString() + " points · +" + money(prize)); }
+      else if (e.place === 1) { S.wins[r.def.id] = (S.wins[r.def.id] || 0) + 1; SFX.win(); fx.confetti(p.x, p.y + 3, p.z, 120); H.banner("YOU WIN!", "+" + money(prize)); }
       else { (e.place <= 3 ? SFX.lap : SFX.lose)(); H.banner(H.ordinal(e.place) + " PLACE", "+" + money(prize)); }
       save();
     } else if (e.type === "results") UI.raceResults(r);

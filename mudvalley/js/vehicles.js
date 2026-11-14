@@ -31,6 +31,7 @@ export const VEHICLES = [
   { id: "swamp", name: "Swamp Crawler 6x6", price: 32000, top: 28, acc: 9, grip: 8, turn: 1.6, off: { dirt: 1, grass: 1, mud: 1 }, size: 9, tow: 2, color: 0x4a5a3a, engine: 55, crawl: 1, desc: "A giant 6-wheel-drive army-style truck. Mud, rivers, mountains... nothing stops it." },
   { id: "hauler", name: "Big Bertha Hauler", price: 15000, top: 30, acc: 6.5, grip: 7, turn: 1.5, off: { dirt: 0.72, grass: 0.62, mud: 0.42 }, size: 9, tow: 2, color: 0x6a3ad0, engine: 50, crawl: 0.35, desc: "A giant semi truck. Slow to start, but pulls the big flatbed full of cars." },
   { id: "crew", name: "Ridgeback 1500 Crew Cab (7 ft bed)", price: 14000, top: 38, acc: 11, grip: 8, turn: 1.9, off: { dirt: 0.85, grass: 0.78, mud: 0.58 }, size: 2, tow: 2, color: 0x9aa0aa, engine: 78, crawl: 0.62, desc: "A big, modern full-size crew cab pickup. Chrome grille, four doors, tows anything." },
+  { id: "drift", name: "Sideways S200 Drift Coupe", price: 9500, top: 41, acc: 14, grip: 3.2, turn: 2.7, off: { dirt: 0.4, grass: 0.32, mud: 0.18 }, size: 2, tow: 0, color: 0xf2f2f2, engine: 120, crawl: 0.25, desc: "A light rear-wheel-drive coupe built to go SIDEWAYS. Low grip, big steering angle, camber from the factory. Made for the Drift Park!" },
   { id: "foxhatch", name: "Street Fox 5.0 Hatch", price: 11000, top: 46, acc: 15, grip: 8.5, turn: 2.2, off: { dirt: 0.45, grass: 0.38, mud: 0.22 }, size: 2, tow: 0, color: 0xe0203a, engine: 105, crawl: 0.3, desc: "A boxy 80s V8 hatchback. Light, loud and fast. Burnouts all day!" },
   { id: "monster", name: "Stomper Monster Truck", price: 22000, top: 33, acc: 11, grip: 7.5, turn: 1.8, off: { dirt: 1, grass: 1, mud: 0.93 }, size: 9, tow: 2, color: 0x2ac0a0, engine: 60, crawl: 1, desc: "HUGE wheels. Climbs anything, crushes mud, does big jumps." },
   // police cars (you get these when you join the police; they never show up at the dealership)
@@ -59,6 +60,8 @@ export const FLATBED_PRICE = 800;
 // truck bed lengths (Mud & Chrome → 🛻 Bed): the bed (and the wheelbase) gets shorter or longer
 export const BED_LENS = [{ name: "Short bed (5.5 ft)", d: -0.36, price: 400 }, { name: "Standard bed", d: 0, price: 0 }, { name: "Long bed (8 ft)", d: 0.5, price: 600 }];
 // wheel offset (Mud & Chrome → 🛞 Wheels): tucked in, stock, or poking out past the fenders
+// camber (Mud & Chrome → 🛞 Wheels): the tops of the wheels tilt in
+export const CAMBERS = [{ name: "Stock", a: 0, price: 0 }, { name: "Mild (-3°)", a: 0.05, price: 200 }, { name: "Stanced (-8°)", a: 0.14, price: 350 }, { name: "Extreme (-15°)", a: 0.26, price: 500 }];
 export const OFFSETS = [{ name: "Tucked", d: -0.05, price: 150 }, { name: "Stock", d: 0, price: 0 }, { name: "Poke (+2 in)", d: 0.06, price: 250 }, { name: "Wide poke (+4 in)", d: 0.12, price: 400 }, { name: "Super poke (+6 in)", d: 0.2, price: 600 }];
 const bedD = (car) => (BED_LENS[car.bedLen ?? 1] || BED_LENS[1]).d;
 // the truck's bed after its length change (in the truck's own space)
@@ -115,7 +118,7 @@ export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
-  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null };
+  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null, ...(id === "drift" ? { camber: 2, ownCamber: [0, 2], offset: 2, ownOffset: [1, 2], rims: "black" } : {}) };
 }
 // final driving numbers after upgrades
 export function tune(car) {
@@ -320,7 +323,8 @@ export function applyLook(C, car) {
     w.r = w.r0 * tk; w.spin.scale.set(car.tires === "mud" ? 1.15 : 1, tk, tk); w.knobs.visible = car.tires !== "street";
   }
   const od = (OFFSETS[car.offset ?? 1] || OFFSETS[1]).d; // (wheel offset: the wheels poke out or tuck in)
-  for (const w of C.wheels) if (!w.bike) w.pivot.position.x = w.x + w.side * od;
+  const ca = (CAMBERS[car.camber ?? 0] || CAMBERS[0]).a;
+  for (const w of C.wheels) if (!w.bike) { w.pivot.position.x = w.x + w.side * od; w.pivot.rotation.z = w.side * ca; }
   C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? 0 : car.lift) * 0.17; // (dirt bikes don't get lifted)
   C.liftY = C.lift.position.y;
   C.scoop.visible = car.engine >= 2; const bl = C.scoop.getObjectByName("blower"); if (bl) bl.visible = car.engine >= 4;
@@ -578,6 +582,27 @@ const BUILD = {
     bx(b, 1.9, 0.05, 0.42, 0, 1.22, -2.12, P, 0.08); for (const s of [-1, 1]) bx(b, 0.04, 0.22, 0.45, s * 0.95, 1.16, -2.12, M.dark);
     C.pipes.push(V3(0.35, 0.38, -2.25), V3(-0.35, 0.38, -2.25));
     for (const [x, z, f] of [[0.84, 1.42, 1], [-0.84, 1.42, 1], [0.84, -1.42, 0], [-0.84, -1.42, 0]]) wheel(C, x, z, 0.38, 0.32, f);
+  },
+  // a drift coupe: a long hood, a small greenhouse, wide fender flares, a front lip, a ducktail wing, big single exhaust
+  drift(C) {
+    const b = C.body, P = C.paint;
+    C.len = 4.4; C.wid = 1.95; C.seat.set(0.38, 0.16, -0.3); C.hitch = null; C.hood = V3(0, 0.82, 1.3);
+    const S = shell(C, { zf: 2.2, zb: -2.18, w: 0.92, b: 0.3, s: 0.72, hood: 0.7, cowl: 0.84, roof: 1.27, ws: 0.95, wt: 0.3, rb: -0.7, rg: -1.6, deck: 0.92, wheels: [[1.32, 0.4], [-1.32, 0.4]], nose: 0.5, drop: 0.16, roofW: 0.72, hoodW: 0.86, taper: 0.1 });
+    seam(C, S, 0.85); seam(C, S, -0.6); handle(C, S, -0.45); mirror(C, S, 0.8);
+    flare(C, S, 1.32, 0.4, M.dark, 0.08); flare(C, S, -1.32, 0.4, M.dark, 0.1);
+    for (const s of [-1, 1]) {
+      bx(b, 0.36, 0.08, 0.12, s * 0.58, 0.66, 2.12, M.light, -0.2); bx(b, 0.36, 0.03, 0.14, s * 0.58, 0.72, 2.08, M.dark, -0.2); // slim headlights + "eyelids"
+      bx(b, 0.46, 0.09, 0.05, s * 0.52, 0.8, -2.19, M.tail); // taillights
+      bx(b, 0.04, 0.1, 2.2, s * 0.94, 0.36, 0, M.dark); // side skirts
+    }
+    bx(b, 1.7, 0.05, 0.18, 0, 0.29, 2.22, M.dark); // front lip
+    bx(b, 0.8, 0.12, 0.04, 0, 0.5, 2.21, M.dark); // grille
+    bx(b, 1.6, 0.16, 0.18, 0, 0.36, -2.18, M.dark); // rear bumper
+    for (const s of [-1, 1]) tube(b, V3(s * 0.55, 0.92, -1.95), V3(s * 0.55, 1.12, -2.04), 0.035, M.dark);
+    bx(b, 1.7, 0.05, 0.36, 0, 1.14, -2.05, M.dark, 0.1); for (const s of [-1, 1]) bx(b, 0.04, 0.2, 0.4, s * 0.85, 1.1, -2.05, M.dark); // the wing
+    bx(b, 0.12, 0.05, 0.9, 0.2, 1.285, -0.2, M.dark); // a roof vent stripe
+    C.pipes.push(V3(-0.5, 0.36, -2.2));
+    for (const [x, z, f] of [[0.84, 1.32, 1], [-0.84, 1.32, 1], [0.86, -1.32, 0], [-0.86, -1.32, 0]]) wheel(C, x, z, 0.36, 0.3, f);
   },
   hauler(C) {
     // a big semi truck: long hood, a tall sleeper cab, chrome stacks + tanks

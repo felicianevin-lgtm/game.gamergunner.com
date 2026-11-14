@@ -19,6 +19,7 @@ export const PARTS = [
   { id: "f_bquad", kind: "frame", name: "Big Quad Frame", price: 1900, icon: "🛞", model: "bigquad", desc: "Builds a big muddy quad with racks. Needs a seat." },
   { id: "f_pit", kind: "frame", name: "Pit Bike Frame", price: 300, icon: "🏍️", model: "pitbike", desc: "Builds a little pit bike. Needs a seat." },
   { id: "f_sxs", kind: "frame", name: "Side-by-Side Frame", price: 6000, icon: "🏎️", model: "sxs", body: true, desc: "Builds a long-travel side-by-side. Needs a seat + body panels." },
+  { id: "f_drift", kind: "frame", name: "Drift Coupe Frame", price: 3500, icon: "🏎️", model: "drift", body: true, desc: "Builds a sideways-loving drift coupe. Needs a seat + body panels." },
   { id: "f_sxs4", kind: "frame", name: "4-Door Side-by-Side Frame", price: 7500, icon: "🏎️", model: "sxs4", body: true, desc: "Builds the 4-seat, 4-door side-by-side. Needs a seat + body panels." },
   { id: "f_125", kind: "frame", name: "125 Dirt Bike Frame", price: 450, icon: "🏍️", model: "bike125", desc: "Builds a 125cc dirt bike. Needs a seat." },
   { id: "f_sport", kind: "frame", name: "Sport Bike Frame", price: 2400, icon: "🏍️", model: "sport300", body: true, desc: "Builds a 300 sport bike. Needs a seat + body panels (the fairing)." },
