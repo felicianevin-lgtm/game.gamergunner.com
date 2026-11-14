@@ -46,7 +46,35 @@ export const ENGINE_COST = [0, 600, 1500, 3500, 7000];
 export const LIFT_COST = [0, 400, 800, 1200];
 export const NEONS = [null, 0x3ad0ff, 0xff3ad8, 0x6aff3a, 0xffd23a, 0xff3a3a, 0xffffff];
 // trucks with a bed a dirt bike or quad can ride in (bed floor height + the middle of the bed, in the truck's own space)
-export const BEDS = { crew: { y: 0.98, z: -2.2 }, pickup: { y: 0.91, z: -1.4 }, minitruck: { y: 0.79, z: -0.75 }, ranch: { y: 1.04, z: -1.95 }, trailboss: { y: 1.46, z: -1.65 } };
+// (front/back = where the bed starts + ends: the flatbed mod swaps everything in there for a steel deck)
+export const BEDS = { crew: { y: 0.98, z: -2.2, front: -1.4, back: -3.0 }, pickup: { y: 0.91, z: -1.4, front: -0.38, back: -2.57 }, minitruck: { y: 0.79, z: -0.75, front: 0.25, back: -1.75 },
+  ranch: { y: 1.04, z: -1.95, front: -0.75, back: -3.12 }, trailboss: { y: 1.46, z: -1.65, front: -0.55, back: -2.8 } };
+export const FLATBED_PRICE = 800;
+// the flatbed mod: take the bed off, bolt on a flat steel deck with a headache rack, stake pockets and toolboxes
+function flatbed(C, B) {
+  const b = C.body, keep = [], box = new THREE.Box3();
+  b.updateMatrixWorld(true);
+  for (const o of b.children) {
+    if (!o.isMesh) { keep.push(o); continue; }
+    box.setFromObject(o);
+    const inBed = box.min.z >= B.back - 0.1 && box.max.z <= B.front + 0.2 && box.min.y > 0.3; // (everything that lives in the bed area, above the frame)
+    if (!inBed) keep.push(o);
+  }
+  b.children.length = 0; for (const o of keep) { b.add(o); }
+  const rear = C.wheels.filter((w) => !w.front), wTop = Math.max(...rear.map((w) => w.r0 * 2 * 1.12)) + 0.04;
+  const y = Math.max(B.y, wTop), L = B.front - B.back, z = (B.front + B.back) / 2, W = Math.min(2.5, C.wid + 0.05);
+  bx(b, W, 0.12, L, 0, y, z, M.deck); bx(b, W + 0.04, 0.1, 0.06, 0, y - 0.01, B.back + 0.03, M.dark); // the deck + its back edge
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 4; k++) bx(b, 0.08, 0.1, 0.08, s * (W / 2 + 0.02), y, B.front - 0.25 - k * (L - 0.5) / 3, M.dark); // stake pockets
+    bx(b, 0.06, 0.12, L, s * (W / 2 + 0.01), y, z, M.dark); // side rails
+    bx(b, 0.4, 0.38, Math.min(0.9, L * 0.35), s * (W / 2 - 0.22), y - 0.32, B.front - 0.55, M.dark); // toolboxes under the deck
+    bx(b, 0.07, 0.8, 0.07, s * (W / 2 - 0.1), y + 0.46, B.front - 0.06, M.dark); // headache rack posts
+    bx(b, 0.12, 0.08, 0.04, s * (W / 2 - 0.2), y - 0.02, B.back - 0.01, M.tail); // taillights
+  }
+  for (const h of [0.86, 0.6, 0.34]) bx(b, W - 0.2, 0.06, 0.05, 0, y + h, B.front - 0.06, M.dark); // rack bars
+  bx(b, W - 0.2, 0.6, 0.02, 0, y + 0.42, B.front - 0.07, M.grate); // the mesh
+  C.flatY = y + 0.06;
+}
 export const PRICES = { paint: 150, rims: 200, neon: 500 };
 
 // how rusty it is (0 = shiny, 1 = crusty). The Rusty Pickup comes rusty.
@@ -90,6 +118,8 @@ function mats() {
   M.wood = new THREE.MeshLambertMaterial({ color: 0x9a6a3a });
   M.white = new THREE.MeshLambertMaterial({ color: 0xf4f4f4 });
   M.glow = new THREE.MeshBasicMaterial({ color: 0x6af0ff });
+  M.deck = new THREE.MeshPhongMaterial({ color: 0x8a8d92, shininess: 70, specular: 0x777777 });
+  M.grate = new THREE.MeshLambertMaterial({ color: 0x55585e, transparent: true, opacity: 0.55 });
   M.frame = new THREE.MeshPhongMaterial({ color: 0xa8adb2, shininess: 80, specular: 0x888888 });
   M.fork = new THREE.MeshPhongMaterial({ color: 0xc9a64a, shininess: 90, specular: 0xbbbbbb });
   M.engine = new THREE.MeshPhongMaterial({ color: 0x8a8d92, shininess: 60, specular: 0x666666 });
@@ -203,6 +233,7 @@ export function buildCar(car, opts = {}) {
   const rustMat = new THREE.MeshLambertMaterial({ color: 0x8a4a22, transparent: true }); // (scrub it off at Mud & Chrome)
   const C = { root, lift, body, paint, paint2, rimMat, rustMat, wheels: [], seat: V3(0.42, 0.9, 0.2), hitch: V3(0, 0.6, -2.5), len: 4.6, wid: 2.1, hood: null, pipes: [], rider: null, id: car.id, extras: {} };
   BUILD[car.id](C, v);
+  if (car.flatbed && BEDS[car.id]) flatbed(C, BEDS[car.id]);
   C.rearZ = Math.min(...C.wheels.map((w) => w.z)); // (wheelies tip back around the back wheel)
   // engine upgrade parts, neon glow, rider
   C.scoop = new THREE.Group(); body.add(C.scoop);

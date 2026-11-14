@@ -1,5 +1,5 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
-import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf } from "./vehicles.js";
+import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE } from "./vehicles.js";
 import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
@@ -109,7 +109,7 @@ function customs() {
   const c = GM.mine(); if (!c) return;
   if (GM.G.panel !== "customs") { const b = c.b; b.x = 36; b.z = -40; b.yaw = 0; b.vx = b.vz = 0; b.flipped = false; } // (onto the turntable in the bay)
   const s = c.s, v = vehicleById(s.id), t = tune(s);
-  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", "⬆️ Lift"]]), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
+  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", "⬆️ Lift"]]), ...(BEDS[s.id] ? [["bed", "🛻 Bed"]] : []), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
   if (v.bike && cTab === "lift") cTab = "paint";
   const maxLift = v.bike ? 0 : LIFT_COST.length - 1; // (dirt bikes don't get lift kits)
   if (s.lift > maxLift) s.lift = maxLift;
@@ -121,6 +121,9 @@ function customs() {
   if (cTab === "speed") body = `<p class="note">The speed limiter makes your ride slower. Great for tricky trails, towing, or learning to drive. Free!</p>
     <h3>Top speed: <span id="limLbl">${mph(t.top)} mph</span> (${Math.round(s.limit * 100)}%)</h3><input type="range" min="30" max="100" step="5" value="${Math.round(s.limit * 100)}" data-a="limit">`;
   if (cTab === "lift") body = `<p class="note">A lift kit raises your ride: better off-road, a bit wobblier on the road.</p><div class="opts">${LIFT_COST.slice(0, maxLift + 1).map((cost, i) => `<button type="button" class="opt ${s.lift === i ? "on" : ""}" data-a="lift" data-v="${i}"><span>${["Stock height", "Lift 1 (+15 cm)", "Lift 2 (+30 cm)", "Lift 3 (+45 cm)"][i]}</span><em>${s.lift === i ? "✓" : i <= (s.maxLift || s.lift) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
+  if (cTab === "bed") body = `<p class="note">Swap the truck bed for a <b>flatbed</b>: a flat steel deck with a headache rack and toolboxes. Bikes and quads still ride on the back!</p><div class="opts">
+    <button type="button" class="opt ${!s.flatbed ? "on" : ""}" data-a="flat" data-v="0"><span>Stock bed<small>The normal truck bed with sides</small></span><em>${!s.flatbed ? "✓" : "FREE"}</em></button>
+    <button type="button" class="opt ${s.flatbed ? "on" : ""}" data-a="flat" data-v="1"><span>Flatbed<small>Flat steel deck, headache rack, toolboxes</small></span><em>${s.flatbed ? "✓" : s.ownFlat ? "FREE" : money(FLATBED_PRICE)}</em></button></div>`;
   if (cTab === "rust") { const r = rustOf(s), pct = Math.round((1 - r) * 100), bar = "█".repeat(Math.round(pct / 10)) + "░".repeat(10 - Math.round(pct / 10));
     body = r <= 0.02 ? `<p class="note">✨ No rust! Your ${esc(v.name)} is shiny clean.</p>` : !S.scrubber ? `<p class="note">Rust spots! Grab a scrubber and scrub them off yourself.</p><div class="btns"><button type="button" class="mid" data-a="buyScrub">🧽 Buy a scrubber ${money(25)}</button></div>`
       : `<p class="note">Keep scrubbing! Watch the rust fade away.</p><p style="font:700 18px monospace;letter-spacing:1px">[${bar}] ${pct}%</p><div class="btns"><button type="button" class="big" data-a="scrub">🧽 SCRUB!</button></div>`; }
@@ -136,6 +139,7 @@ function customs() {
     if (a === "engine") { const i = +val, free = i <= (s.maxEngine || s.engine); if (i !== s.engine && GM.custom("engine", i, free ? 0 : ENGINE_COST[i])) s.maxEngine = Math.max(s.maxEngine || 0, i); }
     if (a === "lift") { const i = +val, free = i <= (s.maxLift || s.lift); if (i !== s.lift && GM.custom("lift", i, free ? 0 : LIFT_COST[i])) s.maxLift = Math.max(s.maxLift || 0, i); }
     if (a === "buyScrub") GM.buyScrubber();
+    if (a === "flat") GM.setFlatbed(val === "1");
     if (a === "scrub") { const r = Math.max(0, rustOf(s) - 0.1); GM.custom("rust", r < 0.02 ? 0 : r, 0); GM.scrubFx(r < 0.02); }
     if (a === "neon") { const i = +val, owned = (s.ownNeon || [0]).includes(i); if (i !== s.neon && GM.custom("neon", i, owned ? 0 : PRICES.neon)) s.ownNeon = [...new Set([...(s.ownNeon || [0]), i])]; }
     if (a === "limit") { GM.custom("limit", +val / 100, 0); const l = $("limLbl"); if (l) l.textContent = mph(tune(s).top) + " mph"; if (live) return; }
@@ -153,7 +157,7 @@ function parts() {
     if (a === "buy") { GM.buyPart(val); parts(); }
   };
 }
-let bSel = { frame: null, motor: null, tires: null, color: null, lift: false, rims: "chrome", neon: 0, name: "" };
+let bSel = { frame: null, motor: null, tires: null, color: null, lift: false, rims: "chrome", neon: 0, name: "", flat: false };
 function builder(h) {
   const own = (kind) => PARTS.filter((p) => p.kind === kind && have(p.id));
   for (const k of ["frame", "motor", "tires"]) if (!bSel[k] || !have(bSel[k])) bSel[k] = own(k)[0] ? own(k)[0].id : null;
@@ -168,6 +172,7 @@ function builder(h) {
     <h3>4. Color</h3><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === (bSel.color ?? (v ? v.color : -1)) ? "on" : ""}" style="background:${hex(p)}" data-a="bColor" data-v="${p}"></button>`).join("")}</div>
     <h3>5. Rims</h3><div class="swatches">${RIMS.map((r) => `<button type="button" class="sw ${bSel.rims === r.id ? "on" : ""}" style="background:${hex(r.c)}" title="${r.name}" data-a="bRims" data-v="${r.id}"></button>`).join("")}</div>
     <h3>6. Underglow</h3><div class="swatches">${NEONS.map((n, i) => `<button type="button" class="sw ${bSel.neon === i ? "on" : ""}" style="background:${n === null ? "repeating-linear-gradient(45deg,#333 0 6px,#555 6px 12px)" : hex(n)}" data-a="bNeon" data-v="${i}" title="${n === null ? "No neon" : ""}"></button>`).join("")}</div>
+    ${v && BEDS[v.id] ? `<div class="btns"><button type="button" class="small" data-a="bFlat">${bSel.flat ? "✓ Flatbed (free when you build it)" : "🛻 Make it a flatbed"}</button></div>` : ""}
     <h3>7. Name it</h3><input id="bName" maxlength="24" placeholder="${esc(v ? "My " + v.name : "My Build")}" value="${esc(bSel.name)}" style="font:inherit;font-size:16px;width:100%;max-width:18em;padding:6px;border-radius:8px">
     ${have("p_lift") && !(v && v.bike) ? `<div class="btns"><button type="button" class="small" data-a="bLift">${bSel.lift ? "✓ Use a lift kit" : "Add a lift kit"}</button></div>` : ""}
     <h3>Checklist</h3><p style="font:700 16px monospace">[${bar}] ${done}/${checks.length}</p><p class="note">${checks.map(([n, ok]) => (ok ? "✅ " : "❌ ") + n).join("<br>")}</p>
@@ -178,6 +183,7 @@ function builder(h) {
     if (a === "bColor") { bSel.color = +val; SFX.click(); builder(h); }
     if (a === "bLift") { bSel.lift = !bSel.lift; SFX.click(); builder(h); }
     if (a === "bRims") { bSel.rims = val; SFX.click(); builder(h); }
+    if (a === "bFlat") { bSel.flat = !bSel.flat; SFX.click(); builder(h); }
     if (a === "bNeon") { bSel.neon = +val; SFX.click(); builder(h); }
     if (a === "back") house(h);
     if (a === "build") {
@@ -185,7 +191,7 @@ function builder(h) {
       // a little "putting it together" moment, then it rolls out of the garage
       const box = $("sideBox"); let k = 0; SFX.click();
       const tickB = () => { k++; box.innerHTML = `<h2>🔧 BUILDING...</h2><p style="font:700 20px monospace;margin-top:30px">[${"█".repeat(k).padEnd(10, "░")}]</p><p class="sub">${["Bolting on the motor...", "Mounting the tires...", "Putting in the seat...", "Painting it...", "Tightening every bolt..."][Math.min(4, Math.floor(k / 2))]}</p>`; SFX.click();
-        if (k < 10) setTimeout(tickB, 140); else { const c = GM.buildRide(h, bSel); if (c) { bSel = { frame: null, motor: null, tires: null, color: null, lift: false, rims: "chrome", neon: 0, name: "" }; close(); } else builder(h); } };
+        if (k < 10) setTimeout(tickB, 140); else { const c = GM.buildRide(h, bSel); if (c) { bSel = { frame: null, motor: null, tires: null, color: null, lift: false, rims: "chrome", neon: 0, name: "", flat: false }; close(); } else builder(h); } };
       tickB();
     }
   };

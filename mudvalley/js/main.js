@@ -9,7 +9,7 @@ import * as THREE from "/create/vendor/three.module.js";
 import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./world.js";
 import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
-import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS } from "./vehicles.js";
+import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
 import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
@@ -520,7 +520,7 @@ function bedHost(t) {
   return t.bedHost;
 }
 function putInBed(c, t) {
-  const B = BEDS[t.s.id], h = bedHost(t), v = vehicleById(c.s.id);
+  const B0 = BEDS[t.s.id], B = t.m.flatY ? { y: t.m.flatY, z: (B0.front + B0.back) / 2 } : B0, h = bedHost(t), v = vehicleById(c.s.id);
   scene.remove(c.m.root); t.m.body.add(c.m.root);
   if (v.bike) { c.m.root.position.set(0.05, B.y, B.z + 0.05); c.m.root.rotation.set(0, 0.62, 0.1); } // (corner to corner, leaning a little, so it fits)
   else { c.m.root.position.set(0, B.y, B.z); c.m.root.rotation.set(0, 0, 0); }
@@ -639,7 +639,7 @@ export const GAME = {
     if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Sell a ride or buy a bigger house first.", "warn"); SFX.nope(); return false; }
     for (const id of need) addPart(id, -1);
     const s = newCar(fr.model, uid()); Object.assign(s, { paint: o.color ?? s.paint, engine: mo.lv, maxEngine: mo.lv, tires: ti.tires, ownTires: ["street", ti.tires], lift: o.lift ? 1 : 0, maxLift: o.lift ? 1 : 0, rust: 0, built: true,
-      rims: o.rims || "chrome", neon: o.neon || 0, ownNeon: [0, o.neon || 0], name: String(o.name || "").trim().slice(0, 24) || undefined });
+      rims: o.rims || "chrome", neon: o.neon || 0, ownNeon: [0, o.neon || 0], name: String(o.name || "").trim().slice(0, 24) || undefined, flatbed: !!(o.flat && BEDS[fr.model]), ownFlat: !!(o.flat && BEDS[fr.model]) });
     const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, 6); s.x = f.x; s.z = f.z; s.yaw = yaw;
     S.cars.push(s); const c = spawnCar(s); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 80); SFX.buy();
     H.banner("YOU BUILT IT!", vehicleById(s.id).name + " · " + mo.name); save(); return c;
@@ -664,6 +664,16 @@ export const GAME = {
     enterCar(c); SFX.buy(); H.bumpMoney(); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 60); H.banner("NEW RIDE!", w.name + " (built by " + w.by + ")"); save(); return true;
   },
   winnerPreview(i) { const w = (G.winners || [])[i]; if (w) GAME.showroomCar({ ...newCar(w.base, 0), paint: w.paint, rims: w.rims, tires: w.tires, engine: w.engine, lift: w.lift, neon: w.neon }); },
+  // the flatbed mod (Mud & Chrome → 🛻 Bed): rebuilds the truck with a flat deck (or puts the bed back)
+  setFlatbed(on) {
+    const c = mine(); if (!c || !BEDS[c.s.id] || !!c.s.flatbed === !!on) return false;
+    if (c.bedHost && c.bedHost.loaded.length) { SFX.nope(); H.toast("Take the ride out of the back first", "", "warn"); return false; }
+    const cost = on && !c.s.ownFlat ? FLATBED_PRICE : 0;
+    if (cost && !spend(cost)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
+    c.s.flatbed = !!on; if (on) c.s.ownFlat = true;
+    scene.remove(c.m.root); const m = buildCar(c.s); scene.add(m.root); c.m = m; c.b.model = m; c.bedHost = null; placeModel(c.b);
+    if (cost) { SFX.cash(); H.bumpMoney(); } else SFX.click(); fx.sparks(c.b.x, c.b.y + 1.2, c.b.z, 14); save(); return true;
+  },
   buyScrubber() { if (!spend(25)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.scrubber = true; SFX.cash(); H.bumpMoney(); save(); return true; },
   scrubFx(done) {
     const c = mine(); if (!c) return; SFX.wash(); for (let i = 0; i < 3; i++) fx.splash(c.b.x + (Math.random() - 0.5) * 2.5, c.b.y + 1.4, c.b.z + (Math.random() - 0.5) * 3, 6);
