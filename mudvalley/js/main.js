@@ -9,7 +9,7 @@ import * as THREE from "/create/vendor/three.module.js";
 import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./world.js";
 import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
-import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE } from "./vehicles.js";
+import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
 import { trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser } from "./character.js";
@@ -673,6 +673,16 @@ export const GAME = {
     c.s.flatbed = !!on; if (on) c.s.ownFlat = true;
     scene.remove(c.m.root); const m = buildCar(c.s); scene.add(m.root); c.m = m; c.b.model = m; c.bedHost = null; placeModel(c.b);
     if (cost) { SFX.cash(); H.bumpMoney(); } else SFX.click(); fx.sparks(c.b.x, c.b.y + 1.2, c.b.z, 14); save(); return true;
+  },
+  // dirt bike suspension (the whole bike grows or shrinks so the wheels always match)
+  setSuspension(i) {
+    const c = mine(); if (!c || !c.m.realBike || !SUSP[i] || (c.s.susp ?? 1) === i) return false;
+    if (c.bedHost && c.bedHost.loaded.length) return false;
+    const own = c.s.ownSusp || [1], cost = own.includes(i) ? 0 : SUSP[i].price;
+    if (cost && !spend(cost)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
+    c.s.susp = i; c.s.ownSusp = [...new Set([...own, i])];
+    scene.remove(c.m.root); const m = buildCar(c.s); scene.add(m.root); c.m = m; c.b.model = m; placeModel(c.b);
+    if (cost) { SFX.cash(); H.bumpMoney(); } else SFX.click(); fx.sparks(c.b.x, c.b.y + 0.8, c.b.z, 10); save(); return true;
   },
   buyScrubber() { if (!spend(25)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.scrubber = true; SFX.cash(); H.bumpMoney(); save(); return true; },
   scrubFx(done) {

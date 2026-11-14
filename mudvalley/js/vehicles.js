@@ -15,6 +15,7 @@ export const VEHICLES = [
   { id: "bigquad", name: "Big Muddy Quad", price: 4800, top: 24, acc: 12, grip: 8, turn: 2.3, off: { dirt: 1, grass: 1, mud: 0.95 }, size: 1, tow: 1, color: 0x4a6a2a, engine: 110, open: true, quad: true, crawl: 0.97, desc: "A big 4x4 quad with racks and huge mud tires. Nothing stops it." },
   { id: "bike450", name: "Thumper 450", price: 4200, top: 33, acc: 17, grip: 7.2, turn: 2.6, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 1, tow: 0, color: 0x2a7ad0, engine: 175, open: true, bike: true, crawl: 0.9, desc: "A race dirt bike. Faster than the Dirt Rocket and SUPER good at wheelies." },
   { id: "pitbike", name: "Pit Rat 110 Pit Bike", price: 900, top: 19, acc: 11, grip: 7, turn: 2.9, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xffd23a, engine: 230, open: true, bike: true, crawl: 0.85, desc: "A little 110cc pit bike. Small, light and SO much fun in the dirt." },
+  { id: "bike125", name: "Scrambler 125 Dirt Bike", price: 1400, top: 24, acc: 13, grip: 7, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xe0203a, engine: 200, open: true, bike: true, crawl: 0.87, desc: "A 125cc two-stroke dirt bike. Between a pit bike and a full-size bike: light, snappy, great on trails." },
   { id: "sport300", name: "Viper 300 Sport Bike", price: 6500, top: 42, acc: 16, grip: 8.5, turn: 2.5, off: { dirt: 0.45, grass: 0.4, mud: 0.2 }, size: 1, tow: 0, color: 0x3ac04a, engine: 215, open: true, bike: true, crawl: 0.3, desc: "A real street sport bike with a full fairing. Quick and nimble on roads... NOT for mud!" },
   { id: "super1000", name: "Thunder 1000 Superbike", price: 19000, top: 60, acc: 22, grip: 9.2, turn: 2.4, off: { dirt: 0.35, grass: 0.3, mud: 0.15 }, size: 1, tow: 0, color: 0x1a4ad0, engine: 240, open: true, bike: true, crawl: 0.25, desc: "A 1000cc superbike. The fastest thing on two wheels. Hold on tight!" },
   { id: "minitruck", name: "Mini Hauler", price: 2500, top: 24, acc: 8, grip: 7, turn: 2.3, off: { dirt: 0.85, grass: 0.8, mud: 0.6 }, size: 1, tow: 1, color: 0xf4f4f4, engine: 150, crawl: 0.6, desc: "A tiny work truck. Cheap, cute, and it even fits on a small trailer." },
@@ -123,6 +124,7 @@ function mats() {
   M.glow = new THREE.MeshBasicMaterial({ color: 0x6af0ff });
   M.deck = new THREE.MeshPhongMaterial({ color: 0x8a8d92, shininess: 70, specular: 0x777777 });
   M.liner = new THREE.MeshLambertMaterial({ color: 0x2c2d31 });
+  M.smoke = new THREE.MeshPhongMaterial({ color: 0x1a2028, transparent: true, opacity: 0.6, shininess: 120, specular: 0x8899aa });
   M.red = new THREE.MeshLambertMaterial({ color: 0xd0302a });
   M.grate = new THREE.MeshLambertMaterial({ color: 0x55585e, transparent: true, opacity: 0.55 });
   M.frame = new THREE.MeshPhongMaterial({ color: 0xa8adb2, shininess: 80, specular: 0x888888 });
@@ -161,6 +163,12 @@ const BIKE_MAT = {
   color_2829873: () => M.seat, color_2828838: () => M.tire, color_0: (C) => C.rimMat, color_15277357: () => M.chrome,
   color_10988977: () => M.frame, color_12561038: () => M.fork, color_14077624: () => M.engine, color_6383466: () => M.trim, color_16448250: () => M.white,
 };
+// dirt bike suspension (Mud & Chrome): taller suspension = the whole bike grows, so the wheels always match
+export const SUSP = [{ name: "Lowered", k: 0.92, price: 250 }, { name: "Stock", k: 1, price: 0 }, { name: "Tall", k: 1.08, price: 350 }, { name: "Extra tall", k: 1.16, price: 500 }];
+function realBike(C, size) {
+  const k = size * (SUSP[C.car && C.car.susp != null ? C.car.susp : 1] || SUSP[1]).k;
+  C.len = 2.5 * k; C.wid = 0.8 * Math.min(1, k); C.seat.set(0, 0.9 * k, -0.2 * k); C.hitch = null; C.hood = null; bikeModel(C, k); C.realBike = true;
+}
 function bikeModel(C, sc = 1) {
   const b = C.body;
   for (const p of BIKE.body) { const m = new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)); m.scale.setScalar(sc); b.add(m); }
@@ -237,6 +245,7 @@ export function buildCar(car, opts = {}) {
   const rimMat = new THREE.MeshPhongMaterial({ color: 0xd8dde3, shininess: 100, specular: 0xffffff });
   const rustMat = new THREE.MeshLambertMaterial({ color: 0x8a4a22, transparent: true }); // (scrub it off at Mud & Chrome)
   const C = { root, lift, body, paint, paint2, rimMat, rustMat, wheels: [], seat: V3(0.42, 0.9, 0.2), hitch: V3(0, 0.6, -2.5), len: 4.6, wid: 2.1, hood: null, pipes: [], rider: null, id: car.id, extras: {} };
+  C.car = car;
   BUILD[car.id](C, v);
   if (car.flatbed && BEDS[car.id]) flatbed(C, BEDS[car.id]);
   C.rearZ = Math.min(...C.wheels.map((w) => w.z)); // (wheelies tip back around the back wheel)
@@ -249,7 +258,7 @@ export function buildCar(car, opts = {}) {
   ng.rotation.x = -Math.PI / 2; ng.position.y = 0.06; root.add(ng); C.neon = ng;
   const look = opts.driver || LOOKS.you;
   if (v.open || v.bike || v.quad) {
-    const p = makePerson(look, 0.85); p.pose(v.bike || v.quad ? "ride" : "sit"); p.root.position.copy(C.seat); body.add(p.root); C.rider = p;
+    const p = makePerson(look, 0.85); p.pose(v.bike || v.quad ? "ride" : "sit"); p.root.position.copy(C.seat); if (C.lean) p.root.rotation.x = C.lean; body.add(p.root); C.rider = p;
   } else {
     // a little driver you can see through the window
     const p = makePerson(look, 0.7); p.pose("sit"); p.root.position.copy(C.seat); body.add(p.root); C.rider = p;
@@ -421,7 +430,7 @@ const BUILD = {
   bike(C) {
     const b = C.body, P = C.paint;
     C.len = 2.1; C.wid = 0.8; C.seat.set(0, 0.92, -0.2); C.hitch = null; C.hood = null;
-    if (BIKE) { C.len = 2.5; C.seat.set(0, 0.9, -0.2); bikeModel(C); C.realBike = true; return; } // (no add-on exhaust: the bike has its own)
+    if (BIKE) return realBike(C, 1); // (no add-on exhaust: the bike has its own)
     // the fork + handlebars turn with the front wheel (a group pivoting on the steering head)
     const fork = new THREE.Group(); fork.position.set(0, 0, 0.62); b.add(fork); C.forks = [fork];
     tube(fork, V3(0, 0.45, 0.13), V3(0, 1.15, -0.12), 0.05, M.chrome);
@@ -554,11 +563,9 @@ const BUILD = {
     C.pipes.push(V3(0.55, 0.32, -2.3), V3(-0.55, 0.32, -2.3));
     for (const [x, z, f] of [[0.78, 1.38, 1], [-0.78, 1.38, 1], [0.78, -1.3, 0], [-0.78, -1.3, 0]]) wheel(C, x, z, 0.34, 0.26, f);
   },
-  // a pit bike: the real dirt bike, but kid-sized
-  pitbike(C) {
-    if (BIKE) { C.len = 1.8; C.wid = 0.7; C.seat.set(0, 0.62, -0.12); C.hitch = null; C.hood = null; bikeModel(C, 0.72); C.realBike = true; return; }
-    BUILD.bike(C);
-  },
+  // a pit bike + a 125: the real dirt bike, smaller
+  pitbike(C) { if (BIKE) return realBike(C, 0.72); BUILD.bike(C); },
+  bike125(C) { if (BIKE) return realBike(C, 0.86); BUILD.bike(C); },
   sport300(C) { sportBike(C, 1, false); },
   super1000(C) { sportBike(C, 1.06, true); },
   atv(C) { quad(C, 1, 0.36); },
@@ -702,35 +709,48 @@ function quad(C, s, wr, o = {}) {
   for (const [x, z, f] of [[0.55, 0.62, 1], [-0.55, 0.62, 1], [0.55, -0.62, 0], [-0.55, -0.62, 0]]) wheel(C, x * s * (o.sport ? 1.08 : 1), z * s, wr, 0.3 * s * (o.racks ? 1.25 : 1), f);
 }
 function P2(C) { return C.paint2; }
-// a street sport bike: a pointy fairing with a windscreen, a fat tank, a sporty seat, an up-swept tail, cast wheels,
-// gold forks, a silver twin-spar frame and a big exhaust. big = the 1000cc superbike (wider, bigger pipe, winglets)
+// a street sport bike, built like a real 300 sport bike: a narrow pointed upper fairing with twin angled headlights and
+// a smoked screen, big side fairings over a black lower cowl, a tank, a rider seat + a higher passenger seat, a slim tail
+// with a hanging plate bracket, a side muffler, silver forks + brake discs, 17-inch wheels (1.4 m wheelbase).
+// big = the 1000cc superbike (a bit bigger, a fat back tire, winglets)
 function sportBike(C, k, big) {
   const b = C.body, P = C.paint, K = (v) => v * k;
-  C.len = K(2.05); C.wid = 0.75; C.seat.set(0, K(0.74), K(-0.3)); C.hitch = null; C.hood = null;
-  // frame, engine, swingarm
-  for (const s of [-1, 1]) { tube(b, V3(s * K(0.15), K(0.82), K(0.5)), V3(s * K(0.16), K(0.55), K(-0.22)), K(0.045), M.frame); tube(b, V3(s * K(0.1), K(0.34), K(-0.72)), V3(s * K(0.12), K(0.46), K(-0.18)), K(0.04), M.frame); }
-  bx(b, K(0.34), K(0.34), K(0.5), 0, K(0.46), K(0.05), M.engine); bx(b, K(0.3), K(0.18), K(0.3), 0, K(0.66), K(0.18), M.dark, -0.5);
-  // the bodywork
-  pod(C, { zf: K(1.0), zb: K(0.3), w: K(0.25), b: K(0.5), tops: [[K(1.0), K(0.68)], [K(0.86), K(0.86)], [K(0.55), K(1.0)], [K(0.3), K(0.96)]], round: K(0.28), top: 0.7 }); // nose fairing
-  pod(C, { zf: K(0.6), zb: K(-0.12), w: K(big ? 0.31 : 0.29), b: K(0.3), tops: [[K(0.6), K(0.64)], [K(0.2), K(0.7)], [K(-0.12), K(0.6)]], round: K(0.14) }); // side panels + belly pan
-  pod(C, { zf: K(0.36), zb: K(-0.14), w: K(0.21), b: K(0.74), tops: [[K(0.36), K(0.95)], [K(0.15), K(1.01)], [K(-0.14), K(0.9)]], round: K(0.12) }); // tank
-  pod(C, { zf: K(-0.12), zb: K(-0.52), w: K(0.15), b: K(0.76), tops: [[K(-0.12), K(0.84)], [K(-0.52), K(0.88)]], round: K(0.06) }, M.seat); // seat
-  pod(C, { zf: K(-0.46), zb: K(-1.0), w: K(0.15), b: K(0.74), tops: [[K(-0.46), K(0.92)], [K(-1.0), K(1.02)]], round: K(0.22), top: 0.7 }); // tail
-  bx(b, K(0.34), K(0.26), 0.02, 0, K(1.06), K(0.66), M.glass, -0.95); // windscreen
-  for (const s of [-1, 1]) { bx(b, K(0.1), K(0.035), 0.03, s * K(0.07), K(0.76), K(0.99), M.light, -0.4); bx(b, K(0.07), K(0.05), K(0.03), s * K(0.26), K(0.98), K(0.62), M.dark); }
-  bx(b, K(0.13), K(0.035), 0.03, 0, K(0.95), K(-1.01), M.tail); bx(b, K(0.2), K(0.04), K(0.2), 0, K(0.68), K(-0.92), M.dark); // taillight, license plate holder
-  if (big) for (const s of [-1, 1]) bx(b, 0.015, K(0.08), K(0.2), s * K(0.27), K(0.66), K(0.75), M.dark); // winglets
-  // exhaust: a big can up by the tail
-  tube(b, V3(K(0.12), K(0.3), K(0.2)), V3(K(0.16), K(0.5), K(-0.5)), K(0.04), M.chrome);
-  const can = cy(b, K(big ? 0.08 : 0.07), K(0.45), K(0.19), K(0.58), K(-0.7), M.chrome, 12, Math.PI / 2 - 0.25); can.name = "can";
-  // front end: gold forks, clip-on bars, a front fender (they all turn with the front wheel)
+  C.len = K(2.02); C.wid = 0.72; C.seat.set(0, K(0.72), K(-0.26)); C.hitch = null; C.hood = null; C.lean = 0.32;
+  // frame, engine, radiator, swingarm
+  for (const s of [-1, 1]) { tube(b, V3(s * K(0.09), K(0.86), K(0.5)), V3(s * K(0.11), K(0.44), K(-0.18)), K(0.035), M.dark); tube(b, V3(s * K(0.1), K(0.43), K(-0.18)), V3(s * K(0.09), K(0.31), K(-0.7)), K(0.035), M.frame); }
+  bx(b, K(0.32), K(0.28), K(0.42), 0, K(0.42), K(0.06), M.engine); bx(b, K(0.28), K(0.2), K(0.2), 0, K(0.6), K(0.24), M.engine, -0.5); bx(b, K(0.34), K(0.3), K(0.05), 0, K(0.6), K(0.42), M.dark, -0.2);
+  // bodywork
+  pod(C, { zf: K(1.0), zb: K(0.44), w: K(0.2), b: K(0.62), tops: [[K(1.0), K(0.74)], [K(0.9), K(0.87)], [K(0.62), K(1.0)], [K(0.44), K(1.0)]], round: K(0.32), top: 0.55 }); // the pointed upper fairing
+  pod(C, { zf: K(0.72), zb: K(-0.02), w: K(big ? 0.285 : 0.27), b: K(0.4), tops: [[K(0.72), K(0.72)], [K(0.45), K(0.83)], [K(0.1), K(0.8)], [K(-0.02), K(0.7)]], round: K(0.14), top: 0.9 }); // side fairings
+  pod(C, { zf: K(0.56), zb: K(0.0), w: K(big ? 0.29 : 0.275), b: K(0.36), tops: [[K(0.56), K(0.52)], [K(0.3), K(0.54)], [K(0.0), K(0.5)]], round: K(0.1) }, M.dark); // the black lower cowl
+  pod(C, { zf: K(0.4), zb: K(-0.12), w: K(0.2), b: K(0.78), tops: [[K(0.4), K(0.98)], [K(0.2), K(1.02)], [K(-0.12), K(0.9)]], round: K(0.12) }); // tank
+  pod(C, { zf: K(-0.38), zb: K(-1.0), w: K(0.15), b: K(0.76), tops: [[K(-0.38), K(0.85)], [K(-0.68), K(0.94)], [K(-1.0), K(0.98)]], round: K(0.2), top: 0.65 }); // tail
+  pod(C, { zf: K(-0.1), zb: K(-0.44), w: K(0.15), b: K(0.8), tops: [[K(-0.1), K(0.83)], [K(-0.44), K(0.86)]], round: K(0.05) }, M.seat); // rider seat
+  pod(C, { zf: K(-0.46), zb: K(-0.7), w: K(0.11), b: K(0.86), tops: [[K(-0.46), K(0.93)], [K(-0.7), K(0.96)]], round: K(0.05) }, M.seat); // passenger seat
+  for (const s of [-1, 1]) bx(b, K(0.13), K(0.2), 0.012, s * K(0.06), K(1.03), K(0.6), M.smoke, -1.2, s * 0.22); // a smoked windscreen that wraps around (two angled halves)
+  for (const s of [-1, 1]) {
+    bx(b, K(0.11), K(0.05), 0.03, s * K(0.075), K(0.8), K(0.955), M.light, -0.35, s * 0.45); // twin headlights
+    bx(b, 0.012, K(0.05), K(0.22), s * K(big ? 0.29 : 0.275), K(0.66), K(0.35), M.dark, 0, 0, s * 0.1); bx(b, 0.012, K(0.035), K(0.16), s * K(big ? 0.29 : 0.275), K(0.6), K(0.32), M.dark); // side vents
+    bx(b, 0.012, K(0.03), K(0.55), s * K(big ? 0.29 : 0.275), K(0.74), K(0.3), M.white, 0.12); // a white stripe
+    tube(b, V3(s * K(0.18), K(0.95), K(0.66)), V3(s * K(0.3), K(0.99), K(0.62)), 0.012, M.dark); bx(b, K(0.1), K(0.06), K(0.03), s * K(0.32), K(1.0), K(0.62), M.dark); // mirrors
+    if (big) bx(b, 0.012, K(0.08), K(0.2), s * K(0.285), K(0.72), K(0.75), M.dark); // winglets
+  }
+  bx(b, K(0.12), K(0.04), 0.03, 0, K(0.93), K(-1.0), M.tail, 0.3); // taillight
+  tube(b, V3(0, K(0.8), K(-0.92)), V3(0, K(0.62), K(-1.1)), 0.015, M.dark); bx(b, K(0.18), K(0.12), 0.015, 0, K(0.58), K(-1.12), M.white, 0.3); // plate bracket
+  bx(b, K(0.12), K(0.04), K(0.5), 0, K(0.66), K(-0.6), M.dark); // rear hugger
+  // exhaust: headers under the engine, a short muffler on the right by the back wheel
+  tube(b, V3(K(0.06), K(0.32), K(0.32)), V3(K(0.12), K(0.27), K(-0.12)), K(0.03), M.chrome); tube(b, V3(K(0.12), K(0.27), K(-0.12)), V3(K(0.17), K(0.42), K(-0.32)), K(0.035), M.chrome);
+  cy(b, K(big ? 0.085 : 0.075), K(0.42), K(0.18), K(0.5), K(-0.48), M.dark, 14, Math.PI / 2 - 0.35); cy(b, K(0.05), K(0.03), K(0.18), K(0.57), K(-0.68), M.chrome, 12, Math.PI / 2 - 0.35);
+  // front end: silver forks with black lowers, clip-on bars, a front fender, brake discs (turn with the front wheel)
   const fork = new THREE.Group(); fork.position.set(0, 0, K(0.7)); b.add(fork); C.forks = [fork];
-  for (const s of [-1, 1]) tube(fork, V3(s * K(0.09), K(0.31), 0), V3(s * K(0.09), K(0.92), K(-0.24)), K(0.035), M.fork);
-  for (const s of [-1, 1]) tube(fork, V3(s * K(0.09), K(0.9), K(-0.24)), V3(s * K(0.3), K(0.88), K(-0.3)), K(0.022), M.dark);
-  bx(fork, K(0.14), K(0.04), K(0.42), 0, K(0.66), K(0.02), P, 0.15);
-  // cast wheels (5 spokes) on fat street tires
-  wheel(C, 0, K(0.7), K(0.31), K(0.14), 1, { bike: true }); wheel(C, 0, K(-0.7), K(0.31), K(big ? 0.2 : 0.18), 0, { bike: true });
-  for (const w of C.wheels) { w.knobs.visible = false; w.street = true; }
+  for (const s of [-1, 1]) { tube(fork, V3(s * K(0.085), K(0.42), K(-0.05)), V3(s * K(0.085), K(0.93), K(-0.25)), K(0.03), M.frame); tube(fork, V3(s * K(0.085), K(0.29), 0), V3(s * K(0.085), K(0.45), K(-0.06)), K(0.038), M.dark); }
+  for (const s of [-1, 1]) tube(fork, V3(s * K(0.085), K(0.9), K(-0.26)), V3(s * K(0.27), K(0.87), K(-0.32)), K(0.018), M.dark);
+  bx(fork, K(0.13), K(0.035), K(0.4), 0, K(0.62), K(0.02), P, 0.15);
+  for (const s of [-1, 1]) cy(fork, K(0.14), 0.01, s * K(0.07), K(0.29), 0, M.frame, 16, 0, Math.PI / 2);
+  cy(b, K(0.11), 0.01, -K(0.08), K(0.31), K(-0.7), M.frame, 16, 0, Math.PI / 2);
+  // 17-inch wheels on fat street tires
+  wheel(C, 0, K(0.7), K(0.29), K(0.11), 1, { bike: true }); wheel(C, 0, K(-0.7), K(0.31), K(big ? 0.19 : 0.15), 0, { bike: true });
+  for (const w of C.wheels) w.knobs.visible = false;
 }
 // a police car: white doors, a push bar and a red + blue light bar on the roof
 function police(C, fast) {

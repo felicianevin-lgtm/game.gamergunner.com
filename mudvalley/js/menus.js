@@ -1,5 +1,5 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
-import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE } from "./vehicles.js";
+import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP } from "./vehicles.js";
 import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
@@ -17,7 +17,7 @@ import * as IN from "./input.js";
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { crew: "🛻", foxhatch: "🏎️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵";
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -109,7 +109,7 @@ function customs() {
   const c = GM.mine(); if (!c) return;
   if (GM.G.panel !== "customs") { const b = c.b; b.x = 36; b.z = -40; b.yaw = 0; b.vx = b.vz = 0; b.flipped = false; } // (onto the turntable in the bay)
   const s = c.s, v = vehicleById(s.id), t = tune(s);
-  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", "⬆️ Lift"]]), ...(BEDS[s.id] ? [["bed", "🛻 Bed"]] : []), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
+  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", "⬆️ Lift"]]), ...(BEDS[s.id] ? [["bed", "🛻 Bed"]] : []), ...(c.m.realBike ? [["susp", "🔧 Suspension"]] : []), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
   if (v.bike && cTab === "lift") cTab = "paint";
   const maxLift = v.bike ? 0 : LIFT_COST.length - 1; // (dirt bikes don't get lift kits)
   if (s.lift > maxLift) s.lift = maxLift;
@@ -121,6 +121,7 @@ function customs() {
   if (cTab === "speed") body = `<p class="note">The speed limiter makes your ride slower. Great for tricky trails, towing, or learning to drive. Free!</p>
     <h3>Top speed: <span id="limLbl">${mph(t.top)} mph</span> (${Math.round(s.limit * 100)}%)</h3><input type="range" min="30" max="100" step="5" value="${Math.round(s.limit * 100)}" data-a="limit">`;
   if (cTab === "lift") body = `<p class="note">A lift kit raises your ride: better off-road, a bit wobblier on the road.</p><div class="opts">${LIFT_COST.slice(0, maxLift + 1).map((cost, i) => `<button type="button" class="opt ${s.lift === i ? "on" : ""}" data-a="lift" data-v="${i}"><span>${["Stock height", "Lift 1 (+15 cm)", "Lift 2 (+30 cm)", "Lift 3 (+45 cm)"][i]}</span><em>${s.lift === i ? "✓" : i <= (s.maxLift || s.lift) ? "FREE" : money(cost)}</em></button>`).join("")}</div>`;
+  if (cTab === "susp") body = `<p class="note">Longer suspension makes your dirt bike taller. The wheels grow with it, so it always looks right!</p><div class="opts">${SUSP.map((q, i) => `<button type="button" class="opt ${(s.susp ?? 1) === i ? "on" : ""}" data-a="susp" data-v="${i}"><span>${q.name}<small>${i === 0 ? "Lower + smaller wheels: easier to stand over" : i === 1 ? "How it came from the shop" : i === 2 ? "Long-travel suspension + bigger wheels" : "Huge suspension + big wheels: sits up high"}</small></span><em>${(s.susp ?? 1) === i ? "✓" : (s.ownSusp || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>`;
   if (cTab === "bed") body = `<p class="note">Swap the truck bed for a <b>flatbed</b>: a flat steel deck with a headache rack and toolboxes. Bikes and quads still ride on the back!</p><div class="opts">
     <button type="button" class="opt ${!s.flatbed ? "on" : ""}" data-a="flat" data-v="0"><span>Stock bed<small>The normal truck bed with sides</small></span><em>${!s.flatbed ? "✓" : "FREE"}</em></button>
     <button type="button" class="opt ${s.flatbed ? "on" : ""}" data-a="flat" data-v="1"><span>Flatbed<small>Flat steel deck, headache rack, toolboxes</small></span><em>${s.flatbed ? "✓" : s.ownFlat ? "FREE" : money(FLATBED_PRICE)}</em></button></div>`;
@@ -140,6 +141,7 @@ function customs() {
     if (a === "lift") { const i = +val, free = i <= (s.maxLift || s.lift); if (i !== s.lift && GM.custom("lift", i, free ? 0 : LIFT_COST[i])) s.maxLift = Math.max(s.maxLift || 0, i); }
     if (a === "buyScrub") GM.buyScrubber();
     if (a === "flat") GM.setFlatbed(val === "1");
+    if (a === "susp") GM.setSuspension(+val);
     if (a === "scrub") { const r = Math.max(0, rustOf(s) - 0.1); GM.custom("rust", r < 0.02 ? 0 : r, 0); GM.scrubFx(r < 0.02); }
     if (a === "neon") { const i = +val, owned = (s.ownNeon || [0]).includes(i); if (i !== s.neon && GM.custom("neon", i, owned ? 0 : PRICES.neon)) s.ownNeon = [...new Set([...(s.ownNeon || [0]), i])]; }
     if (a === "limit") { GM.custom("limit", +val / 100, 0); const l = $("limLbl"); if (l) l.textContent = mph(tune(s).top) + " mph"; if (live) return; }
