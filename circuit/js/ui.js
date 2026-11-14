@@ -20,15 +20,15 @@ const card = (T, extra = "") => { const R = RARITIES[T.r]; return `<div class="t
 // ---------------------------------------------------------------- the Crate Room
 export function crates(r0 = 0) {
   setBolts();
-  open(`<h2>📦 CRATES</h2><p class="sub">Every crate has a robot tower: usually its own rarity, sometimes better! You have <b>⚡ ${fmt(S.bolts)}</b> bolts (win waves to get more).</p>
-    <div class="crates">${CRATES.map((c) => { const R = RARITIES[c.r], list = TOWERS.filter((t) => t.r === c.r); return `<div class="crate" style="--rc:${R.color}"><div class="cbox"></div><b>${R.name.toUpperCase()} CRATE</b><small>${list.map((t) => esc(t.name)).join(" · ")}</small><small>${c.r >= 5 ? "100% Mythic" : c.r === 4 ? "80% Legendary · 20% Mythic" : "80% " + R.name + " · 17% " + RARITIES[c.r + 1].name + " · 3% " + RARITIES[c.r + 2].name}</small><button type="button" class="big" data-a="buy" data-v="${c.r}" ${S.bolts >= c.price ? "" : "disabled"}>⚡ ${fmt(c.price)}</button></div>`; }).join("")}</div><div id="reveal"></div>`, (a, v) => {
+  open(`<h2>📦 CRATES</h2><p class="sub">Every crate has a robot tower inside. The <b>Normal Crate</b> is cheap but the good stuff is rare. The <b>Rare Crate</b> costs more, but it's WAY more likely to have Epic, Legendary and Mythic towers! You have <b>⚡ ${fmt(S.bolts)}</b> bolts (win waves to get more).</p>
+    <div class="crates two">${CRATES.map((c, i) => `<div class="crate${i === r0 ? " pick" : ""}" style="--rc:${c.color}"><div class="cbox"></div><b>${c.name.toUpperCase()}</b><div class="odds">${c.odds.map((p, r) => p ? `<span style="color:${RARITIES[r].color}">${RARITIES[r].name} <b>${p}%</b></span>` : "").join("")}</div><button type="button" class="big" data-a="buy" data-v="${i}" ${S.bolts >= c.price ? "" : "disabled"}>⚡ ${fmt(c.price)}</button></div>`).join("")}</div><div id="reveal"></div>`, (a, v) => {
     if (a === "buy") {
       const C = CRATES[+v]; if (S.bolts < C.price) { SFX.nope(); return; }
-      S.bolts -= C.price; S.stats.crates++; const id = rollCrate(C.r); addTower(id); save(); setBolts();
+      S.bolts -= C.price; S.stats.crates++; const id = rollCrate(+v); addTower(id); save(); setBolts();
       const T = towerById(id), R = RARITIES[T.r]; SFX.crate();
       setTimeout(() => $("reveal") && $("reveal").scrollIntoView({ behavior: "smooth", block: "center" }), 30);
-      $("reveal").innerHTML = `<div class="rev spin" style="--rc:${RARITIES[C.r].color}"><div class="cbox big"></div><b>Opening...</b></div>`;
-      setTimeout(() => { if (!$("reveal")) return; SFX.reveal(T.r); $("reveal").innerHTML = `<div class="rev pop r${T.r}" style="--rc:${R.color}"><small>${R.name.toUpperCase()}${T.r > C.r ? " · LUCKY UPGRADE!" : ""}</small>${card(T, `<em>You have ${S.inv[id]}</em>`)}<button type="button" data-a="again" data-v="${C.r}">Open another</button></div>`; $("reveal").scrollIntoView({ behavior: "smooth", block: "center" }); for (const b of document.querySelectorAll('[data-a="buy"]')) b.disabled = S.bolts < CRATES[+b.dataset.v].price; }, 1300);
+      $("reveal").innerHTML = `<div class="rev spin" style="--rc:${C.color}"><div class="cbox big"></div><b>Opening...</b></div>`;
+      setTimeout(() => { if (!$("reveal")) return; SFX.reveal(T.r); $("reveal").innerHTML = `<div class="rev pop r${T.r}" style="--rc:${R.color}"><small>${R.name.toUpperCase()}${T.r >= 4 ? "!!!" : T.r >= 3 ? "!" : ""}</small>${card(T, `<em>You have ${S.inv[id]}</em>`)}<button type="button" data-a="again" data-v="${v}">Open another</button></div>`; $("reveal").scrollIntoView({ behavior: "smooth", block: "center" }); for (const b of document.querySelectorAll('[data-a="buy"]')) b.disabled = S.bolts < CRATES[+b.dataset.v].price; }, 1300);
     }
     if (a === "again") { onAct("buy", v); }
   });
@@ -144,7 +144,7 @@ export function help() {
     <li><b>Play a map</b>: walk over a bridge and stand on a glowing pad (2, 4 or 8 players). Everybody on the pad goes together when it fills up or the timer runs out. Alone works too!</li>
     <li><b>In a match</b>: you start with $100. Click a tower card, then click the floor to build. Robots give cash when you destroy them. Click a tower to upgrade or sell it. Don't let robots reach your core!</li>
     <li><b>Bosses</b>: the last wave of every map has a BOSS. Destroy it to win bonus bolts. In <b>Endless</b> there's a boss every 20 waves, and wave 100 unlocks the OMEGA PRIME.</li>
-    <li><b>Crates</b>: go up the stairs and turn RIGHT. Spend bolts on crates to get new robot towers (Common → Mythic). Then put them in your loadout at the Tower Locker.</li>
+    <li><b>Crates</b>: go up the stairs and turn RIGHT. Spend bolts on the Normal Crate (cheap) or the Rare Crate (better chances at Epic, Legendary and Mythic) to get new robot towers. Then put them in your loadout at the Tower Locker.</li>
     <li><b>Trading</b>: up the stairs, turn LEFT. Use the Trade Terminal to trade towers and bolts with other players.</li></ul>`, () => {});
 }
 export { MAPS };

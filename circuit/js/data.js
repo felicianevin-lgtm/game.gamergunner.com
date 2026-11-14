@@ -88,12 +88,16 @@ export function waveList(M, w, seed) {
   return out;
 }
 
-// crates (Crate Room). Each gives a tower: 80% its own rarity, 17% one better, 3% two better
+// crates (Crate Room): just 2. The Normal Crate is cheap and mostly Common / Uncommon, with a tiny chance of the good
+// stuff; the Rare Crate costs more and has WAY better chances at Epic, Legendary and Mythic. odds = % for each rarity
+// (Common, Uncommon, Rare, Epic, Legendary, Mythic)
 export const CRATES = [
-  { r: 0, price: 100 }, { r: 1, price: 250 }, { r: 2, price: 600 }, { r: 3, price: 1500 }, { r: 4, price: 4000 }, { r: 5, price: 10000 },
+  { id: "normal", name: "Normal Crate", price: 150, color: "#3aff6a", hex: 0x3aff6a, odds: [60, 26, 9.5, 3.5, 0.8, 0.2] },
+  { id: "rare", name: "Rare Crate", price: 1500, color: "#ff3ad8", hex: 0xff3ad8, odds: [0, 25, 35, 25, 11, 4] },
 ];
-export function rollCrate(r, rand = Math.random) {
-  const x = rand(), rr = Math.min(5, r + (x < 0.03 ? 2 : x < 0.2 ? 1 : 0));
+export function rollCrate(i, rand = Math.random) {
+  const C = CRATES[i]; let x = rand() * 100, rr = 0;
+  for (let r = 0; r < C.odds.length; r++) { if (x < C.odds[r]) { rr = r; break; } x -= C.odds[r]; rr = r; }
   const list = TOWERS.filter((t) => t.r === rr);
   return list[Math.floor(rand() * list.length)].id;
 }

@@ -79,7 +79,7 @@ function hubStep(dt) {
   padTick(dt);
   let prompt = null;
   const near = (p, r = 3) => (me.x - p.x) ** 2 + (me.z - p.z) ** 2 < r * r && Math.abs(me.y - p.y) < 2;
-  for (const c of CRATE_SPOTS) if (near(c, 3.2)) prompt = ["Open crates", () => UI.crates(c.r)];
+  for (const c of CRATE_SPOTS) if (near(c, 3.2)) prompt = ["Open the " + (c.i ? "Rare" : "Normal") + " Crate", () => UI.crates(c.i)];
   if (near(TRADE_SPOT)) prompt = ["Trade with players", () => UI.tradeMenu()];
   if (near(LOCKER_SPOT)) prompt = ["Tower locker (your loadout)", () => UI.locker()];
   const z = zoneAt(me.x, me.z, me.y);

@@ -33,7 +33,7 @@ export const PADS = [];
   MAPS.filter((m) => !m.endless).forEach((m, mi) => { const [cx, cz, ax, az] = spots[mi]; PAD_SIZES.forEach((n, k) => PADS.push({ id: PADS.length, map: m.id, cap: n, x: cx + ax * (k - 1) * 6, z: cz + az * (k - 1) * 6, y: 0 })); });
   PAD_SIZES.forEach((n, k) => PADS.push({ id: PADS.length, map: "endless", cap: n, x: (k - 1) * 7, z: -78, y: 16 }));
 }
-export const CRATE_SPOTS = CRATES.map((c, i) => ({ r: c.r, x: 36 + (i % 3) * 7, z: i < 3 ? -44 : -31, y: 8 }));
+export const CRATE_SPOTS = CRATES.map((c, i) => ({ i, x: 38 + i * 10, z: -37, y: 8 }));
 export const TRADE_SPOT = { x: -42, z: -37, y: 8 }; // the trade terminal
 export const LOCKER_SPOT = { x: 0, z: 6, y: 0 }; // your tower locker (loadout) on the spawn platform
 
@@ -69,7 +69,7 @@ export class Hub {
         const n = 14, w = f.x[1] - f.x[0], d = (f.z[1] - f.z[0]) / n;
         for (let i = 0; i < n; i++) { const z = f.z[1] - (i + 0.5) * d, y = f.y0 + ((f.y1 - f.y0) * (i + 1)) / n; const s = box(R, w, 0.4, d + 0.02, (f.x[0] + f.x[1]) / 2, y - 0.2, z, dark); s.receiveShadow = true; box(R, w, 0.04, 0.08, (f.x[0] + f.x[1]) / 2, y + 0.01, z + d / 2 - 0.04, glow); }
         const len = Math.hypot(f.z[1] - f.z[0], f.y1 - f.y0), mid = { y: (f.y0 + f.y1) / 2 - 1.2, z: (f.z[0] + f.z[1]) / 2 };
-        const beam = box(R, w * 0.6, 1.2, len, (f.x[0] + f.x[1]) / 2, mid.y, mid.z, gray); beam.rotation.x = -Math.atan2(f.y1 - f.y0, f.z[1] - f.z[0]);
+        const beam = box(R, w * 0.6, 1.2, len, (f.x[0] + f.x[1]) / 2, mid.y, mid.z, gray); beam.rotation.x = Math.atan2(f.y1 - f.y0, f.z[1] - f.z[0]); // (tilted down toward the low end, under the steps)
       } else {
         const w = f.x[1] - f.x[0], d = f.z[1] - f.z[0], top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, d), [dark, dark, texMat(w / 4, d / 4), dark, dark, dark]);
         top.position.set((f.x[0] + f.x[1]) / 2, f.y - 0.3, (f.z[0] + f.z[1]) / 2); top.receiveShadow = true; R.add(top);
@@ -118,10 +118,10 @@ export class Hub {
     // crate pedestals (one per rarity)
     this.crates = [];
     for (const c of CRATE_SPOTS) {
-      const R0 = RARITIES[c.r]; cyl(R, 1.2, 1.0, c.x, c.y + 0.5, c.z, mat(0x16191c), 8);
+      const R0 = CRATES[c.i]; cyl(R, 1.6, 1.0, c.x, c.y + 0.5, c.z, mat(0x16191c), 8); const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.08, 6, 32), mat(R0.hex, true)); ring.rotation.x = Math.PI / 2; ring.position.set(c.x, c.y + 1.01, c.z); R.add(ring);
       const g = new THREE.Group(); g.position.set(c.x, c.y + 1.9, c.z); R.add(g);
       box(g, 1.3, 1.3, 1.3, 0, 0, 0, mat(0x1a1d22)); for (const [x, y] of [[0, 0.66], [0, -0.66]]) box(g, 1.36, 0.1, 1.36, x, y, 0, mat(R0.hex, true)); for (const x of [-0.66, 0.66]) box(g, 0.1, 1.36, 1.36, x, 0, 0, mat(R0.hex, true));
-      this.crates.push(g); const lb = sign(R0.name.toUpperCase() + " CRATE", R0.color, c.x, c.y + 3.6, c.z, 4.6);
+      this.crates.push(g); const lb = sign(R0.name.toUpperCase() + " · ⚡" + R0.price.toLocaleString("en-US"), R0.color, c.x, c.y + 3.8, c.z, 5.5); g.scale.setScalar(c.i ? 1.35 : 1.1);
     }
     // the trade terminal + booths, and the locker on the spawn platform
     const term = (x, y, z, c) => { box(R, 1.4, 1.6, 0.8, x, y + 0.8, z, mat(0x16191c)); box(R, 1.2, 0.8, 0.05, x, y + 1.3, z + 0.42, mat(c, true)); };

@@ -88,3 +88,5 @@ kbd { display: inline-block; min-width: 26px; padding: 2px 7px; border-radius: 6
 #mEnd .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; } #mEnd .stats div { background: #0a1a10; border: 1px solid #1f5a33; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; } #mEnd .stats span { font-size: 22px; } #mEnd .stats small { color: #8fb89a; } #mEnd .stats b { font-family: "Russo One", sans-serif; font-size: 22px; }
 .reward { font-family: "Russo One", sans-serif; font-size: 34px; color: #ffd23a; text-shadow: 0 0 18px #ffb020; margin: 8px 0 14px; }
 @media (max-width: 700px) { .trade { grid-template-columns: 1fr; } #mCards .mCard { width: 92px; } #intro h1 { font-size: 40px; } #hint { display: none; } }
+.crates.two { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); } .crate.pick { transform: scale(1.03); }
+.odds { display: flex; flex-direction: column; gap: 2px; font-size: 14px; width: 100%; } .odds span { display: flex; justify-content: space-between; padding: 2px 10px; background: #050d08; border-radius: 6px; }
