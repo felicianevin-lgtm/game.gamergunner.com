@@ -15,7 +15,7 @@ export const VEHICLES = [
   { id: "bigquad", name: "Big Muddy Quad", price: 4800, top: 24, acc: 12, grip: 8, turn: 2.3, off: { dirt: 1, grass: 1, mud: 0.95 }, size: 1, tow: 1, color: 0x4a6a2a, engine: 110, open: true, quad: true, crawl: 0.97, desc: "A big 4x4 quad with racks and huge mud tires. Nothing stops it." },
   { id: "bike450", name: "Thumper 450", price: 4200, top: 33, acc: 17, grip: 7.2, turn: 2.6, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 1, tow: 0, color: 0x2a7ad0, engine: 175, open: true, bike: true, crawl: 0.9, desc: "A race dirt bike. Faster than the Dirt Rocket and SUPER good at wheelies." },
   { id: "pitbike", name: "Pit Rat 110 Pit Bike", price: 900, top: 19, acc: 11, grip: 7, turn: 2.9, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xffd23a, engine: 230, open: true, bike: true, crawl: 0.85, desc: "A little 110cc pit bike. Small, light and SO much fun in the dirt." },
-  { id: "bike125f", name: "Trail Thumper 125F (4-stroke)", price: 1700, top: 23, acc: 12, grip: 7.2, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 1, tow: 0, color: 0x3a6ad0, engine: 150, open: true, bike: true, crawl: 0.88, desc: "A 4-stroke 125 dirt bike. Smooth and torquey (it goes brap instead of ring-ding-ding), easy to ride, great for trails." },
+  { id: "bike125f", name: "Trail Thumper 125F (4-stroke)", price: 1700, top: 23, acc: 12, grip: 7.2, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.72 }, size: 1, tow: 0, color: 0xe0203a, engine: 150, open: true, bike: true, crawl: 0.88, desc: "A 4-stroke 125 dirt bike. Smooth and torquey (it goes brap instead of ring-ding-ding), easy to ride, great for trails." },
   { id: "dual250", name: "Ranger 250 Dual-Sport (street legal)", price: 5200, top: 34, acc: 14, grip: 7.8, turn: 2.6, off: { dirt: 0.95, grass: 0.9, mud: 0.66 }, size: 1, tow: 0, color: 0xe0203a, engine: 165, open: true, bike: true, street: true, crawl: 0.86, desc: "A street-legal 4-stroke 250 dirt bike: headlight, mirrors, turn signals and a license plate. Ride the trails AND the highway!" },
   { id: "ebike", name: "Volt Trail E-Bike", price: 1100, top: 14, acc: 11, grip: 7, turn: 2.9, off: { dirt: 0.95, grass: 0.9, mud: 0.55 }, size: 1, tow: 0, color: 0x2ac0a0, engine: 420, open: true, bike: true, electric: true, crawl: 0.8, desc: "An electric mountain bike with a battery and a motor. Super quiet, zippy on trails, and it never needs gas!" },
   { id: "efat", name: "Fat Tire E-Bike", price: 1600, top: 13, acc: 10, grip: 7.5, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.75 }, size: 1, tow: 0, color: 0xff7a1a, engine: 380, open: true, bike: true, electric: true, crawl: 0.88, desc: "An electric bike with HUGE fat tires. Rolls right over sand, snow and even some mud." },
@@ -178,12 +178,19 @@ const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 // ---------------------------------------------------------------- the real dirt bike model (models/dirtbike.bin)
 // a packed, slimmed-down model: the body + the two wheels (each centered on its axle so it can spin).
 let BIKE = null;
+// more real bikes (same packed format, plus their own colors): GamerGunner's 4-stroke 125 and 250 models
+const XBIKE = {};
 export async function loadBikeModel() {
   if (BIKE) return BIKE;
-  try {
-    const buf = await (await fetch(new URL("../models/dirtbike.bin", import.meta.url))).arrayBuffer();
+  await Promise.all([["b125", "bike125.bin"], ["b250", "bike250.bin"]].map(([k, f]) => loadPacked(f).then((b) => { XBIKE[k] = b; }).catch((e) => console.warn("bike model " + f + " didn't load", e))));
+  try { BIKE = await loadPacked("dirtbike.bin"); } catch (e) { console.warn("dirt bike model didn't load, using the simple bike", e); }
+  return BIKE;
+}
+async function loadPacked(file) {
+  {
+    const buf = await (await fetch(new URL("../models/" + file, import.meta.url))).arrayBuffer();
     const n = new DataView(buf).getUint32(0, true), hdr = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, n))), base = 4 + n;
-    const out = { wheels: hdr.wheels, body: [], front: [], back: [] };
+    const out = { wheels: hdr.wheels, body: [], front: [], back: [], colors: hdr.colors, paint: hdr.paint || [], tire: hdr.tire || [] };
     for (const p of hdr.parts) {
       const pos = new Int16Array(buf, base + p.off, p.v * 3), idx = new Uint16Array(buf, base + p.off + p.v * 6, p.i);
       const f = new Float32Array(p.v * 3); for (let i = 0; i < f.length; i++) f[i] = pos[i] / 1000;
@@ -191,9 +198,18 @@ export async function loadBikeModel() {
       g = g.toNonIndexed(); g.computeVertexNormals(); // (flat shading: crisp edges)
       out[p.group].push({ mat: p.mat, geo: g });
     }
-    BIKE = out;
-  } catch (e) { console.warn("dirt bike model didn't load, using the simple bike", e); }
-  return BIKE;
+    return out;
+  }
+}
+// the material for one color of a bike model (the plastics take your paint color)
+const XMAT = new Map();
+function bikeMat(B, mat, C) {
+  if (!B.colors) return (BIKE_MAT[mat] || (() => M.trim))(C);
+  if (B.paint.includes(mat)) return C.paint;
+  if (B.tire.includes(mat)) return M.tire;
+  const hx = B.colors[mat] || "3a3d44";
+  if (!XMAT.has(hx)) { const c = parseInt(hx, 16), shiny = ["c8ccd2", "9a9aa0", "c9a64a", "8a8d92"].includes(hx); XMAT.set(hx, shiny ? new THREE.MeshPhongMaterial({ color: c, shininess: 80, specular: 0x888888 }) : new THREE.MeshLambertMaterial({ color: c })); }
+  return XMAT.get(hx);
 }
 // which color of the model is which part
 const BIKE_MAT = {
@@ -203,17 +219,17 @@ const BIKE_MAT = {
 };
 // dirt bike suspension (Mud & Chrome): taller suspension = the whole bike grows, so the wheels always match
 export const SUSP = [{ name: "Lowered", k: 0.92, price: 250 }, { name: "Stock", k: 1, price: 0 }, { name: "Tall", k: 1.08, price: 350 }, { name: "Extra tall", k: 1.16, price: 500 }];
-function realBike(C, size) {
+function realBike(C, size, B = BIKE) {
   const k = size * (SUSP[C.car && C.car.susp != null ? C.car.susp : 1] || SUSP[1]).k;
-  C.len = 2.5 * k; C.wid = 0.8 * Math.min(1, k); C.seat.set(0, 0.9 * k, -0.2 * k); C.hitch = null; C.hood = null; bikeModel(C, k); C.realBike = true;
+  C.len = 2.5 * k; C.wid = 0.8 * Math.min(1, k); C.seat.set(0, 0.9 * k, -0.2 * k); C.hitch = null; C.hood = null; bikeModel(C, k, B); C.realBike = true;
 }
-function bikeModel(C, sc = 1) {
+function bikeModel(C, sc = 1, BIKE) {
   const b = C.body;
-  for (const p of BIKE.body) { const m = new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)); m.scale.setScalar(sc); b.add(m); }
+  for (const p of BIKE.body) { const m = new THREE.Mesh(p.geo, bikeMat(BIKE, p.mat, C)); m.scale.setScalar(sc); b.add(m); }
   for (const k of ["front", "back"]) {
     const w0 = BIKE.wheels[k], w = { x: w0.x * sc, z: w0.z * sc, r: w0.r * sc }, pivot = new THREE.Group(); pivot.position.set(w.x, w.r, w.z);
     const spin = new THREE.Group(); pivot.add(spin); spin.scale.setScalar(sc);
-    for (const p of BIKE[k]) { const m = new THREE.Mesh(p.geo, (BIKE_MAT[p.mat] || (() => M.trim))(C)); m.castShadow = true; spin.add(m); }
+    for (const p of BIKE[k]) { const m = new THREE.Mesh(p.geo, bikeMat(BIKE, p.mat, C)); m.castShadow = true; spin.add(m); }
     const knobs = new THREE.Group(); spin.add(knobs);
     C.root.add(pivot);
     C.wheels.push({ pivot, spin, knobs, x: w.x, z: w.z, r0: w.r, r: w.r, front: k === "front", side: 1, bike: true, model: true });
@@ -683,8 +699,8 @@ const BUILD = {
   // a pit bike + a 125: the real dirt bike, smaller
   pitbike(C) { if (BIKE) return realBike(C, 0.72); BUILD.bike(C); },
   bike125(C) { if (BIKE) return realBike(C, 0.86); BUILD.bike(C); },
-  bike125f(C) { if (BIKE) return realBike(C, 0.88); BUILD.bike(C); },
-  dual250(C) { if (BIKE) realBike(C, 0.97); else BUILD.bike(C); streetKit(C); },
+  bike125f(C) { if (XBIKE.b125 || BIKE) return realBike(C, 0.9, XBIKE.b125 || BIKE); BUILD.bike(C); },
+  dual250(C) { if (XBIKE.b250 || BIKE) realBike(C, 0.97, XBIKE.b250 || BIKE); else BUILD.bike(C); streetKit(C); },
   sport300(C) { sportBike(C, 1.2, false); },
   super1000(C) { sportBike(C, 1.27, true); },
   // a sport side-by-side (UTV): molded hood + fenders, two bucket seats, half doors, a roll cage with a roof,
