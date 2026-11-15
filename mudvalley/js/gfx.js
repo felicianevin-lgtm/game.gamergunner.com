@@ -11,6 +11,8 @@ export const GFX = [
   { name: "Ultra", note: "Glow, sun rays, film colors, extra sharp shadows, thick grass. Needs a strong computer!", dpr: 2, shadow: 4096, box: 100, grassR: 52, blades: 5 },
 ];
 
+// (a broken "not a number" pixel would get smeared into a black box by the glow, so those become plain black dots first)
+const SAFE = "vec3 safe(vec3 c){ return (any(isnan(c)) || any(isinf(c))) ? vec3(0.0) : clamp(c, 0.0, 64.0); }";
 const VERT = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }";
 const rt = (w, h, samples = 0) => new THREE.WebGLRenderTarget(Math.max(1, w), Math.max(1, h), { type: THREE.HalfFloatType, depthBuffer: samples > 0, samples, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
 
@@ -22,8 +24,8 @@ export class Ultra {
     this.qs = new THREE.Scene(); this.qs.add(this.quad);
     const M = (frag, uniforms) => new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
     // 1) only the bright bits (a soft cut-off, so it doesn't pop)
-    this.mBright = M(`uniform sampler2D t; uniform vec2 px; varying vec2 vUv;
-      void main(){ vec3 c = 0.25 * (texture2D(t, vUv + px * vec2(-0.5,-0.5)).rgb + texture2D(t, vUv + px * vec2(0.5,-0.5)).rgb + texture2D(t, vUv + px * vec2(-0.5,0.5)).rgb + texture2D(t, vUv + px * vec2(0.5,0.5)).rgb);
+    this.mBright = M(`uniform sampler2D t; uniform vec2 px; varying vec2 vUv; ${SAFE}
+      void main(){ vec3 c = 0.25 * (safe(texture2D(t, vUv + px * vec2(-0.5,-0.5)).rgb) + safe(texture2D(t, vUv + px * vec2(0.5,-0.5)).rgb) + safe(texture2D(t, vUv + px * vec2(-0.5,0.5)).rgb) + safe(texture2D(t, vUv + px * vec2(0.5,0.5)).rgb));
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); float k = smoothstep(0.85, 1.7, l); gl_FragColor = vec4(c * k, 1.0); }`, { t: { value: null }, px: { value: new THREE.Vector2() } });
     // 2) blur (one direction at a time)
     this.mBlur = M(`uniform sampler2D t; uniform vec2 dir; varying vec2 vUv;
@@ -40,14 +42,14 @@ export class Ultra {
         vec2 o = (vUv - sun) * vec2(aspect, 1.0); float near = exp(-dot(o, o) * 1.6);
         gl_FragColor = vec4(acc * 0.03 * near, 1.0); }`, { t: { value: null }, sun: { value: new THREE.Vector2(0.5, 0.5) }, aspect: { value: 1 } });
     // 4) put it all together: glow + rays, film colors (ACES), a little extra color + contrast, dark edges
-    this.mFinal = M(`uniform sampler2D t, b0, b1, b2, b3, b4, rays; uniform float glow, rayK, expo, night; varying vec2 vUv;
+    this.mFinal = M(`uniform sampler2D t, b0, b1, b2, b3, b4, rays; uniform float glow, rayK, expo, night; varying vec2 vUv; ${SAFE}
       vec3 aces(vec3 c){ c *= expo / 0.6;
         const mat3 A = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
         const mat3 B = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
         c = A * c; vec3 a = c * (c + 0.0245786) - 0.000090537; vec3 b = c * (0.983729 * c + 0.4329510) + 0.238081; c = B * (a / b); return clamp(c, 0.0, 1.0); }
       vec3 srgb(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }
       void main(){
-        vec3 c = texture2D(t, vUv).rgb;
+        vec3 c = safe(texture2D(t, vUv).rgb);
         vec3 bl = texture2D(b0, vUv).rgb * 0.9 + texture2D(b1, vUv).rgb * 0.75 + texture2D(b2, vUv).rgb * 0.55 + texture2D(b3, vUv).rgb * 0.4 + texture2D(b4, vUv).rgb * 0.3;
         c += bl * glow + texture2D(rays, vUv).rgb * rayK * vec3(1.0, 0.92, 0.78);
         c = aces(c);

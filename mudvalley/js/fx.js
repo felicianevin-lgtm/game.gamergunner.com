@@ -50,6 +50,7 @@ export class FX {
       if (p.y < g + p.size * 0.5) { p.y = g + p.size * 0.5; p.vy *= -0.25; p.vx *= 0.5; p.vz *= 0.5; }
       p.rx += p.spin * dt; p.ry += p.spin * 0.7 * dt;
       const k = Math.min(1, p.life / (p.max * 0.3));
+      if (p.size * k < 0.02) continue; // (too tiny to see: skip it, a nearly-zero size breaks the lighting math = black specks)
       M.compose(v.set(p.x, p.y, p.z), q.setFromEuler(e.set(p.rx, p.ry, 0)), s.set(p.size * k, p.size * k * (p.grav < 1 ? 0.3 : 1), p.size * k));
       this.cm.setMatrixAt(n, M); this.cm.setColorAt(n, c.set(p.color)); n++;
     }
@@ -60,6 +61,7 @@ export class FX {
       p.life -= dt; if (p.life <= 0) { this.puffs.splice(i, 1); continue; }
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vx *= 1 - dt; p.vz *= 1 - dt;
       const t = 1 - p.life / p.max, sz = p.size * (1 + t * p.grow) * Math.min(1, (1 - t) * 3);
+      if (sz < 0.02) continue;
       M.compose(v.set(p.x, p.y, p.z), q.identity(), s.set(sz, sz * 0.8, sz));
       this.pm.setMatrixAt(n, M); this.pm.setColorAt(n, c.set(p.color)); n++;
     }

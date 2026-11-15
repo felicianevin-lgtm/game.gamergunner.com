@@ -1396,6 +1396,7 @@ const MV = {
   sync() { syncSave(); },
   camYaw(v) { cam.yaw = v; cam.snap = true; },
   info() { return { ...renderer.info.render, quality, pixelRatio: renderer.getPixelRatio() }; },
+  ultra: () => ultra,
   get crime() { return crime; }, get fishing() { return fishing; }, get world() { return world; }, scene, camera, renderer,
   // hold a key for n steps (e.g. MV.hold("KeyE", 300) robs / cuffs)
   hold(code, n = 60) { IN.forceHeld(code, true); MV.step(n); IN.forceHeld(code, false); return MV.state; },
