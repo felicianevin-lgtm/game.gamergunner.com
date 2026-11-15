@@ -4,7 +4,7 @@
 import * as THREE from "/create/vendor/three.module.js";
 import { groundAt, surfaceAt, SURF } from "./terrain.js";
 
-const CH = 16, STEP = 0.55, CELL = 0.5; // (square size, space between tufts, mow grid size)
+const CH = 16, STEP = 0.62, CELL = 0.5; // (square size, space between tufts, mow grid size)
 export const CUT_H = [0.2, 0.12, 0.06, 0.015]; // how tall the grass is after mowing at each deck height
 const GROW = 0.0016; // m per second it grows back
 const key = (i, j) => (i + 8000) * 16000 + (j + 8000);
@@ -26,9 +26,9 @@ function tuftGeo(blades) {
 
 export class Grass {
   constructor(scene, low) {
-    this.scene = scene; this.R = low ? 26 : 44; this.chunks = new Map(); this.cut = new Map(); this.time = 0; this.regrowT = 0;
+    this.scene = scene; this.R = low ? 22 : 34; this.chunks = new Map(); this.cut = new Map(); this.time = 0; this.regrowT = 0;
     this.U = { time: { value: 0 }, center: { value: new THREE.Vector2() }, radius: { value: this.R } };
-    this.geo = tuftGeo(low ? 3 : 5);
+    this.geo = tuftGeo(3);
     const U = this.U;
     this.mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.mat.onBeforeCompile = (sh) => {
@@ -49,6 +49,8 @@ transformed.z += cos(time * 1.25 + wo.z * 0.29 - wo.x * 0.1) * 0.08 * bend;`);
     this.mat.customProgramCacheKey = () => "grass";
     this.queue = [];
   }
+  // the computer is struggling: grass only close by
+  setLow() { if (this.R <= 22) return; this.R = 22; this.U.radius.value = 22; }
   // how tall the grass is at a spot right now (1 = not mowed)
   heightAt(x, z, base) {
     const c = this.cut.get(key(Math.floor(x / CELL), Math.floor(z / CELL))); if (!c) return base;

@@ -250,24 +250,23 @@ function shade(g, f) {
   for (let i = 0; i < p.count; i++) { const k = f(p.getX(i), p.getY(i), p.getZ(i)); c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = Math.max(0.3, Math.min(1, k)); }
   g.setAttribute("color", new THREE.BufferAttribute(c, 3)); g.deleteAttribute("uv"); return g;
 }
+// (kept very light: there are about 50,000 pines, 17,000 leafy trees and 9,000 bushes in the valley)
 function pineGeo() {
-  let sd = 3; const rr = () => ((sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const parts = [[2.5, 2.4, 1.9], [2.05, 2.2, 3.1], [1.6, 2.0, 4.2], [1.1, 1.8, 5.2], [0.6, 1.4, 6.0]].map(([r, h, y], i) => {
-    const g = new THREE.ConeGeometry(r, h, 9, 2); const p = g.attributes.position;
-    for (let k = 0; k < p.count; k++) { const yy = p.getY(k); if (yy < -h / 2 + 0.01) { const a = Math.atan2(p.getZ(k), p.getX(k)); p.setY(k, yy - 0.25 - 0.18 * Math.sin(a * 4 + i)); p.setX(k, p.getX(k) * (1 + (rr() - 0.5) * 0.18)); p.setZ(k, p.getZ(k) * (1 + (rr() - 0.5) * 0.18)); } }
-    g.translate(0, y, 0); return shade(g, (x, yy, z) => 0.62 + (yy - y + h / 2) / h * 0.38 + i * 0.03);
+  const parts = [[2.4, 2.9, 2.5], [1.75, 2.5, 4.0], [1.05, 2.1, 5.4]].map(([r, h, y], i) => {
+    const g = new THREE.ConeGeometry(r, h, 7, 1, i > 0); const p = g.attributes.position; // (only the bottom layer needs a floor)
+    for (let k = 0; k < p.count; k++) { const yy = p.getY(k); if (yy < -h / 2 + 0.01 && Math.hypot(p.getX(k), p.getZ(k)) > 0.1) { const a = Math.atan2(p.getZ(k), p.getX(k)); p.setY(k, yy - 0.2 - 0.18 * Math.sin(a * 3 + i)); const w = 1 + 0.1 * Math.sin(a * 5 + i * 2); p.setX(k, p.getX(k) * w); p.setZ(k, p.getZ(k) * w); } }
+    g.translate(0, y, 0); return shade(g, (x, yy, z) => 0.6 + (yy - y + h / 2) / h * 0.4 + i * 0.04);
   });
   return merge(parts);
 }
 function roundGeo() {
   let sd = 9; const rr = () => ((sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296);
-  const blobs = [[0, 3.5, 0, 1.75], [1.05, 3.1, 0.35, 1.3], [-0.95, 3.3, -0.4, 1.25], [0.2, 4.5, -0.45, 1.2], [-0.35, 3.0, 1.0, 1.05], [0.5, 4.1, 0.8, 1.0]];
-  const parts = blobs.map(([x, y, z, r]) => { const g = new THREE.IcosahedronGeometry(r, 1); const p = g.attributes.position; for (let k = 0; k < p.count; k++) { const s = 1 + (rr() - 0.5) * 0.22; p.setXYZ(k, p.getX(k) * s, p.getY(k) * s, p.getZ(k) * s); } g.translate(x, y, z); return shade(g, (a, b, c) => 0.6 + (b - 2.0) * 0.12 + rr() * 0.12); });
-  parts.push(shade(new THREE.CylinderGeometry(0.07, 0.11, 1.4, 5).rotateZ(0.8).translate(0.55, 2.4, 0), () => 0.5), shade(new THREE.CylinderGeometry(0.07, 0.1, 1.2, 5).rotateZ(-0.7).translate(-0.5, 2.3, 0.1), () => 0.5));
+  const blobs = [[0, 3.5, 0, 2.0], [0.55, 4.4, -0.35, 1.35]];
+  const parts = blobs.map(([x, y, z, r]) => { const g = new THREE.IcosahedronGeometry(r, 0); const p = g.attributes.position; for (let k = 0; k < p.count; k++) { const s = 1 + (rr() - 0.5) * 0.2; p.setXYZ(k, p.getX(k) * s, p.getY(k) * s, p.getZ(k) * s); } g.translate(x, y, z); return shade(g, (a, b) => 0.62 + (b - 2.4) * 0.12 + rr() * 0.1); });
   return merge(parts);
 }
 function bushGeo() {
-  const parts = [[0, 0.45, 0, 0.7], [0.5, 0.35, 0.2, 0.5], [-0.45, 0.38, -0.15, 0.55], [0.1, 0.7, -0.3, 0.45]].map(([x, y, z, r]) => shade(new THREE.IcosahedronGeometry(r, 1).translate(x, y, z), (a, b) => 0.55 + b * 0.5));
+  const parts = [[0, 0.45, 0, 0.75], [0.45, 0.4, 0.25, 0.55]].map(([x, y, z, r]) => shade(new THREE.IcosahedronGeometry(r, 0).translate(x, y, z), (a, b) => 0.55 + b * 0.5));
   return merge(parts);
 }
 function forests(scene) {
@@ -282,7 +281,7 @@ function forests(scene) {
       const s = 0.8 + rnd() * 0.7, h = hAt(x, z);
       (h > 20 || rnd() < 0.6 ? pines : rounds).push({ x, z, s, y: h, c: rnd() });
       addCircle(x, z, 0.5 * s, h + 7);
-    } else if (r > 0.45 && r < 0.45 + Math.min(0.1, dens * 0.12) && !desertAt(x, z)) { // a bush near the woods
+    } else if (r > 0.45 && r < 0.45 + Math.min(0.05, dens * 0.06) && !desertAt(x, z)) { // a bush near the woods
       if (inFlat(x, z) || nearPath(x, z, 4)) continue;
       bushes.push({ x: x + (rnd() - 0.5) * 2, z: z + (rnd() - 0.5) * 2, s: 0.6 + rnd() * 0.7, y: hAt(x, z), c: rnd() });
     } else if (r > 0.6 && r < 0.6 + desertAt(x, z) * 0.012) { // cactus!
@@ -298,21 +297,21 @@ function forests(scene) {
   // (cut into 12 x 12 big squares: the computer skips the squares the camera can't see)
   const NR = 12, R = (HALF * 2) / NR, reg = (t) => Math.min(NR - 1, Math.floor((t.x + HALF) / R)) + NR * Math.min(NR - 1, Math.floor((t.z + HALF) / R));
   const mats = {};
-  const make = (geo, color, all, y, ys, cv) => {
+  const make = (geo, color, all, y, ys, cv, shadow = true) => {
     const vc = !!geo.attributes.color, mk = color + (vc ? "v" : "");
     const mat = mats[mk] || (mats[mk] = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, vertexColors: vc }));
     for (let r = 0; r < NR * NR; r++) {
       const list = all.filter((t) => reg(t) === r); if (!list.length) continue;
       const m = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach((t, i) => { M.compose(v.set(t.x, t.y + y * t.s, t.z), q.setFromAxisAngle(up, t.c * 6.28), sc.set(t.s, t.s * ys, t.s)); m.setMatrixAt(i, M); m.setColorAt(i, col.set(color).offsetHSL(cv ? (t.c - 0.5) * 0.04 : 0, 0, cv ? (t.c - 0.5) * 0.12 : 0)); });
-      m.computeBoundingSphere(); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+      m.computeBoundingSphere(); m.castShadow = shadow; m.receiveShadow = true; scene.add(m);
     }
   };
   const trunks = pines.concat(rounds);
   make(new THREE.CylinderGeometry(0.2, 0.32, 2.2, 6), 0x7a5232, trunks, 1.0, 1, false);
   make(pineGeo(), 0x2f8a3c, pines, 0, 1, true);
   make(roundGeo(), 0x4fae3e, rounds, 0, 0.95, true);
-  make(bushGeo(), 0x4a9a3a, bushes, 0, 1, true);
+  make(bushGeo(), 0x4a9a3a, bushes, 0, 1, true, false);
   make(new THREE.DodecahedronGeometry(1, 0), 0x8f8a82, rocks, 0.35, 0.75, true);
   // cacti: a tall stem + two arms
   make(new THREE.CylinderGeometry(0.32, 0.38, 3.6, 7), 0x3f8a3a, cacti, 1.8, 1, true);

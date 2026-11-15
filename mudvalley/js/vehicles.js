@@ -130,6 +130,28 @@ export const PRICES = { paint: 150, rims: 200, neon: 500 };
 
 // how rusty it is (0 = shiny, 1 = crusty). The Rusty Pickup comes rusty.
 export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
+// a ride's paint-shop + bolt-on mods as a short code, so friends online see your ride the way you built it
+// (one letter per thing; the order never changes, new things only get added at the end)
+const num = (k, d = 0, add = 0) => [(c) => (c[k] ?? d) + add, (c, n) => { c[k] = n - add; }];
+const yes = (k) => [(c) => (c[k] ? 1 : 0), (c, n) => { c[k] = !!n; }];
+const CODE = [
+  [(c) => RIMS.findIndex((r) => r.id === c.rims), (c, n) => { if (RIMS[n]) c.rims = RIMS[n].id; }],
+  [(c) => TIRES.findIndex((t) => t.id === c.tires), (c, n) => { if (TIRES[n]) c.tires = TIRES[n].id; }],
+  num("engine"), num("lift"), num("neon"), num("camber"), num("offset", 1), num("bedLen", 1), yes("flatbed"),
+  [(c) => Math.round(rustOf(c) * 35), (c, n) => { c.rust = n / 35; }],
+  num("lbar"), num("boards"), num("antenna"), yes("winch"), num("bars"), num("pad", 0, 1), num("grips"), yes("moto"), num("kit"), num("kitCol"), num("helmet", 1),
+];
+const stockCode = new Map();
+export function modCode(car) {
+  const code = CODE.map(([g]) => Math.max(0, Math.min(35, Math.round(+g(car) || 0))).toString(36)).join("");
+  if (!stockCode.has(car.id)) stockCode.set(car.id, CODE.map(([g]) => Math.max(0, Math.min(35, Math.round(+g(newCar(car.id, 0)) || 0))).toString(36)).join(""));
+  return code === stockCode.get(car.id) ? "" : code; // ("" = nothing changed from the dealer)
+}
+export function carFromCode(id, code, paint) {
+  const car = newCar(id, 0); car.paint = paint;
+  if (/^[0-9a-z]{1,40}$/.test(code || "")) [...code].forEach((ch, i) => { if (CODE[i]) CODE[i][1](car, parseInt(ch, 36)); });
+  return car;
+}
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);

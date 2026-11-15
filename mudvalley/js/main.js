@@ -9,7 +9,7 @@ import * as THREE from "/create/vendor/three.module.js";
 import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./world.js";
 import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
-import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf } from "./vehicles.js";
+import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf, modCode } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
 import { buildTrailer, trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor, RV_DOOR } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser, setOutfit } from "./character.js";
@@ -859,7 +859,7 @@ function frame(now) {
   draw(dt);
   // automatic quality: if the computer is struggling, draw fewer pixels
   frames++; fpsT += dt;
-  if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; if (fps < 32 && quality) { slowT++; if (slowT >= 2) { quality = 0; resize(); renderer.shadowMap.enabled = fps > 22; } } else slowT = 0; }
+  if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; if (fps < 32 && quality) { slowT++; if (slowT >= 2) { quality = 0; resize(); renderer.shadowMap.enabled = fps > 22; extras.grass.setLow(); } } else slowT = 0; }
 }
 function tick(dt) {
   G.time += dt;
@@ -1270,7 +1270,7 @@ async function boot() {
     room: () => (inside() ? (interiors.cur.bd.id === "rv" ? "rv_" + mp.id : interiors.cur.bd.id) : ""),
     riding: () => G.ride || 0, mapPos: () => mapPos(),
     myRide() { const c = mine(); return c ? { x: c.m.root.position.x, y: c.m.root.position.y, z: c.m.root.position.z, yaw: c.b.yaw, C: c.m } : null; },
-    me() { const c = mine(), p = inside() ? G.me.w : mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint } : null }; },
+    me() { const c = mine(), p = inside() ? G.me.w : mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint, code: modCode(c.s) } : null }; },
     // what you have out near you, so friends see it too: parked rides, trailers, your camp (closest first)
     // (things riding along with the ride you're driving, like a bike in your truck bed or your hitched trailer and the
     //  rides on it, are sent relative to your ride: x/z/yaw/y in its own space, towing = 1, so friends see them move with you)

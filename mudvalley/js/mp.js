@@ -10,7 +10,7 @@ import * as THREE from "/create/vendor/three.module.js";
 import { RELAY, account } from "/create/js/net.js";
 import { makePerson, CLOTH_COLORS } from "./character.js";
 import { buildingById } from "./interiors.js";
-import { buildCar, animateCar, vehicleById } from "./vehicles.js";
+import { buildCar, animateCar, vehicleById, carFromCode } from "./vehicles.js";
 import { groundAt } from "./terrain.js";
 import { S, save } from "./save.js";
 import { buildTrailer, trailerById, trailerBack } from "./trailer.js";
@@ -142,9 +142,9 @@ export class MP {
     const look = { shirt: unhex(k[0] || "2f8ae0"), pants: unhex(k[1] || "2a3550"), skin: unhex(k[2] || "ffc999"), hair: unhex(k[4] || "5a3a1a"), cap: k[5] && k[5] !== "000000" ? unhex(k[5]) : null, shoes: unhex(k[6] || "ffffff"),
       top: Math.min(5, d(0)), legs: Math.min(2, d(1)), hat: Math.min(3, d(2)), glasses: Math.min(2, d(4) >> 2), extra: d(4) & 3, acc: CLOTH_COLORS[d(5)] ?? 0xffffff };
     p.model = makePerson(look); this.api.scene.add(p.model.root);
-    const parts = (p.v || "").split("|");
-    if (parts.length === 3 && vehicleById(parts[1]).id === parts[1]) {
-      p.car = buildCar({ id: parts[1], paint: unhex(parts[2]), rims: "chrome", tires: "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0 }, { driver: look });
+    const parts = (p.v || "").split("|"), [vid, code] = (parts[1] || "").split(":");
+    if (parts.length === 3 && vehicleById(vid).id === vid) {
+      p.car = buildCar(carFromCode(vid, code, unhex(parts[2])), { driver: look });
       this.api.scene.add(p.car.root); p.model.root.visible = false;
     }
     p.tag = tag(tagText(p)); this.api.scene.add(p.tag);
@@ -186,8 +186,9 @@ export class MP {
     this.sendT -= dt;
     const me = this.api.me();
     if (this.sendT <= 0) { this.sendT = 0.1; this.send({ t: "s", p: [me.x, me.y, me.z], r: me.yaw, w: me.moving ? 1 : 0, c: 0 }); }
-    const v = me.car ? "w|" + me.car.id + "|" + hex(me.car.paint) : "";
-    if (v !== this.lastCar) { this.lastCar = v; this.send({ t: "car", v }); }
+    const v = me.car ? "w|" + me.car.id + (me.car.code ? ":" + me.car.code : "") + "|" + hex(me.car.paint) : "";
+    if (v !== this.lastCar) { this.lastCar = v; this.carAgain = 0.8; this.send({ t: "car", v }); }
+    else if (this.carAgain > 0 && (this.carAgain -= dt) <= 0) this.send({ t: "car", v }); // (once more, in case a fast change got skipped by the server)
     this.roleT = (this.roleT || 0) - dt; this.sendRole(this.roleT <= 0);
     // which room you're in ("" = outside) and whose ride you're sitting in (0 = none)
     const room = this.api.room ? this.api.room() : "", ride = this.api.riding ? this.api.riding() : 0;
