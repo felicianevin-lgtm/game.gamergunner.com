@@ -34,7 +34,7 @@ import * as H from "./hud.js";
 import * as IN from "./input.js";
 import { initMenus, UI } from "./menus.js";
 import { Extras, TRICKS } from "./extras.js";
-import { GFX, Ultra } from "./gfx.js";
+import { GFX, Ultra, fixNormals } from "./gfx.js";
 
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
@@ -867,7 +867,7 @@ function endRace() {
 }
 
 // ---------------------------------------------------------------- the main loop
-let acc = 0, last = performance.now(), saveT = 0, fpsT = 0, frames = 0, slowT = 0, miniT = 0, limT = 0;
+let fixT = 0, acc = 0, last = performance.now(), saveT = 0, fpsT = 0, frames = 0, slowT = 0, miniT = 0, limT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   if (G.mode === "thumb") return;
@@ -875,6 +875,7 @@ function frame(now) {
   if (!G.frozen) { acc += dt; let n = 0; while (acc >= DT && n < 4) { tick(DT); acc -= DT; n++; } if (n >= 4) acc = 0; }
   draw(dt);
   // automatic quality: if the computer is struggling, draw fewer pixels
+  if ((fixT -= dt) <= 0) { fixT = 2; fixNormals(scene); }
   frames++; fpsT += dt;
   if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; if (fps < 32 && quality && S.gfx == null) { slowT++; if (slowT >= 2) { slowT = 0; setGfx(quality - 1); H.toast("Graphics lowered to " + GFX[quality].name, "So the game runs smoother. Change it in Settings.", "", 2600); } } else slowT = 0; }
 }
@@ -1248,6 +1249,7 @@ async function boot() {
     radioText: (t) => { const el = $("radioTxt"); if (el) { el.textContent = t; el.classList.toggle("hidden", !t); } } });
   extras.dark = sky.update(S.tod ?? 0.33);
   setGfx(quality);
+  fixNormals(scene);
   jobBeacon = beacon(0xffd23a); gpsBeacon = beacon(0xc86aff);
   H.setMapBase(mapCanvas(1024));
   await loadBikeModel();

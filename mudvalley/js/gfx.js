@@ -12,7 +12,20 @@ export const GFX = [
 ];
 
 // (a broken "not a number" pixel would get smeared into a black box by the glow, so those become plain black dots first)
-const SAFE = "vec3 safe(vec3 c){ return (any(isnan(c)) || any(isinf(c))) ? vec3(0.0) : clamp(c, 0.0, 64.0); }";
+const SAFE = "vec3 safe(vec3 c){ bvec3 bad = bvec3(isnan(c.x) || isinf(c.x), isnan(c.y) || isinf(c.y), isnan(c.z) || isinf(c.z)); c = min(max(c, vec3(0.0)), vec3(64.0)); return any(bad) || !(c.x + c.y + c.z < 1e9) ? vec3(0.0) : c; }"; // (several checks: some graphics chips skip one of them)
+// Some shapes have spots with a "zero" facing direction (squashed-flat triangles). Lighting can't handle that, and on
+// some graphics chips it makes broken pixels (on Ultra the glow smeared them into big black boxes). Give those spots
+// a real direction. (Done once per shape: fixed shapes are remembered.)
+const FIXED = new WeakSet();
+export function fixNormals(root) {
+  root.traverse((o) => {
+    const g = o.geometry; if (!g || FIXED.has(g)) return; FIXED.add(g);
+    const n = g.attributes && g.attributes.normal; if (!n || n.isInterleavedBufferAttribute) return;
+    const a = n.array; let bad = false;
+    for (let i = 0; i < a.length; i += 3) { const x = a[i], y = a[i + 1], z = a[i + 2]; if (!(x * x + y * y + z * z > 1e-8)) { a[i] = 0; a[i + 1] = 1; a[i + 2] = 0; bad = true; } }
+    if (bad) n.needsUpdate = true;
+  });
+}
 const VERT = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }";
 const rt = (w, h, samples = 0) => new THREE.WebGLRenderTarget(Math.max(1, w), Math.max(1, h), { type: THREE.HalfFloatType, depthBuffer: samples > 0, samples, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
 

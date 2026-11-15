@@ -1,6 +1,7 @@
 // MUD VALLEY RP: every ride you can buy, how it drives, and the 3D model (with paint, tires, lift, engine parts and neon).
 // Models face +z (forward). Wheels touch the ground at y = 0.
 import * as THREE from "/create/vendor/three.module.js";
+import { fixNormals } from "./gfx.js";
 import { makePerson, LOOKS } from "./character.js";
 import { mergeGeometries, toCreasedNormals } from "/create/vendor/BufferGeometryUtils.js";
 import { addMods, graphics, applyKit, modTune } from "./mods.js";
@@ -217,6 +218,18 @@ export async function loadBikeModel() {
   try { BIKE = await loadPacked("dirtbike.bin"); } catch (e) { console.warn("dirt bike model didn't load, using the simple bike", e); }
   return BIKE;
 }
+// throw away squashed-flat triangles (no size = no "which way it faces"): on some graphics chips they make broken
+// pixels, and on Ultra the glow smeared those into big black boxes flashing over the bike
+function noFlat(g) {
+  const p = g.attributes.position.array, keep = [];
+  for (let i = 0; i < p.length; i += 9) {
+    const ax = p[i + 3] - p[i], ay = p[i + 4] - p[i + 1], az = p[i + 5] - p[i + 2], bx = p[i + 6] - p[i], by = p[i + 7] - p[i + 1], bz = p[i + 8] - p[i + 2];
+    const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;
+    if (cx * cx + cy * cy + cz * cz > 1e-14) for (let k = 0; k < 9; k++) keep.push(p[i + k]);
+  }
+  if (keep.length === p.length) return g;
+  const n = new THREE.BufferGeometry(); n.setAttribute("position", new THREE.Float32BufferAttribute(keep, 3)); return n;
+}
 async function loadPacked(file) {
   {
     const buf = await (await fetch(new URL("../models/" + file, import.meta.url))).arrayBuffer();
@@ -229,7 +242,7 @@ async function loadPacked(file) {
       const pos = new Int16Array(buf, base + p.off, p.v * 3), idx = new Uint16Array(buf, base + p.off + p.v * 6, p.i);
       const f = new Float32Array(p.v * 3); for (let i = 0; i < f.length; i++) f[i] = pos[i] / 1000;
       let g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(f, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1));
-      g = g.toNonIndexed(); g.computeVertexNormals(); // (flat shading: crisp edges)
+      g = noFlat(g.toNonIndexed()); g.computeVertexNormals(); // (flat shading: crisp edges)
       if (p.group === "steer") { g.applyMatrix4(unrake); g.computeVertexNormals(); out.steerParts.push({ mat: p.mat, geo: g }); }
       else out[p.group].push({ mat: p.mat, geo: g });
     }
@@ -364,7 +377,7 @@ export function buildCar(car, opts = {}) {
   const keep = new Set([C.scoop, C.rider.root, ...C.flames, ...(C.lights || []), ...(C.forks || []), ...(C.anim || [])]);
   bakeGroup(body, (o) => keep.has(o) || o.name === "pipe" || o.name === "flag");
   root.traverse((o) => { if (o.isMesh && o !== ng) { o.castShadow = true; } });
-  applyLook(C, car);
+  applyLook(C, car); fixNormals(root);
   return C;
 }
 let GT = null;
