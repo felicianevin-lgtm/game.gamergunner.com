@@ -2,6 +2,7 @@
 // Models face +z (forward). Wheels touch the ground at y = 0.
 import * as THREE from "/create/vendor/three.module.js";
 import { fixNormals } from "./gfx.js";
+import { buildCockpit, animateCockpit, wantsCockpit } from "./cockpit.js";
 import { makePerson, LOOKS } from "./character.js";
 import { mergeGeometries, toCreasedNormals } from "/create/vendor/BufferGeometryUtils.js";
 import { addMods, graphics, applyKit, modTune } from "./mods.js";
@@ -377,6 +378,8 @@ export function buildCar(car, opts = {}) {
   const keep = new Set([C.scoop, C.rider.root, ...C.flames, ...(C.lights || []), ...(C.forks || []), ...(C.anim || [])]);
   bakeGroup(body, (o) => keep.has(o) || o.name === "pipe" || o.name === "flag");
   root.traverse((o) => { if (o.isMesh && o !== ng) { o.castShadow = true; } });
+  // the inside of the cab, for first person (cockpit.js): built around the driver's eyes
+  if (wantsCockpit(v) && C.rider && !opts.noCockpit) { root.updateMatrixWorld(true); const e = C.rider.head.getWorldPosition(new THREE.Vector3()); body.worldToLocal(e); e.y += 0.08; C.topSpeed = v.top; buildCockpit(C, e, C.paint); }
   applyLook(C, car); fixNormals(root);
   return C;
 }
@@ -423,6 +426,7 @@ export function animateCar(C, st, dt) {
   if (C.lights) { const on = st.siren, ph = Math.floor((st.t || performance.now() / 1000) * 7) % 2; C.lights[0].material.color.setHex(on && ph ? 0xff2a2a : 0x6a1a1a); C.lights[1].material.color.setHex(on && !ph ? 0x2a6aff : 0x1a2a6a); }
   const fl = C.engineLv >= 4 && st.boost > 0.6;
   for (const f of C.flames) { f.visible = fl; if (fl) f.scale.setScalar(0.7 + Math.random() * 0.6); }
+  animateCockpit(C, st);
 }
 
 // ---------------------------------------------------------------- each vehicle's shape

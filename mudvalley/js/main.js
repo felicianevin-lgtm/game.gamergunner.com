@@ -1095,10 +1095,11 @@ function toggleFP() {
 const EYE = new THREE.Vector3(), LOOKV = new THREE.Vector3();
 function fpCamera(c) {
   const head = c && c.m.rider ? c.m.rider.head : G.me.p.head;
-  head.updateWorldMatrix(true, false); head.getWorldPosition(EYE); EYE.y += c ? 0.08 : 0.1;
+  if (c && c.m.eye) { c.m.body.updateWorldMatrix(true, false); EYE.copy(c.m.eye); c.m.body.localToWorld(EYE); } // (in a cab: from the driver's seat, see cockpit.js)
+  else { head.updateWorldMatrix(true, false); head.getWorldPosition(EYE); EYE.y += c ? 0.08 : 0.1; }
   const v = c && vehicleById(c.s.id), open = !!(v && (v.bike || v.quad));
   // (on a dirt bike or quad: 0.5 m back + a little up, looking a bit down, so you see the handlebars + mirrors)
-  if (c) { EYE.addScaledVector(LOOKV.set(Math.sin(c.b.yaw), 0, Math.cos(c.b.yaw)), open ? -0.5 : 0.12); }
+  if (c) { EYE.addScaledVector(LOOKV.set(Math.sin(c.b.yaw), 0, Math.cos(c.b.yaw)), open ? -0.5 : c.m.eye ? 0 : 0.12); }
   const pitch = (cam.pitch - 0.28) * 1.3 + (open ? 0.38 : 0), yaw = cam.yaw;
   camera.position.copy(EYE); camera.lookAt(EYE.x + Math.sin(yaw) * Math.cos(pitch), EYE.y - Math.sin(pitch), EYE.z + Math.cos(yaw) * Math.cos(pitch));
 }
@@ -1166,7 +1167,7 @@ function draw(dt) {
     else p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
   }
   if (G.placing) { const sp = placeSpot(), gh = G.placing.ghost; gh.position.set(sp.x, groundAt(sp.x, sp.z), sp.z); gh.rotation.y = sp.yaw; }
-  { const fp = fpOn(); if (!c) G.me.p.root.visible = !fp; else if (c.m.rider) c.m.rider.root.visible = !fp; } // (first person: you don't see your own head)
+  { const fp = fpOn(); if (!c) G.me.p.root.visible = !fp; else if (c.m.rider) c.m.rider.root.visible = !fp; for (const v of G.CARS.values()) if (v.m.cockpit) v.m.cockpit.visible = fp && v === c; } // (first person: the inside of your cab shows) // (first person: you don't see your own head)
   crime.draw(dt, G.time); traffic.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); camp.draw(G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
   if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
