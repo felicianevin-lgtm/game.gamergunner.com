@@ -238,3 +238,7 @@ body.thumb #hud, body.thumb #loading { display: none !important; }
 #clockTxt { font: 700 13px Inter, sans-serif; opacity: .9; text-shadow: 0 1px 3px #000c; margin-top: 2px; }
 #radioTxt { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); background: #000a; border-radius: 10px; padding: 4px 12px; font: 600 12px Inter, sans-serif; white-space: nowrap; pointer-events: none; }
 body.touch #radioTxt { bottom: auto; top: 8px; }
+
+/* Settings: the 4 graphics buttons fit on one line */
+.tabs.gfx { gap: 5px; flex-wrap: nowrap; }
+.tabs.gfx button { padding: 7px 8px; font-size: 13px; white-space: nowrap; }

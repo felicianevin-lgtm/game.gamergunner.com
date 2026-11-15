@@ -15,9 +15,9 @@ export const TOWN_Y = 1, LAWN = 0.14;
 export function makeSky(scene) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(820, 24, 12), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x3d98f0) }, mid: { value: new THREE.Color(0x8fcaff) }, bot: { value: new THREE.Color(0xd8efff) } },
+    uniforms: { top: { value: new THREE.Color(0x3d98f0) }, mid: { value: new THREE.Color(0x8fcaff) }, bot: { value: new THREE.Color(0xd8efff) }, lin: { value: 0 } },
     vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
-    fragmentShader: "uniform vec3 top, mid, bot; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.15 ? mix(mid, top, smoothstep(0.15, 0.7, h)) : mix(bot, mid, smoothstep(-0.05, 0.15, h)); gl_FragColor = vec4(c, 1.0); }",
+    fragmentShader: "uniform vec3 top, mid, bot; uniform float lin; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.15 ? mix(mid, top, smoothstep(0.15, 0.7, h)) : mix(bot, mid, smoothstep(-0.05, 0.15, h)); gl_FragColor = vec4(mix(c, pow(c, vec3(2.2)), lin), 1.0); }",
   }));
   sky.renderOrder = -1; scene.add(sky);
   // the sun: a soft glowing ball
@@ -35,8 +35,19 @@ export function makeSky(scene) {
   scene.add(sun); scene.add(sun.target);
   const SUN_DIR = new THREE.Vector3(0.42, 0.72, 0.5).normalize();
   // the sun's shadow box follows you around
+  let box = 70, size = 2048;
+  const setShadow = (sz, bx) => {
+    if (!sz) return; box = bx; size = sz;
+    Object.assign(sun.shadow.camera, { left: -bx, right: bx, top: bx, bottom: -bx }); sun.shadow.camera.updateProjectionMatrix();
+    if (sun.shadow.mapSize.x !== sz) { sun.shadow.mapSize.set(sz, sz); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+    sun.shadow.normalBias = bx > 80 ? 0.04 : 0.05;
+  };
+  // Ultra: the sun + moon are much brighter than white (that makes them glow and throw rays)
+  let kSun = 1, kHemi = 1;
+  const setHDR = (on) => { sunSprite.material.color.setScalar(on ? 3 : 1); sky.material.uniforms.lin.value = on ? 1 : 0; moon.material.color.setScalar(on ? 1.8 : 1); kSun = on ? 1.3 : 1; kHemi = on ? 0.78 : 1; }; // (Ultra: stronger sun, deeper shade)
+  const sunAt = (v) => (sunSprite.visible && sunSprite.position.y > 0 ? sunSprite.getWorldPosition(v) : null);
   const follow = (x, y, z) => {
-    const s = 140 / 2048 * 2; x = Math.round(x / s) * s; z = Math.round(z / s) * s; // (snapping stops shadows shimmering)
+    const s = box * 2 / size * 2; x = Math.round(x / s) * s; z = Math.round(z / s) * s; // (snapping stops shadows shimmering)
     sun.target.position.set(x, y, z); sun.position.set(x + SUN_DIR.x * 150, y + SUN_DIR.y * 150, z + SUN_DIR.z * 150);
   };
   // ---- day + night: stars, a moon, and colors for every time of day
@@ -63,16 +74,16 @@ export function makeSky(scene) {
     sunPos.set(Math.cos(a) * 0.8, e, 0.45).normalize();
     const P = e > 0.05 ? mix(DUSK, DAY, sm(0.05, 0.35, e)) : mix(NIGHT, DUSK, sm(-0.22, 0.05, e));
     U.top.value.copy(P.top); U.mid.value.copy(P.mid); U.bot.value.copy(P.bot); scene.fog.color.copy(P.fog);
-    hemi.color.copy(P.sky); hemi.groundColor.copy(P.gnd); hemi.intensity = P.hemi;
+    hemi.color.copy(P.sky); hemi.groundColor.copy(P.gnd); hemi.intensity = P.hemi * kHemi;
     // the light comes from the sun in the day and from the moon at night
     const moonUp = e < -0.02; SUN_DIR.copy(moonUp ? sunPos.clone().negate() : sunPos); if (SUN_DIR.y < 0.25) { SUN_DIR.y = 0.25; SUN_DIR.normalize(); }
-    sun.color.copy(P.sun); sun.intensity = P.sunI * (moonUp ? 1 : sm(-0.02, 0.12, e) * 0.8 + 0.2);
+    sun.color.copy(P.sun); sun.intensity = kSun * P.sunI * (moonUp ? 1 : sm(-0.02, 0.12, e) * 0.8 + 0.2);
     sunSprite.position.copy(sunPos).multiplyScalar(760); sunSprite.visible = e > -0.12;
     moon.position.copy(sunPos).multiplyScalar(-760); moon.visible = e < 0.12;
     stars.material.opacity = sm(0.02, -0.25, e);
     return 1 - sm(-0.2, 0.12, e);
   };
-  return { sky, sun, hemi, follow, update };
+  return { sky, sun, hemi, follow, update, setShadow, setHDR, sunAt };
 }
 
 // ---------------------------------------------------------------- the town

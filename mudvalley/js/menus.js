@@ -352,7 +352,7 @@ function phone(view = "home") {
       <div class="btns"><button type="button" class="small" data-a="invert">${C.invert ? "✓ Up/down is flipped" : "Flip camera up/down"}</button></div>
       <div class="btns"><button type="button" class="small" data-a="resetKeys">↺ Put all controls back to normal</button></div>`;
   }
-  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="view" data-v="controls">🎮 Controls</button></div><div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div><div class="btns"><button type="button" class="mid" data-a="daymode">${["🌗 Day + night cycle", "☀️ Always day", "🌙 Always night"][S.dayMode || 0]}</button></div><div class="btns"><button type="button" class="mid" data-a="radio">📻 Country radio (N)</button></div>
+  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="view" data-v="controls">🎮 Controls</button></div>${gfxHtml()}<div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div><div class="btns"><button type="button" class="mid" data-a="daymode">${["🌗 Day + night cycle", "☀️ Always day", "🌙 Always night"][S.dayMode || 0]}</button></div><div class="btns"><button type="button" class="mid" data-a="radio">📻 Country radio (N)</button></div>
     <h3>Texting friends</h3><p class="note">Quick texts and “send my location” always work in a lobby. Typing your own texts is <b>${S.chatOn ? "ON" : "OFF"}</b> (it’s filtered: no links, no phone numbers, no bad words). A grown-up can turn it off here.</p><div class="btns"><button type="button" class="small" data-a="chatOn">${S.chatOn ? "Turn typing OFF" : "Turn typing ON"}</button></div><h3>Start over</h3><p class="note">This deletes your money, rides and houses in this browser.</p><div class="btns"><button type="button" class="small" data-a="wipe">🗑️ Reset my game</button></div><p class="note"><a class="back" href="../#/">← Back to GunnerVerse</a></p>`;
   if (view === "help") html = `<h2>❓ HELP</h2>${back}${helpHtml()}`;
   if (view === "career") html = careerHtml(back);
@@ -433,6 +433,7 @@ function phone(view = "home") {
     if (a === "campGps") { const it = S.camp.set.find((x) => x.u === +val); if (it) { GM.setWaypoint({ x: it.x, z: it.z, name: "your " + campItem(it.id).name }); close(); } }
     if (a === "gpsHouse") { const h = HOUSES.find((x) => x.id === val); GM.setWaypoint({ x: h.garage.x, z: h.garage.z, name: h.name }); close(); }
     if (a === "mute") { GM.muted(!S.muted); phone("settings"); }
+    if (a === "gfx") { GM.setGfx(+val); SFX.click(); phone("settings"); }
     if (a === "daymode") { GM.dayMode(); SFX.click(); phone("settings"); }
     if (a === "radio") { GM.radio(); }
     if (a === "wipe") { if (confirm("Really start over? Everything will be deleted!") && confirm("Are you SURE? This can't be undone.")) GM.wipe(); }
@@ -636,6 +637,11 @@ function goHome() {
   const h = HOUSES.find((x) => x.id === S.home) || HOUSES[0];
   if (GM.G.race) { H.toast("Not during a race!", "", "warn"); return; }
   close(); GM.G.goHome(h);
+}
+// Settings → Graphics: Low / Medium / Good / Ultra
+function gfxHtml() {
+  const g = GM.gfx(), L = g.list[g.level];
+  return `<h3>🖥️ Graphics</h3><div class="tabs gfx">${g.list.map((x, i) => `<button type="button" data-a="gfx" data-v="${i}" class="${i === g.level ? "on" : ""}">${["🐢", "🙂", "😎", "🔥"][i]} ${x.name}</button>`).join("")}</div><p class="note"><b>${L.name}:</b> ${L.note}${g.picked ? "" : " (Picked for you. The game lowers it if things get choppy, until you pick one yourself.)"}</p>`;
 }
 function helpHtml() {
   return `<div class="keys" style="margin-top:10px">

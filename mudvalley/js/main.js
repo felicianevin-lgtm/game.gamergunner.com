@@ -34,6 +34,7 @@ import * as H from "./hud.js";
 import * as IN from "./input.js";
 import { initMenus, UI } from "./menus.js";
 import { Extras, TRICKS } from "./extras.js";
+import { GFX, Ultra } from "./gfx.js";
 
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
@@ -49,11 +50,25 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.3, 900);
-let quality = Q.has("low") ? 0 : 1;
+// graphics: 0 = Low, 1 = Medium, 2 = Good, 3 = Ultra (Settings → Graphics). Until you pick one, the game picks + lowers it if it gets choppy.
+let quality = Q.has("low") ? 0 : Q.has("ultra") ? 3 : S.gfx ?? (IN.touch ? 1 : 2), ultra = null;
 function resize() {
-  const dpr = Math.min(devicePixelRatio || 1, quality ? 1.5 : 1);
+  const L = GFX[quality], dpr = L.dpr < 1 ? L.dpr : Math.min(devicePixelRatio || 1, L.dpr);
   renderer.setPixelRatio(dpr); renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+}
+function setGfx(lv) {
+  quality = lv; const L = GFX[lv];
+  if (lv === 3 && !ultra) ultra = new Ultra(renderer);
+  if (lv !== 3 && ultra) { ultra.dispose(); ultra = null; }
+  resize();
+  const type = lv >= 2 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  if (renderer.shadowMap.enabled !== !!L.shadow || renderer.shadowMap.type !== type) {
+    renderer.shadowMap.enabled = !!L.shadow; renderer.shadowMap.type = type;
+    scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; }); // (redo the shaders with or without shadows)
+  }
+  sky.setShadow(L.shadow, L.box); sky.setHDR(lv === 3);
+  extras.grass.setLevel(L.grassR, L.blades);
 }
 addEventListener("resize", resize); resize();
 if (IN.touch) document.body.classList.add("touch");
@@ -772,6 +787,8 @@ export const GAME = {
     scene.remove(c.m.root); const m = buildCar(c.s); scene.add(m.root); c.m = m; c.b.model = m; c.bedHost = null; retune(c.b); placeModel(c.b);
     if (cost) { SFX.cash(); H.bumpMoney(); } else SFX.click(); fx.sparks(c.b.x, c.b.y + 1.0, c.b.z, 10); save(); return true;
   },
+  gfx() { return { level: quality, picked: S.gfx != null, list: GFX }; },
+  setGfx(lv) { S.gfx = lv; save(); setGfx(lv); },
   dayMode() { S.dayMode = ((S.dayMode || 0) + 1) % 3; save(); return S.dayMode; },
   radio() { audio(); IN.forceTap("KeyN"); },
   buyScrubber() { if (!spend(25)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.scrubber = true; SFX.cash(); H.bumpMoney(); save(); return true; },
@@ -859,7 +876,7 @@ function frame(now) {
   draw(dt);
   // automatic quality: if the computer is struggling, draw fewer pixels
   frames++; fpsT += dt;
-  if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; if (fps < 32 && quality) { slowT++; if (slowT >= 2) { quality = 0; resize(); renderer.shadowMap.enabled = fps > 22; extras.grass.setLow(); } } else slowT = 0; }
+  if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; if (fps < 32 && quality && S.gfx == null) { slowT++; if (slowT >= 2) { slowT = 0; setGfx(quality - 1); H.toast("Graphics lowered to " + GFX[quality].name, "So the game runs smoother. Change it in Settings.", "", 2600); } } else slowT = 0; }
 }
 function tick(dt) {
   G.time += dt;
@@ -1133,6 +1150,7 @@ function updateCamera(dt) {
   sky.sky.position.copy(camera.position);
   sky.follow(t.x, t.y, t.z);
 }
+const sunV = new THREE.Vector3();
 function draw(dt) {
   const c = mine();
   // models
@@ -1160,7 +1178,7 @@ function draw(dt) {
   extras.dark = sky.update(S.tod ?? 0.33); { const e = 1 - extras.dark * 0.85; world.clouds.material.emissive.setRGB(0.6 * e, 0.66 * e, 0.72 * e); world.clouds.material.color.setScalar(0.25 + 0.75 * e); }
   extras.draw(dt, c, camera.position, G.time, !inside() && G.mode !== "thumb");
   updateCamera(dt);
-  renderer.render(scene, camera);
+  if (ultra) ultra.render(scene, camera, sky.sunAt(sunV), extras.dark); else renderer.render(scene, camera);
   hudTick(dt);
 }
 function hudTick(dt) {
@@ -1229,6 +1247,7 @@ async function boot() {
   extras = new Extras(scene, { toast: H.toast, pay, bumpMoney: () => H.bumpMoney(), money, fx, S, save, low: !quality || IN.touch, inRace: () => !!G.race,
     radioText: (t) => { const el = $("radioTxt"); if (el) { el.textContent = t; el.classList.toggle("hidden", !t); } } });
   extras.dark = sky.update(S.tod ?? 0.33);
+  setGfx(quality);
   jobBeacon = beacon(0xffd23a); gpsBeacon = beacon(0xc86aff);
   H.setMapBase(mapCanvas(1024));
   await loadBikeModel();

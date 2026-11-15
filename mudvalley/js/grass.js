@@ -28,7 +28,7 @@ export class Grass {
   constructor(scene, low) {
     this.scene = scene; this.R = low ? 22 : 34; this.chunks = new Map(); this.cut = new Map(); this.time = 0; this.regrowT = 0;
     this.U = { time: { value: 0 }, center: { value: new THREE.Vector2() }, radius: { value: this.R } };
-    this.geo = tuftGeo(3);
+    this.blades = 3; this.geo = tuftGeo(3);
     const U = this.U;
     this.mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.mat.onBeforeCompile = (sh) => {
@@ -51,6 +51,11 @@ transformed.z += cos(time * 1.25 + wo.z * 0.29 - wo.x * 0.1) * 0.08 * bend;`);
   }
   // the computer is struggling: grass only close by
   setLow() { if (this.R <= 22) return; this.R = 22; this.U.radius.value = 22; }
+  // graphics level: how far the grass goes + how many blades in each tuft
+  setLevel(R, blades) {
+    this.R = R; this.U.radius.value = R;
+    if (blades !== this.blades) { this.blades = blades; for (const ck of this.chunks.values()) if (ck.mesh) { this.scene.remove(ck.mesh); ck.mesh.dispose(); } this.chunks.clear(); this.geo.dispose(); this.geo = tuftGeo(blades); }
+  }
   // how tall the grass is at a spot right now (1 = not mowed)
   heightAt(x, z, base) {
     const c = this.cut.get(key(Math.floor(x / CELL), Math.floor(z / CELL))); if (!c) return base;
