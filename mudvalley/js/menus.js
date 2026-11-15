@@ -16,11 +16,13 @@ import { CLOTH_COLORS, LOOKS } from "./character.js";
 import { itemById, packCap } from "./npcs.js";
 import { PARTS, partById, KINDS, SHIP_FEE, have } from "./parts.js";
 import * as IN from "./input.js";
+import { LIGHTBARS, BOARDS, ANTENNAS, WINCH_PRICE, BAR_COLORS, PAD_COLORS, GRIP_COLORS, BAR_PRICE, PAD_PRICE, GRIP_PRICE, MOTO_PRICE, KIT_PRICE, KITS, KIT_COLORS, HELMETS, HELMET_PRICE, isTruckish, canWinch, hasHelmet, helmetOf } from "./mods.js";
+export const CUTS = [{ name: "High (4 in)", desc: "Just a trim. Tall and fluffy." }, { name: "Normal (3 in)", desc: "A nice clean lawn." }, { name: "Low (1.5 in)", desc: "Short like a golf course." }, { name: "Scalped (DEEP!)", desc: "Cuts right down to the dirt. Ouch!" }];
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
 const ICON = { drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
-ICON.atv = "🛵"; Object.assign(ICON, { bike125f: "🏍️", dual250: "🏍️", ebike: "🚲", efat: "🚲", mudmower: "🚜", racemower: "🚜", camper: "🚐" });
+ICON.atv = "🛵"; Object.assign(ICON, { squarebody: "🛻", muscle: "🏎️", suv: "🚙", rally: "🏎️", skidsteer: "🚜", excavator: "🏗️", ztmower: "🚜", lawntractor: "🚜" }); Object.assign(ICON, { bike125f: "🏍️", dual250: "🏍️", ebike: "🚲", efat: "🚲", mudmower: "🚜", racemower: "🚜", camper: "🚐" });
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const bars = (st) => `<div class="stats"><span>Speed</span><div class="bar"><i style="width:${st.speed * 100}%"></i></div><span>Acceleration</span><div class="bar"><i style="width:${st.accel * 100}%"></i></div><span>Off-road</span><div class="bar g"><i style="width:${st.offroad * 100}%"></i></div><span>Handling</span><div class="bar b"><i style="width:${st.handling * 100}%"></i></div></div>`;
@@ -111,7 +113,7 @@ function customs() {
   const c = GM.mine(); if (!c) return;
   if (GM.G.panel !== "customs") { const b = c.b; b.x = 36; b.z = -40; b.yaw = 0; b.vx = b.vz = 0; b.flipped = false; } // (onto the turntable in the bay)
   const s = c.s, v = vehicleById(s.id), t = tune(s);
-  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", "⬆️ Lift"]]), ...(BEDS[s.id] ? [["bed", "🛻 Bed"]] : []), ...(c.m.realBike ? [["susp", "🔧 Suspension"]] : []), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : [])];
+  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", "⬆️ Lift"]]), ...(BEDS[s.id] ? [["bed", "🛻 Bed"]] : []), ...(c.m.realBike ? [["susp", "🔧 Suspension"]] : []), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : []), ...(!v.bike ? [["truck", v.quad || v.heavy || v.mower || v.open ? "🔦 Lights + Winch" : "🔦 Truck Mods"]] : []), ...(v.bike ? [["bikemods", "🏍️ Bike Mods"]] : []), ...(v.bike || v.quad ? [["kit", "🎨 Graphics"]] : []), ...(hasHelmet(v) ? [["helmet", "⛑️ Helmet"]] : []), ...(v.mower ? [["deck", "🌱 Mower Deck"]] : [])];
   if (v.bike && cTab === "lift") cTab = "paint";
   const maxLift = v.bike ? 0 : LIFT_COST.length - 1; // (dirt bikes don't get lift kits)
   if (s.lift > maxLift) s.lift = maxLift;
@@ -133,12 +135,39 @@ function customs() {
   if (cTab === "rust") { const r = rustOf(s), pct = Math.round((1 - r) * 100), bar = "█".repeat(Math.round(pct / 10)) + "░".repeat(10 - Math.round(pct / 10));
     body = r <= 0.02 ? `<p class="note">✨ No rust! Your ${esc(v.name)} is shiny clean.</p>` : !S.scrubber ? `<p class="note">Rust spots! Grab a scrubber and scrub them off yourself.</p><div class="btns"><button type="button" class="mid" data-a="buyScrub">🧽 Buy a scrubber ${money(25)}</button></div>`
       : `<p class="note">Keep scrubbing! Watch the rust fade away.</p><p style="font:700 18px monospace;letter-spacing:1px">[${bar}] ${pct}%</p><div class="btns"><button type="button" class="big" data-a="scrub">🧽 SCRUB!</button></div>`; }
+  const ownOf = (k, d = 0) => s["own_" + k] || [d];
+  const optList = (list, cur, k, act, priceOf, d = 0) => `<div class="opts">${list.map((q, i) => `<button type="button" class="opt ${cur === i ? "on" : ""}" data-a="${act}" data-v="${i}"><span>${q.name}${q.desc ? `<small>${q.desc}</small>` : ""}</span><em>${cur === i ? "✓" : ownOf(k, d).includes(i) || !priceOf(q, i) ? "FREE" : money(priceOf(q, i))}</em></button>`).join("")}</div>`;
+  const swList = (list, cur, act, none) => `<div class="swatches">${none ? `<button type="button" class="sw ${cur === -1 ? "on" : ""}" style="background:repeating-linear-gradient(45deg,#333 0 6px,#555 6px 12px)" title="None" data-a="${act}" data-v="-1"></button>` : ""}${list.map((q, i) => `<button type="button" class="sw ${cur === i ? "on" : ""}" style="background:${hex(q.c ?? q)}" title="${q.name || ""}" data-a="${act}" data-v="${i}"></button>`).join("")}</div>`;
+  if (cTab === "truck") body = `<p class="note">Bolt-on mods! Light bars light up at night (press <kbd>L</kbd> for your lights).${canWinch(v) ? " The winch pulls you out when you're stuck: press <kbd>J</kbd> near a tree, rock or pole." : ""}</p>
+    <h3>💡 Light bar</h3>${optList(LIGHTBARS, s.lbar || 0, "lbar", "mod:lbar", (q) => q.price)}
+    ${canWinch(v) ? `<h3>🪝 Front bumper winch</h3>${optList([{ name: "No winch" }, { name: "12,000 lb winch", desc: "Steel cable + a hook. J = winch yourself out of the mud!" }], s.winch || 0, "winch", "mod:winch", (q, i) => (i ? WINCH_PRICE : 0))}` : ""}
+    ${isTruckish(v) && !v.open ? `<h3>🪜 Running boards</h3>${optList(BOARDS, s.boards || 0, "boards", "mod:boards", (q) => q.price)}` : ""}
+    <h3>📡 Antenna</h3>${optList(ANTENNAS, s.antenna || 0, "antenna", "mod:antenna", (q) => q.price)}`;
+  if (cTab === "bikemods") body = `<p class="note">Make your dirt bike YOURS.${c.m.steerG ? "" : " (Bars, pads and grips only show on the full-size dirt bikes.)"}</p>
+    <h3>Tapered handlebars (${money(BAR_PRICE)})</h3>${swList(BAR_COLORS, s.bars ?? 0, "mod:bars")}
+    <h3>Bar pad (${money(PAD_PRICE)})</h3>${swList(PAD_COLORS, s.pad ?? 0, "mod:pad", true)}
+    <h3>Grips (${money(GRIP_PRICE)})</h3>${swList(GRIP_COLORS, s.grips ?? 0, "mod:grips")}
+    <h3>🛣️ Supermoto kit</h3>${optList([{ name: "Dirt wheels", desc: "Tall knobby wheels for the dirt" }, { name: "Supermoto wheels", desc: "Small, fat street tires: faster + grippier on roads, worse in dirt and mud" }], s.moto || 0, "moto", "mod:moto", (q, i) => (i ? MOTO_PRICE : 0))}`;
+  if (cTab === "kit") body = `<p class="note">A graphic kit printed right onto your plastics. ${money(KIT_PRICE)} for a new design, colors are free!</p>
+    ${optList(KITS, s.kit || 0, "kit", "kit", (q, i) => (i ? KIT_PRICE : 0))}<h3>Graphics color</h3>${swList(KIT_COLORS, s.kitCol ?? 0, "kitCol")}`;
+  if (cTab === "helmet") { const hi = helmetOf(s, v); body = `<p class="note">Safety first (and style)! A full-face motocross helmet with a peak and goggles. ${money(HELMET_PRICE)} each, and you keep the ones you buy.</p>
+    <div class="opts">${HELMETS.map((h, i) => `<button type="button" class="opt ${hi === i ? "on" : ""}" data-a="mod:helmet" data-v="${i}"><span>${h.c == null ? "🚫 " : `<i style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${hex(h.c)};border:3px solid ${hex(h.c2)};vertical-align:middle;margin-right:6px"></i>`}${h.name}</span><em>${hi === i ? "✓" : ownOf("helmet", 1).includes(i) || !i ? "FREE" : money(HELMET_PRICE)}</em></button>`).join("")}</div>`; }
+  if (cTab === "deck") body = `<p class="note">Your mower cuts REAL grass! Press <kbd>B</kbd> to turn the blades on, then drive over the grass. Lower = deeper cut. Mow lawns and fields to get paid!</p>
+    <h3>Cutting height</h3>${optList(CUTS, s.cut ?? 1, "cut", "mod:cut", () => 0, 1)}`;
   if (cTab === "neon") body = `<p class="note">Underglow lights! ${money(PRICES.neon)} for a new color.</p><div class="swatches">${NEONS.map((n, i) => `<button type="button" class="sw ${s.neon === i ? "on" : ""}" style="background:${n === null ? "repeating-linear-gradient(45deg,#333 0 6px,#555 6px 12px)" : hex(n)}" data-a="neon" data-v="${i}" title="${n === null ? "No neon" : ""}"></button>`).join("")}</div>`;
   side(`<h2>MUD & CHROME</h2><div class="bank">${money(S.money)}</div><h3>${ICON[s.id] || "🚗"} ${esc(v.name)}</h3>${bars(statBars(s.id, s))}
     <div class="tabs">${tabs.map(([k, n]) => `<button type="button" data-a="tab" data-v="${k}" class="${cTab === k ? "on" : ""}">${n}</button>`).join("")}</div>${body}
     <div class="btns"><button type="button" class="mid" data-a="close">✓ Done</button></div>`, "customs");
   onAct = (a, val, el, live) => {
     if (a === "tab") { cTab = val; SFX.click(); customs(); return; }
+    if (a.startsWith("mod:")) {
+      const k = a.slice(4), i = +val, d = { pad: 0, bars: 0, grips: 0, helmet: 1, cut: 1 }[k] ?? 0, cur = k === "helmet" ? helmetOf(s, v) : s[k] ?? d, own = s["own_" + k] || [d];
+      const price = { lbar: () => LIGHTBARS[i].price, boards: () => BOARDS[i].price, antenna: () => ANTENNAS[i].price, winch: () => (i ? WINCH_PRICE : 0), bars: () => BAR_PRICE, pad: () => (i < 0 ? 0 : PAD_PRICE), grips: () => GRIP_PRICE, moto: () => (i ? MOTO_PRICE : 0), helmet: () => (i ? HELMET_PRICE : 0), cut: () => 0 }[k];
+      if (i !== cur && price) GM.setMod(k, i, own.includes(i) ? 0 : price());
+      customs(); return;
+    }
+    if (a === "kit") { const i = +val, own = s.own_kit || [0]; if (i !== (s.kit || 0) && GM.custom("kit", i, own.includes(i) || !i ? 0 : KIT_PRICE)) s.own_kit = [...new Set([...own, i])]; }
+    if (a === "kitCol") GM.custom("kitCol", +val, 0);
     if (a === "paint") { if (+val !== s.paint) GM.custom("paint", +val, PRICES.paint); }
     if (a === "rims") { if (val !== s.rims) GM.custom("rims", val, PRICES.rims); }
     if (a === "tires") { const x = TIRES.find((q) => q.id === val); if (val !== s.tires) GM.custom("tires", val, (s.ownTires || []).includes(val) ? 0 : x.price) && (s.ownTires = [...new Set([...(s.ownTires || ["street"]), val])]); }
@@ -323,7 +352,7 @@ function phone(view = "home") {
       <div class="btns"><button type="button" class="small" data-a="invert">${C.invert ? "✓ Up/down is flipped" : "Flip camera up/down"}</button></div>
       <div class="btns"><button type="button" class="small" data-a="resetKeys">↺ Put all controls back to normal</button></div>`;
   }
-  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="view" data-v="controls">🎮 Controls</button></div><div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div>
+  if (view === "settings") html = `<h2>⚙️ SETTINGS</h2>${back}<div class="btns"><button type="button" class="mid" data-a="view" data-v="controls">🎮 Controls</button></div><div class="btns"><button type="button" class="mid" data-a="mute">${S.muted ? "🔇 Sound is OFF" : "🔊 Sound is ON"}</button></div><div class="btns"><button type="button" class="mid" data-a="daymode">${["🌗 Day + night cycle", "☀️ Always day", "🌙 Always night"][S.dayMode || 0]}</button></div><div class="btns"><button type="button" class="mid" data-a="radio">📻 Country radio (N)</button></div>
     <h3>Texting friends</h3><p class="note">Quick texts and “send my location” always work in a lobby. Typing your own texts is <b>${S.chatOn ? "ON" : "OFF"}</b> (it’s filtered: no links, no phone numbers, no bad words). A grown-up can turn it off here.</p><div class="btns"><button type="button" class="small" data-a="chatOn">${S.chatOn ? "Turn typing OFF" : "Turn typing ON"}</button></div><h3>Start over</h3><p class="note">This deletes your money, rides and houses in this browser.</p><div class="btns"><button type="button" class="small" data-a="wipe">🗑️ Reset my game</button></div><p class="note"><a class="back" href="../#/">← Back to GunnerVerse</a></p>`;
   if (view === "help") html = `<h2>❓ HELP</h2>${back}${helpHtml()}`;
   if (view === "career") html = careerHtml(back);
@@ -404,6 +433,8 @@ function phone(view = "home") {
     if (a === "campGps") { const it = S.camp.set.find((x) => x.u === +val); if (it) { GM.setWaypoint({ x: it.x, z: it.z, name: "your " + campItem(it.id).name }); close(); } }
     if (a === "gpsHouse") { const h = HOUSES.find((x) => x.id === val); GM.setWaypoint({ x: h.garage.x, z: h.garage.z, name: h.name }); close(); }
     if (a === "mute") { GM.muted(!S.muted); phone("settings"); }
+    if (a === "daymode") { GM.dayMode(); SFX.click(); phone("settings"); }
+    if (a === "radio") { GM.radio(); }
     if (a === "wipe") { if (confirm("Really start over? Everything will be deleted!") && confirm("Are you SURE? This can't be undone.")) GM.wipe(); }
     if (a === "quitRace") { GM.quitRace(); close(); }
     if (a === "role") { if (GM.setRole(val)) phone("career"); }

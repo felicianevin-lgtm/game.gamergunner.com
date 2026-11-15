@@ -3,6 +3,7 @@
 import * as THREE from "/create/vendor/three.module.js";
 import { makePerson, LOOKS } from "./character.js";
 import { mergeGeometries, toCreasedNormals } from "/create/vendor/BufferGeometryUtils.js";
+import { addMods, graphics, applyKit, modTune } from "./mods.js";
 
 // top = top speed on the road (m/s), acc = how fast it speeds up, grip = how well it sticks, turn = how fast it turns,
 // off = how well it does on dirt / grass / mud (1 = great), size = how much room it takes on a trailer, tow = what trailers it can pull,
@@ -19,8 +20,8 @@ export const VEHICLES = [
   { id: "dual250", name: "Ranger 250 Dual-Sport (street legal)", price: 5200, top: 34, acc: 14, grip: 7.8, turn: 2.6, off: { dirt: 0.95, grass: 0.9, mud: 0.66 }, size: 1, tow: 0, color: 0xe0203a, engine: 165, open: true, bike: true, street: true, crawl: 0.86, desc: "A street-legal 4-stroke 250 dirt bike: headlight, mirrors, turn signals and a license plate. Ride the trails AND the highway!" },
   { id: "ebike", name: "Volt Trail E-Bike", price: 1100, top: 14, acc: 11, grip: 7, turn: 2.9, off: { dirt: 0.95, grass: 0.9, mud: 0.55 }, size: 1, tow: 0, color: 0x2ac0a0, engine: 420, open: true, bike: true, electric: true, crawl: 0.8, desc: "An electric mountain bike with a battery and a motor. Super quiet, zippy on trails, and it never needs gas!" },
   { id: "efat", name: "Fat Tire E-Bike", price: 1600, top: 13, acc: 10, grip: 7.5, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.75 }, size: 1, tow: 0, color: 0xff7a1a, engine: 380, open: true, bike: true, electric: true, crawl: 0.88, desc: "An electric bike with HUGE fat tires. Rolls right over sand, snow and even some mud." },
-  { id: "mudmower", name: "Mud Mower", price: 2200, top: 16, acc: 10, grip: 7.5, turn: 2.6, off: { dirt: 1, grass: 1, mud: 0.95 }, size: 1, tow: 1, color: 0x3aa04a, engine: 140, open: true, crawl: 0.92, desc: "A riding lawn mower, lifted, with giant mud tires. Mow the lawn? Nah. Go MUDDING! Pulls the small trailer too." },
-  { id: "racemower", name: "Turbo Mud Mower", price: 4500, top: 24, acc: 13, grip: 7.5, turn: 2.6, off: { dirt: 1, grass: 1, mud: 0.97 }, size: 1, tow: 1, color: 0xffd23a, engine: 175, open: true, crawl: 0.95, desc: "A race-built mud mower: way more lift, a snorkel, a light bar and a roll bar. The fastest lawn mower in the world!" },
+  { id: "mudmower", name: "Mud Mower", price: 2200, top: 16, acc: 10, grip: 7.5, turn: 2.6, off: { dirt: 1, grass: 1, mud: 0.95 }, size: 1, tow: 1, color: 0x3aa04a, engine: 140, open: true, mower: true, crawl: 0.92, desc: "A riding lawn mower, lifted, with giant mud tires. Mow the lawn? Nah. Go MUDDING! Pulls the small trailer too." },
+  { id: "racemower", name: "Turbo Mud Mower", price: 4500, top: 24, acc: 13, grip: 7.5, turn: 2.6, off: { dirt: 1, grass: 1, mud: 0.97 }, size: 1, tow: 1, color: 0xffd23a, engine: 175, open: true, mower: true, crawl: 0.95, desc: "A race-built mud mower: way more lift, a snorkel, a light bar and a roll bar. The fastest lawn mower in the world!" },
   { id: "bike125", name: "Scrambler 125 Dirt Bike", price: 1400, top: 24, acc: 13, grip: 7, turn: 2.7, off: { dirt: 1, grass: 0.95, mud: 0.7 }, size: 1, tow: 0, color: 0xe0203a, engine: 200, open: true, bike: true, crawl: 0.87, desc: "A 125cc two-stroke dirt bike. Between a pit bike and a full-size bike: light, snappy, great on trails." },
   { id: "sport300", name: "Viper 300 Sport Bike", price: 6500, top: 42, acc: 16, grip: 8.5, turn: 2.5, off: { dirt: 0.45, grass: 0.4, mud: 0.2 }, size: 1, tow: 0, color: 0x3ac04a, engine: 215, open: true, bike: true, crawl: 0.3, desc: "A real street sport bike with a full fairing. Quick and nimble on roads... NOT for mud!" },
   { id: "super1000", name: "Thunder 1000 Superbike", price: 19000, top: 60, acc: 22, grip: 9.2, turn: 2.4, off: { dirt: 0.35, grass: 0.3, mud: 0.15 }, size: 1, tow: 0, color: 0x1a4ad0, engine: 240, open: true, bike: true, crawl: 0.25, desc: "A 1000cc superbike. The fastest thing on two wheels. Hold on tight!" },
@@ -40,6 +41,14 @@ export const VEHICLES = [
   { id: "drift", name: "Sideways S200 Drift Coupe", price: 9500, top: 41, acc: 14, grip: 3.2, turn: 2.7, off: { dirt: 0.4, grass: 0.32, mud: 0.18 }, size: 2, tow: 0, color: 0xf2f2f2, engine: 120, crawl: 0.25, desc: "A light rear-wheel-drive coupe built to go SIDEWAYS. Low grip, big steering angle, camber from the factory. Made for the Drift Park!" },
   { id: "foxhatch", name: "Street Fox 5.0 Hatch", price: 11000, top: 46, acc: 15, grip: 8.5, turn: 2.2, off: { dirt: 0.45, grass: 0.38, mud: 0.22 }, size: 2, tow: 0, color: 0xe0203a, engine: 105, crawl: 0.3, desc: "A boxy 80s V8 hatchback. Light, loud and fast. Burnouts all day!" },
   { id: "monster", name: "Stomper Monster Truck", price: 22000, top: 33, acc: 11, grip: 7.5, turn: 1.8, off: { dirt: 1, grass: 1, mud: 0.93 }, size: 9, tow: 2, color: 0x2ac0a0, engine: 60, crawl: 1, desc: "HUGE wheels. Climbs anything, crushes mud, does big jumps." },
+  { id: "squarebody", name: "Old School '79 Squarebody", price: 7500, top: 34, acc: 9.5, grip: 7.2, turn: 1.9, off: { dirt: 0.82, grass: 0.75, mud: 0.55 }, size: 2, tow: 2, color: 0x2a6a4a, engine: 68, crawl: 0.6, desc: "A boxy old-school pickup with square headlights and big chrome bumpers. Lift it, mud it, love it." },
+  { id: "muscle", name: "Midnight Bandit V8 Coupe", price: 14500, top: 51, acc: 17, grip: 7.6, turn: 2.1, off: { dirt: 0.42, grass: 0.35, mud: 0.18 }, size: 2, tow: 0, color: 0x1a1a22, engine: 92, crawl: 0.25, desc: "A long, low 70s muscle car with gold stripes and a big V8. Smoky burnouts guaranteed." },
+  { id: "suv", name: "Trekker 4x4 SUV", price: 12500, top: 38, acc: 11, grip: 7.8, turn: 2.0, off: { dirt: 0.92, grass: 0.88, mud: 0.72 }, size: 2, tow: 2, color: 0x9a3a2a, engine: 80, crawl: 0.85, desc: "A tall 4-door 4x4 with a roof rack and a spare tire on the back. Family trips AND mud trips." },
+  { id: "rally", name: "Gravel Rally Hatch", price: 13500, top: 45, acc: 16, grip: 7.4, turn: 2.5, off: { dirt: 0.95, grass: 0.85, mud: 0.6 }, size: 2, tow: 0, color: 0x2a5ad0, engine: 135, crawl: 0.7, air: 0.9, desc: "An all-wheel-drive rally car. Flat out on dirt roads, sideways through every corner." },
+  { id: "skidsteer", name: "Dig Dog Skid Steer", price: 11000, top: 9, acc: 8, grip: 9, turn: 3.2, off: { dirt: 1, grass: 1, mud: 0.92 }, size: 1, tow: 1, color: 0xffb020, engine: 58, open: true, heavy: true, pivot: true, crawl: 0.97, desc: "Heavy equipment! A little loader that spins in place. T raises and lowers the bucket." },
+  { id: "excavator", name: "Mini Digger Excavator", price: 24000, top: 5.5, acc: 5, grip: 9, turn: 1.4, off: { dirt: 1, grass: 1, mud: 1 }, size: 2, tow: 0, color: 0xffc21a, engine: 52, open: true, heavy: true, pivot: true, crawl: 1, desc: "A mini excavator on rubber tracks. Hold T to dig, and the cab swings around on top!" },
+  { id: "ztmower", name: "Zero-Turn Pro Mower", price: 3800, top: 11, acc: 9, grip: 8.5, turn: 3.4, off: { dirt: 0.9, grass: 1, mud: 0.6 }, size: 1, tow: 1, color: 0xe0203a, engine: 120, open: true, mower: true, pivot: true, crawl: 0.75, desc: "A real lawn mower that actually CUTS THE GRASS. Spins in place. B = blades on/off. Get paid to mow!" },
+  { id: "lawntractor", name: "Lawn Tractor 42 inch", price: 1500, top: 8, acc: 7, grip: 8, turn: 2.5, off: { dirt: 0.85, grass: 1, mud: 0.5 }, size: 1, tow: 1, color: 0x3a9a3a, engine: 110, open: true, mower: true, crawl: 0.65, desc: "A classic riding mower that cuts real grass (B = blades on/off). Pulls the small trailer too." },
   // police cars (you get these when you join the police; they never show up at the dealership)
   { id: "cruiser", name: "Police Cruiser", price: 0, police: true, top: 40, acc: 13, grip: 8.5, turn: 2.1, off: { dirt: 0.7, grass: 0.62, mud: 0.45 }, size: 2, tow: 0, color: 0xf4f4f4, engine: 95, crawl: 0.45, desc: "A sturdy police car with a light bar and a siren (G)." },
   { id: "interceptor", name: "Police Interceptor", price: 15000, police: true, top: 52, acc: 17, grip: 9, turn: 2.2, off: { dirt: 0.6, grass: 0.5, mud: 0.35 }, size: 2, tow: 0, color: 0x1a2a5a, engine: 115, crawl: 0.35, desc: "The super fast police car. Unlocks at Sergeant rank (or buy it at the station)." },
@@ -124,7 +133,7 @@ export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
-  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "mudmower" || id === "racemower" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null, ...(id === "drift" ? { camber: 2, ownCamber: [0, 2], offset: 2, ownOffset: [1, 2], rims: "black" } : {}) };
+  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "mudmower" || id === "racemower" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner", "suv", "rally"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null, ...(id === "drift" ? { camber: 2, ownCamber: [0, 2], offset: 2, ownOffset: [1, 2], rims: "black" } : {}) };
 }
 // final driving numbers after upgrades
 export function tune(car) {
@@ -136,7 +145,7 @@ export function tune(car) {
   off.dirt += 0.03 * car.lift; off.grass += 0.03 * car.lift; off.mud += 0.04 * car.lift; grip *= 1 - 0.04 * car.lift;
   for (const k in off) off[k] = Math.min(1, off[k]);
   const crawl = Math.min(1, (v.crawl ?? 0.5) + (t === "mud" ? 0.08 : t === "allterrain" ? 0.04 : 0) + 0.02 * car.lift);
-  return { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, quad: !!v.quad, wheelie: !!(v.bike || v.quad), engine: v.engine * (1 + 0.04 * car.engine) };
+  return modTune(car, { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, quad: !!v.quad, wheelie: !!(v.bike || v.quad), pivot: !!v.pivot, engine: v.engine * (1 + 0.04 * car.engine) });
 }
 // 0..1 bars for the dealership
 export function statBars(id, car) {
@@ -328,8 +337,9 @@ export function buildCar(car, opts = {}) {
     // a little driver you can see through the window
     const p = makePerson(look, 0.7); p.pose("sit"); p.root.position.copy(C.seat); body.add(p.root); C.rider = p;
   }
+  addMods(C, car, v); if (v.bike || v.quad) graphics(C, car);
   if (!opts.keepRider) bakeGroup(C.rider.root, () => false, true);
-  const keep = new Set([C.scoop, C.rider.root, ...C.flames, ...(C.lights || []), ...(C.forks || [])]);
+  const keep = new Set([C.scoop, C.rider.root, ...C.flames, ...(C.lights || []), ...(C.forks || []), ...(C.anim || [])]);
   bakeGroup(body, (o) => keep.has(o) || o.name === "pipe" || o.name === "flag");
   root.traverse((o) => { if (o.isMesh && o !== ng) { o.castShadow = true; } });
   applyLook(C, car);
@@ -364,6 +374,7 @@ export function applyLook(C, car) {
   C.neon.visible = !!NEONS[car.neon]; if (NEONS[car.neon]) C.neon.material.color.set(NEONS[car.neon]);
   C.engineLv = car.engine;
   const rust = rustOf(car); C.rustMat.opacity = rust; C.rustMat.visible = rust > 0.02;
+  applyKit(C, car);
 }
 // spin wheels, steer, bounce the wheels onto the ground and lean the bike
 export function animateCar(C, st, dt) {
@@ -962,8 +973,9 @@ function ebike(C, fat) {
   wheel(C, 0, fz, r, tw, 1, { bike: true }); wheel(C, 0, rz, r, tw, 0, { bike: true });
 }
 // a riding lawn mower built for MUD: lifted, giant back tires, a mower deck underneath (turbo = more lift + a roll bar)
-function mower(C, turbo) {
-  const b = C.body, P = C.paint, up = turbo ? 0.26 : 0.1, y = (v) => v + up, rf = turbo ? 0.34 : 0.3, rr = turbo ? 0.5 : 0.44;
+function mower(C, turbo, lawn = false) {
+  const b = C.body, P = C.paint, up = lawn ? 0 : turbo ? 0.26 : 0.1, y = (v) => v + up, rf = lawn ? 0.2 : turbo ? 0.34 : 0.3, rr = lawn ? 0.32 : turbo ? 0.5 : 0.44;
+  C.deck = { z: 0.12, w: lawn ? 1.2 : 1.15 };
   C.len = 2.2; C.wid = 1.4; C.seat.set(0, y(0.86), -0.32); C.hitch = V3(0, 0.55, -1.05); C.hood = null;
   bx(b, 0.62, 0.14, 1.7, 0, y(0.42), 0.1, M.dark); // frame
   bx(b, 1.15, 0.16, 0.78, 0, y(0.24), 0.12, M.trim); bx(b, 1.2, 0.04, 0.82, 0, y(0.32), 0.12, P); // the mower deck
@@ -984,12 +996,149 @@ function mower(C, turbo) {
     bx(b, 0.5, 0.06, 0.2, 0, y(0.84), 0.62, M.dark); // hood scoop
   }
   C.pipes.push(V3(0.3, y(0.62), -0.88));
-  for (const s of [-1, 1]) { wheel(C, s * 0.5, 0.74, rf, 0.24, 1); wheel(C, s * 0.64, -0.5, rr, turbo ? 0.4 : 0.36, 0); }
+  for (const s of [-1, 1]) { wheel(C, s * 0.5, 0.74, rf, lawn ? 0.16 : 0.24, 1); wheel(C, s * 0.64, -0.5, rr, lawn ? 0.24 : turbo ? 0.4 : 0.36, 0); }
 }
 BUILD.ebike = (C) => ebike(C, false);
 BUILD.efat = (C) => ebike(C, true);
 BUILD.mudmower = (C) => mower(C, false);
 BUILD.racemower = (C) => mower(C, true);
+// ================================================================ new rides (classic pickup, muscle car, SUV, rally car, heavy equipment, real mowers)
+BUILD.squarebody = (C) => {
+  // a boxy late-70s pickup: flat hood, square headlights, big chrome bumpers, a regular cab and a long bed
+  const b = C.body, P = C.paint;
+  C.len = 5.5; C.wid = 2.0; C.seat.set(0.42, 0.98, 0.2); C.hitch.set(0, 0.6, -2.95); C.hood = V3(0, 1.42, 1.55);
+  bx(b, 1.4, 0.2, 5.1, 0, 0.48, -0.2, M.dark); // frame
+  const S = shell(C, { zf: 2.6, zb: -0.55, w: 0.98, b: 0.56, s: 1.32, hood: 1.36, cowl: 1.4, roof: 1.92, ws: 1.05, wt: 0.58, rb: -0.48, wheels: [[1.66, 0.42]], nose: 0.06, drop: 0.03, roofW: 0.9, hoodW: 0.97, taper: 0.02 });
+  bedShell(C, { zf: -0.6, zb: -2.78, w: 0.98, b: 0.56, rail: 1.3, floor: 0.72, wheels: [[-1.76, 0.42]] });
+  bx(b, 1.92, 0.68, 0.07, 0, 0.98, -2.775, P); bx(b, 1.86, 0.06, 0.08, 0, 1.31, -2.775, M.chrome); backGlass(C, S); pillar(C, S, -0.5, P, 0.14);
+  seam(C, S, 1.0); seam(C, S, -0.45); handle(C, S, -0.28); mirror(C, S, 0.95, true);
+  truckGrille(C, S, { y: 1.3, w: 1.58, h: 0.42, bars: 2, cross: true });
+  for (const s of [-1, 1]) {
+    const q = at(S, 0.4); bx(b, 0.015, 0.06, 4.9, s * ((q.w + q.wb) / 2 + 0.012), 1.02, -0.15, M.chrome); // the chrome side trim
+    bx(b, 0.22, 0.18, 0.05, s * 0.78, 1.12, 2.62, M.light); bx(b, 0.14, 0.08, 0.05, s * 0.78, 0.94, 2.62, M.light); // square headlights + parking lights
+    bx(b, 0.08, 0.36, 0.06, s * 0.96, 1.0, -2.8, M.tail);
+  }
+  bx(b, 2.08, 0.26, 0.2, 0, 0.66, 2.66, M.chrome); bx(b, 2.04, 0.24, 0.2, 0, 0.62, -2.88, M.chrome);
+  C.pipes.push(V3(-0.7, 0.45, -2.85));
+  for (const [x, z, f] of [[0.84, 1.66, 1], [-0.84, 1.66, 1], [0.84, -1.76, 0], [-0.84, -1.76, 0]]) wheel(C, x, z, 0.4, 0.3, f);
+};
+BEDS.squarebody = { y: 0.72, z: -1.69, front: -0.64, back: -2.74 };
+BUILD.muscle = (C) => {
+  // a long, low 70s V8 muscle coupe: a hood scoop, gold stripes, a ducktail spoiler, fat back tires
+  const b = C.body, P = C.paint, gold = new THREE.MeshPhongMaterial({ color: 0xd4af37, shininess: 90, specular: 0x998844 });
+  C.len = 5.0; C.wid = 1.96; C.seat.set(0.4, 0.2, -0.35); C.hitch = null; C.hood = V3(0, 0.96, 1.45);
+  const S = shell(C, { zf: 2.5, zb: -2.48, w: 0.97, b: 0.33, s: 0.8, hood: 0.84, cowl: 0.9, roof: 1.27, ws: 0.72, wt: 0.02, rb: -0.68, rg: -1.5, deck: 0.92, wheels: [[1.5, 0.38], [-1.48, 0.4]], nose: 0.12, drop: 0.05, roofW: 0.78, hoodW: 0.93, taper: 0.03 });
+  seam(C, S, 0.7); handle(C, S, -0.48); mirror(C, S, 0.6); pillar(C, S, -0.6, P, 0.14);
+  for (let z = 2.42; z > -2.42; z -= 0.08) { const q = at(S, z); for (const s of [-1, 1]) bx(b, 0.13, 0.012, 0.085, s * 0.17, q.t + 0.006, z, gold); } // racing stripes over the top
+  for (const s of [-1, 1]) {
+    const q = at(S, 0); bx(b, 0.012, 0.08, 3.4, s * ((q.w + q.wb) / 2 + 0.012), 0.66, 0.1, gold);
+    const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.05, 12), M.light); hl.rotation.x = Math.PI / 2; hl.position.set(s * 0.66, 0.66, 2.51); b.add(hl);
+  }
+  bx(b, 1.1, 0.2, 0.05, 0, 0.64, 2.51, M.dark); bx(b, 1.7, 0.14, 0.2, 0, 0.36, 2.48, M.chrome); bx(b, 1.7, 0.14, 0.18, 0, 0.38, -2.5, M.chrome);
+  bx(b, 1.5, 0.12, 0.05, 0, 0.74, -2.49, M.tail); bx(b, 1.6, 0.05, 0.28, 0, 0.97, -2.3, P, -0.25); // full-width taillight, ducktail
+  C.pipes.push(V3(0.5, 0.3, -2.5), V3(-0.5, 0.3, -2.5));
+  wheel(C, 0.8, 1.5, 0.35, 0.27, 1); wheel(C, -0.8, 1.5, 0.35, 0.27, 1); wheel(C, 0.8, -1.48, 0.37, 0.36, 0); wheel(C, -0.8, -1.48, 0.37, 0.36, 0);
+};
+BUILD.suv = (C) => {
+  // a tall 4-door 4x4 SUV: roof rack, a spare tire on the back, fender flares
+  const b = C.body;
+  C.len = 5.0; C.wid = 2.0; C.seat.set(0.44, 0.98, 0.35); C.hitch.set(0, 0.6, -2.62); C.hood = V3(0, 1.44, 1.6);
+  bx(b, 1.4, 0.2, 4.6, 0, 0.5, 0, M.dark);
+  const S = shell(C, { zf: 2.5, zb: -2.4, w: 0.98, b: 0.6, s: 1.32, hood: 1.38, cowl: 1.44, roof: 2.0, ws: 1.0, wt: 0.42, rb: -2.3, wheels: [[1.6, 0.45], [-1.55, 0.45]], nose: 0.14, drop: 0.05, roofW: 0.9, hoodW: 0.95, taper: 0.04 });
+  backGlass(C, S); pillar(C, S, -0.62, M.dark, 0.14); pillar(C, S, -1.72, M.dark, 0.16);
+  for (const z of [0.98, -0.6, -1.66]) seam(C, S, z); handle(C, S, -0.4); handle(C, S, -1.42); mirror(C, S, 0.92, false);
+  flare(C, S, 1.6, 0.45, M.trim, 0.06); flare(C, S, -1.55, 0.45, M.trim, 0.06);
+  truckGrille(C, S, { y: 1.32, w: 1.3, h: 0.44, bars: 2 });
+  for (const s of [-1, 1]) {
+    bx(b, 0.3, 0.16, 0.05, s * 0.76, 1.2, 2.51, M.light); bx(b, 0.1, 0.4, 0.06, s * 0.93, 1.35, -2.41, M.tail);
+    bx(b, 0.05, 0.06, 2.6, s * 0.72, 2.07, -0.8, M.dark); for (const z of [0.3, -1.9]) bx(b, 0.08, 0.08, 0.08, s * 0.72, 2.02, z, M.dark); // roof rack rails
+  }
+  for (const z of [0.1, -0.8, -1.7]) bx(b, 1.48, 0.04, 0.05, 0, 2.11, z, M.dark);
+  const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.26, 16), M.tire); sp.rotation.x = Math.PI / 2; sp.position.set(0, 1.25, -2.56); b.add(sp);
+  const spr = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.28, 10), C.rimMat); spr.rotation.x = Math.PI / 2; spr.position.set(0, 1.25, -2.57); b.add(spr);
+  bx(b, 2.0, 0.24, 0.22, 0, 0.7, 2.55, M.dark); bx(b, 2.0, 0.22, 0.2, 0, 0.66, -2.46, M.dark);
+  C.pipes.push(V3(-0.7, 0.5, -2.45));
+  for (const [x, z, f] of [[0.84, 1.6, 1], [-0.84, 1.6, 1], [0.84, -1.55, 0], [-0.84, -1.55, 0]]) wheel(C, x, z, 0.43, 0.32, f);
+};
+BUILD.rally = (C) => {
+  // a little all-wheel-drive rally hatch: big wing, hood scoop, a light pod on the nose, mud flaps
+  const b = C.body, P = C.paint;
+  C.len = 4.3; C.wid = 1.86; C.seat.set(0.36, 0.3, -0.2); C.hitch = null; C.hood = V3(0, 1.0, 1.25);
+  const S = shell(C, { zf: 2.12, zb: -2.05, w: 0.92, b: 0.4, s: 0.86, hood: 0.86, cowl: 0.94, roof: 1.42, ws: 0.92, wt: 0.12, rb: -1.2, rg: -1.8, deck: 1.04, wheels: [[1.32, 0.36], [-1.3, 0.36]], nose: 0.16, drop: 0.08, roofW: 0.78, hoodW: 0.88, taper: 0.05 });
+  seam(C, S, 0.84); seam(C, S, -0.32); handle(C, S, -0.1); handle(C, S, -1.0); mirror(C, S, 0.78); pillar(C, S, -0.3, M.dark, 0.1); pillar(C, S, -1.2, P, 0.14);
+  flare(C, S, 1.32, 0.36, P, 0.07); flare(C, S, -1.3, 0.36, P, 0.07);
+  for (const s of [-1, 1]) {
+    bx(b, 0.3, 0.12, 0.05, s * 0.6, 0.76, 2.11, M.light); bx(b, 0.3, 0.14, 0.05, s * 0.66, 0.9, -2.04, M.tail);
+    bx(b, 0.32, 0.3, 0.02, s * 0.74, 0.25, -1.75, M.red); bx(b, 0.32, 0.26, 0.02, s * 0.74, 0.23, 0.85, M.red); // mud flaps
+    bx(b, 0.05, 0.3, 0.05, s * 0.62, 1.32, -1.95, M.dark);
+  }
+  bx(b, 1.62, 0.04, 0.32, 0, 1.48, -1.98, P); bx(b, 0.5, 0.1, 0.5, 0, 0.95, 1.2, M.dark); // the wing, the hood scoop
+  bx(b, 1.1, 0.18, 0.14, 0, 0.62, 2.2, M.dark); for (const x of [-0.39, -0.13, 0.13, 0.39]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.04, 10), M.light); l.rotation.x = Math.PI / 2; l.position.set(x, 0.62, 2.28); b.add(l); } // 4 rally lights
+  bx(b, 1.78, 0.2, 0.2, 0, 0.42, 2.1, M.dark); bx(b, 1.78, 0.2, 0.2, 0, 0.44, -2.04, M.dark);
+  C.pipes.push(V3(0.55, 0.36, -2.06));
+  for (const [x, z, f] of [[0.78, 1.32, 1], [-0.78, 1.32, 1], [0.78, -1.3, 0], [-0.78, -1.3, 0]]) wheel(C, x, z, 0.33, 0.25, f);
+};
+BUILD.skidsteer = (C) => {
+  // a compact skid steer loader: a cage you sit in, two lift arms and a bucket (T raises / lowers it)
+  const b = C.body, P = C.paint;
+  C.len = 3.0; C.wid = 1.72; C.seat.set(0, 0.92, -0.18); C.hitch = null; C.hood = null;
+  bx(b, 1.12, 0.62, 2.0, 0, 0.72, -0.25, P); bx(b, 1.16, 0.56, 0.6, 0, 0.9, -1.0, P); bx(b, 0.9, 0.3, 0.03, 0, 0.95, -1.31, M.grate); // body + engine
+  bx(b, 1.14, 0.12, 2.04, 0, 1.06, -0.25, M.dark);
+  for (const [x, z] of [[-0.54, 0.45], [0.54, 0.45], [-0.54, -0.7], [0.54, -0.7]]) bx(b, 0.07, 1.05, 0.07, x, 1.62, z, M.dark); // the cage
+  bx(b, 1.2, 0.08, 1.3, 0, 2.17, -0.12, P); bx(b, 1.0, 0.85, 0.02, 0, 1.6, 0.46, M.grate); bx(b, 0.02, 0.8, 1.1, 0.55, 1.6, -0.12, M.grate); bx(b, 0.02, 0.8, 1.1, -0.55, 1.6, -0.12, M.grate);
+  bx(b, 0.5, 0.12, 0.45, 0, 1.17, -0.2, M.seat); bx(b, 0.5, 0.5, 0.1, 0, 1.45, -0.46, M.seat, -0.1);
+  for (const s of [-1, 1]) { bx(b, 0.04, 0.3, 0.04, s * 0.22, 1.3, 0.12, M.dark); bx(b, 0.06, 0.06, 0.06, s * 0.22, 1.47, 0.12, M.red); } // joysticks
+  for (const s of [-1, 1]) bx(b, 0.12, 0.1, 0.05, s * 0.4, 2.1, 0.47, M.light);
+  // the lift arms + bucket swing around a pin at the back
+  const arm = new THREE.Group(); arm.position.set(0, 1.6, -0.95); b.add(arm); C.arm = arm; C.anim = [arm];
+  for (const s of [-1, 1]) { tube(arm, V3(s * 0.66, 0, 0), V3(s * 0.66, -0.25, 1.35), 0.07, P); tube(arm, V3(s * 0.66, -0.25, 1.35), V3(s * 0.7, -1.05, 2.08), 0.07, P); bx(arm, 0.1, 0.4, 0.1, s * 0.66, -1.0, 2.1, M.dark); }
+  tube(arm, V3(-0.66, -0.25, 1.35), V3(0.66, -0.25, 1.35), 0.05, P);
+  const bk = new THREE.Group(); bk.position.set(0, -1.1, 2.12); arm.add(bk);
+  bx(bk, 1.66, 0.6, 0.06, 0, 0.12, 0.0, M.dark); bx(bk, 1.66, 0.06, 0.62, 0, -0.18, 0.3, M.dark); for (const s of [-1, 1]) bx(bk, 0.05, 0.42, 0.62, s * 0.83, 0.0, 0.3, M.dark);
+  bx(bk, 1.7, 0.05, 0.08, 0, -0.2, 0.62, M.frame); C.bucket = bk;
+  for (const [x, z] of [[0.72, 0.42], [-0.72, 0.42], [0.72, -0.72], [-0.72, -0.72]]) wheel(C, x, z, 0.36, 0.3, 0);
+};
+BUILD.excavator = (C) => {
+  // a mini excavator: rubber tracks, a cab on a turntable, a boom + stick + bucket (hold T to dig)
+  const b = C.body, P = C.paint;
+  C.len = 3.4; C.wid = 1.8; C.seat.set(0.3, 1.25, -0.15); C.hitch = null; C.hood = null;
+  for (const s of [-1, 1]) {
+    bx(b, 0.42, 0.5, 2.6, s * 0.7, 0.3, 0, M.tire); bx(b, 0.3, 0.3, 2.3, s * 0.7, 0.32, 0, M.dark);
+    for (let i = 0; i < 5; i++) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.44, 8), M.frame); r.rotation.z = Math.PI / 2; r.position.set(s * 0.7, 0.18, -0.9 + i * 0.45); b.add(r); }
+  }
+  bx(b, 1.8, 0.1, 0.5, 0, 0.3, 1.35, M.dark); // the dozer blade
+  const up = new THREE.Group(); up.position.set(0, 0.6, 0); b.add(up); C.upper = up;
+  bx(up, 1.5, 0.4, 2.0, 0, 0.25, -0.15, P); bx(up, 1.5, 0.5, 0.5, 0, 0.45, -1.0, M.dark); // house + counterweight
+  bx(up, 0.85, 1.2, 1.05, 0.3, 1.05, 0.05, P); bx(up, 0.8, 0.7, 0.02, 0.3, 1.22, 0.58, M.glass); bx(up, 0.02, 0.65, 0.9, 0.73, 1.22, 0.05, M.glass); bx(up, 0.02, 0.65, 0.9, -0.13, 1.22, 0.05, M.glass);
+  bx(up, 0.95, 0.06, 1.12, 0.3, 1.68, 0.05, M.dark); bx(up, 0.12, 0.08, 0.05, 0.6, 1.62, 0.6, M.light);
+  const boom = new THREE.Group(); boom.position.set(-0.4, 0.5, 0.75); up.add(boom); C.boom = boom;
+  tube(boom, V3(0, 0, 0), V3(0, 1.3, 0.9), 0.12, P); tube(boom, V3(0, 1.3, 0.9), V3(0, 1.0, 2.0), 0.11, P);
+  const stick = new THREE.Group(); stick.position.set(0, 1.0, 2.0); boom.add(stick); C.stick = stick;
+  tube(stick, V3(0, 0, 0), V3(0, -1.3, 0.25), 0.08, P); tube(boom, V3(0.12, 0.2, 0.25), V3(0.12, 1.1, 1.0), 0.05, M.chrome);
+  const bk = new THREE.Group(); bk.position.set(0, -1.3, 0.25); stick.add(bk); C.bucket = bk;
+  bx(bk, 0.5, 0.45, 0.06, 0, -0.1, 0.0, M.dark); bx(bk, 0.5, 0.06, 0.4, 0, -0.32, 0.18, M.dark); for (const s of [-1, 1]) bx(bk, 0.04, 0.4, 0.4, s * 0.25, -0.15, 0.18, M.dark);
+  for (let i = 0; i < 4; i++) bx(bk, 0.06, 0.04, 0.1, -0.18 + i * 0.12, -0.33, 0.42, M.frame);
+  C.anim = [up, boom, stick, bk];
+  for (const [x, z] of [[0.7, 0.9], [-0.7, 0.9], [0.7, -0.9], [-0.7, -0.9]]) { const w = wheel(C, x, z, 0.25, 0.3, 0); w.pivot.visible = false; }
+};
+BUILD.ztmower = (C) => {
+  // a zero-turn mower: two big drive wheels in back, little caster wheels in front, a wide deck, lap bars, a roll bar
+  const b = C.body, P = C.paint;
+  C.len = 2.2; C.wid = 1.55; C.seat.set(0, 0.86, -0.42); C.hitch = V3(0, 0.45, -1.05); C.hood = null;
+  bx(b, 0.9, 0.12, 1.9, 0, 0.42, 0.05, M.dark); // frame
+  bx(b, 1.5, 0.18, 0.86, 0, 0.26, 0.42, P); bx(b, 1.54, 0.04, 0.9, 0, 0.36, 0.42, M.dark); for (const s of [-1, 1]) bx(b, 0.04, 0.2, 0.7, s * 0.77, 0.24, 0.42, M.dark); // the cutting deck
+  bx(b, 0.2, 0.1, 0.3, 0.78, 0.3, 0.3, M.dark); // the chute
+  bx(b, 0.9, 0.06, 0.55, 0, 0.5, 0.55, P); // footrest
+  bx(b, 1.0, 0.45, 0.7, 0, 0.72, -0.72, P); bx(b, 0.8, 0.2, 0.3, 0, 0.62, -1.05, M.dark); // engine + tank
+  bx(b, 0.56, 0.12, 0.48, 0, 0.82, -0.4, M.seat); bx(b, 0.56, 0.5, 0.12, 0, 1.08, -0.66, M.seat, -0.12);
+  for (const s of [-1, 1]) { tube(b, V3(s * 0.33, 0.8, -0.2), V3(s * 0.33, 1.14, 0.0), 0.025, M.dark); tube(b, V3(s * 0.33, 1.14, 0.0), V3(s * 0.12, 1.14, 0.08), 0.025, M.dark); bx(b, 0.28, 0.32, 0.05, s * 0.48, 0.66, -0.15, P); } // lap bars + side pods
+  for (const s of [-1, 1]) tube(b, V3(s * 0.5, 0.75, -1.0), V3(s * 0.5, 1.75, -0.95), 0.035, M.dark);
+  tube(b, V3(-0.5, 1.75, -0.95), V3(0.5, 1.75, -0.95), 0.035, M.dark);
+  C.pipes.push(V3(0.3, 0.6, -1.12));
+  C.deck = { z: 0.42, w: 1.5 };
+  for (const s of [-1, 1]) { wheel(C, s * 0.48, 0.92, 0.16, 0.12, 0); wheel(C, s * 0.6, -0.65, 0.36, 0.32, 0); }
+};
+BUILD.lawntractor = (C) => mower(C, false, true);
 BUILD.cruiser = (C) => police(C, false);
 BUILD.interceptor = (C) => police(C, true);
 

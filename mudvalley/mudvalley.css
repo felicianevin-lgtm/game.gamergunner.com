@@ -233,3 +233,8 @@ body.thumb #hud, body.thumb #loading { display: none !important; }
 .qts { display: flex; flex-wrap: wrap; gap: 6px; }
 #bPhone.dot::after { content: ""; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #ff3a3a; margin: -18px 0 0 14px; border: 2px solid #fff; }
 #modal input { -webkit-user-select: text; user-select: text; }
+
+/* the clock + the radio */
+#clockTxt { font: 700 13px Inter, sans-serif; opacity: .9; text-shadow: 0 1px 3px #000c; margin-top: 2px; }
+#radioTxt { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); background: #000a; border-radius: 10px; padding: 4px 12px; font: 600 12px Inter, sans-serif; white-space: nowrap; pointer-events: none; }
+body.touch #radioTxt { bottom: auto; top: 8px; }

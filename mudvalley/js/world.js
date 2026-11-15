@@ -39,7 +39,40 @@ export function makeSky(scene) {
     const s = 140 / 2048 * 2; x = Math.round(x / s) * s; z = Math.round(z / s) * s; // (snapping stops shadows shimmering)
     sun.target.position.set(x, y, z); sun.position.set(x + SUN_DIR.x * 150, y + SUN_DIR.y * 150, z + SUN_DIR.z * 150);
   };
-  return { sky, sun, hemi, follow };
+  // ---- day + night: stars, a moon, and colors for every time of day
+  const starG = new THREE.BufferGeometry(), sp = [];
+  for (let i = 0; i < 1600; i++) { const u = Math.random() * 2 - 1, a = Math.random() * 6.283, r = Math.sqrt(1 - u * u), y = Math.abs(u) * 0.95 + 0.05; sp.push(r * Math.cos(a) * 780, y * 780, r * Math.sin(a) * 780); }
+  starG.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
+  const stars = new THREE.Points(starG, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+  sky.add(stars);
+  const mc = document.createElement("canvas"); mc.width = mc.height = 128; const mg = mc.getContext("2d");
+  const mr = mg.createRadialGradient(64, 64, 4, 64, 64, 64); mr.addColorStop(0, "#ffffff"); mr.addColorStop(0.3, "#eef2ff"); mr.addColorStop(0.36, "rgba(200,215,255,0.35)"); mr.addColorStop(1, "rgba(200,215,255,0)");
+  mg.fillStyle = mr; mg.fillRect(0, 0, 128, 128); mg.fillStyle = "rgba(160,170,200,0.5)"; for (const [x, y, r] of [[54, 56, 7], [72, 70, 5], [66, 50, 4]]) { mg.beginPath(); mg.arc(x, y, r, 0, 7); mg.fill(); }
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(mc), fog: false, depthWrite: false, transparent: true }));
+  moon.scale.set(90, 90, 1); sky.add(moon);
+  const K = (h) => new THREE.Color(h);
+  const DAY = { top: K(0x3d98f0), mid: K(0x8fcaff), bot: K(0xd8efff), fog: K(0xcfe9ff), sun: K(0xfff2d8), sunI: 2.7, sky: K(0xd8eeff), gnd: K(0x6a8a4a), hemi: 1.55 };
+  const DUSK = { top: K(0x2c4a8a), mid: K(0xff9a6a), bot: K(0xffc890), fog: K(0xe6a888), sun: K(0xffa060), sunI: 1.5, sky: K(0xffc8a0), gnd: K(0x5a5a3a), hemi: 0.95 };
+  const NIGHT = { top: K(0x03060f), mid: K(0x0a1430), bot: K(0x18233e), fog: K(0x101a30), sun: K(0x9ab0ff), sunI: 0.4, sky: K(0x5a70b0), gnd: K(0x1a221a), hemi: 0.42 };
+  const mix = (A, B, t) => { const o = {}; for (const k in A) o[k] = typeof A[k] === "number" ? A[k] + (B[k] - A[k]) * t : A[k].clone().lerp(B[k], t); return o; };
+  const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const U = sky.material.uniforms, sunPos = new THREE.Vector3();
+  // tod: 0 = midnight, 0.25 = 6 AM, 0.5 = noon, 0.75 = 6 PM. Returns how dark it is (0 = day, 1 = night).
+  const update = (tod) => {
+    const a = (tod - 0.25) * Math.PI * 2, e = Math.sin(a);
+    sunPos.set(Math.cos(a) * 0.8, e, 0.45).normalize();
+    const P = e > 0.05 ? mix(DUSK, DAY, sm(0.05, 0.35, e)) : mix(NIGHT, DUSK, sm(-0.22, 0.05, e));
+    U.top.value.copy(P.top); U.mid.value.copy(P.mid); U.bot.value.copy(P.bot); scene.fog.color.copy(P.fog);
+    hemi.color.copy(P.sky); hemi.groundColor.copy(P.gnd); hemi.intensity = P.hemi;
+    // the light comes from the sun in the day and from the moon at night
+    const moonUp = e < -0.02; SUN_DIR.copy(moonUp ? sunPos.clone().negate() : sunPos); if (SUN_DIR.y < 0.25) { SUN_DIR.y = 0.25; SUN_DIR.normalize(); }
+    sun.color.copy(P.sun); sun.intensity = P.sunI * (moonUp ? 1 : sm(-0.02, 0.12, e) * 0.8 + 0.2);
+    sunSprite.position.copy(sunPos).multiplyScalar(760); sunSprite.visible = e > -0.12;
+    moon.position.copy(sunPos).multiplyScalar(-760); moon.visible = e < 0.12;
+    stars.material.opacity = sm(0.02, -0.25, e);
+    return 1 - sm(-0.2, 0.12, e);
+  };
+  return { sky, sun, hemi, follow, update };
 }
 
 // ---------------------------------------------------------------- the town
@@ -211,8 +244,34 @@ function forestDensity(x, z) {
   if (b[0] > 0) d = d * (1 - b[0]) + b[0] * (b[2] * 0.85 + b[4] * (hAt(x, z) < 125 ? 0.5 : 0) + b[3] * 0.12);
   return d * (1 - Math.min(1, desertAt(x, z) * 1.6));
 }
+// tree shapes with shading baked in (darker inside + at the bottom, lighter tips)
+function shade(g, f) {
+  g = g.index ? g.toNonIndexed() : g; const p = g.attributes.position, c = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) { const k = f(p.getX(i), p.getY(i), p.getZ(i)); c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = Math.max(0.3, Math.min(1, k)); }
+  g.setAttribute("color", new THREE.BufferAttribute(c, 3)); g.deleteAttribute("uv"); return g;
+}
+function pineGeo() {
+  let sd = 3; const rr = () => ((sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const parts = [[2.5, 2.4, 1.9], [2.05, 2.2, 3.1], [1.6, 2.0, 4.2], [1.1, 1.8, 5.2], [0.6, 1.4, 6.0]].map(([r, h, y], i) => {
+    const g = new THREE.ConeGeometry(r, h, 9, 2); const p = g.attributes.position;
+    for (let k = 0; k < p.count; k++) { const yy = p.getY(k); if (yy < -h / 2 + 0.01) { const a = Math.atan2(p.getZ(k), p.getX(k)); p.setY(k, yy - 0.25 - 0.18 * Math.sin(a * 4 + i)); p.setX(k, p.getX(k) * (1 + (rr() - 0.5) * 0.18)); p.setZ(k, p.getZ(k) * (1 + (rr() - 0.5) * 0.18)); } }
+    g.translate(0, y, 0); return shade(g, (x, yy, z) => 0.62 + (yy - y + h / 2) / h * 0.38 + i * 0.03);
+  });
+  return merge(parts);
+}
+function roundGeo() {
+  let sd = 9; const rr = () => ((sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const blobs = [[0, 3.5, 0, 1.75], [1.05, 3.1, 0.35, 1.3], [-0.95, 3.3, -0.4, 1.25], [0.2, 4.5, -0.45, 1.2], [-0.35, 3.0, 1.0, 1.05], [0.5, 4.1, 0.8, 1.0]];
+  const parts = blobs.map(([x, y, z, r]) => { const g = new THREE.IcosahedronGeometry(r, 1); const p = g.attributes.position; for (let k = 0; k < p.count; k++) { const s = 1 + (rr() - 0.5) * 0.22; p.setXYZ(k, p.getX(k) * s, p.getY(k) * s, p.getZ(k) * s); } g.translate(x, y, z); return shade(g, (a, b, c) => 0.6 + (b - 2.0) * 0.12 + rr() * 0.12); });
+  parts.push(shade(new THREE.CylinderGeometry(0.07, 0.11, 1.4, 5).rotateZ(0.8).translate(0.55, 2.4, 0), () => 0.5), shade(new THREE.CylinderGeometry(0.07, 0.1, 1.2, 5).rotateZ(-0.7).translate(-0.5, 2.3, 0.1), () => 0.5));
+  return merge(parts);
+}
+function bushGeo() {
+  const parts = [[0, 0.45, 0, 0.7], [0.5, 0.35, 0.2, 0.5], [-0.45, 0.38, -0.15, 0.55], [0.1, 0.7, -0.3, 0.45]].map(([x, y, z, r]) => shade(new THREE.IcosahedronGeometry(r, 1).translate(x, y, z), (a, b) => 0.55 + b * 0.5));
+  return merge(parts);
+}
 function forests(scene) {
-  const pines = [], rounds = [], rocks = [], cacti = [];
+  const pines = [], rounds = [], rocks = [], cacti = [], bushes = [];
   let seed = 7; const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
   for (let gz = -HALF + 2; gz < HALF; gz += 5) for (let gx = -HALF + 2; gx < HALF; gx += 5) {
     const x = gx + (rnd() - 0.5) * 4.6, z = gz + (rnd() - 0.5) * 4.6, r = rnd();
@@ -223,6 +282,9 @@ function forests(scene) {
       const s = 0.8 + rnd() * 0.7, h = hAt(x, z);
       (h > 20 || rnd() < 0.6 ? pines : rounds).push({ x, z, s, y: h, c: rnd() });
       addCircle(x, z, 0.5 * s, h + 7);
+    } else if (r > 0.45 && r < 0.45 + Math.min(0.1, dens * 0.12) && !desertAt(x, z)) { // a bush near the woods
+      if (inFlat(x, z) || nearPath(x, z, 4)) continue;
+      bushes.push({ x: x + (rnd() - 0.5) * 2, z: z + (rnd() - 0.5) * 2, s: 0.6 + rnd() * 0.7, y: hAt(x, z), c: rnd() });
     } else if (r > 0.6 && r < 0.6 + desertAt(x, z) * 0.012) { // cactus!
       if (inFlat(x, z) || nearPath(x, z, 5)) continue;
       const s = 0.8 + rnd() * 0.6, h = hAt(x, z); cacti.push({ x, z, s, y: h, c: rnd() }); addCircle(x, z, 0.4 * s, h + 4);
@@ -237,7 +299,8 @@ function forests(scene) {
   const NR = 12, R = (HALF * 2) / NR, reg = (t) => Math.min(NR - 1, Math.floor((t.x + HALF) / R)) + NR * Math.min(NR - 1, Math.floor((t.z + HALF) / R));
   const mats = {};
   const make = (geo, color, all, y, ys, cv) => {
-    const mat = mats[color] || (mats[color] = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }));
+    const vc = !!geo.attributes.color, mk = color + (vc ? "v" : "");
+    const mat = mats[mk] || (mats[mk] = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, vertexColors: vc }));
     for (let r = 0; r < NR * NR; r++) {
       const list = all.filter((t) => reg(t) === r); if (!list.length) continue;
       const m = new THREE.InstancedMesh(geo, mat, list.length);
@@ -247,9 +310,9 @@ function forests(scene) {
   };
   const trunks = pines.concat(rounds);
   make(new THREE.CylinderGeometry(0.2, 0.32, 2.2, 6), 0x7a5232, trunks, 1.0, 1, false);
-  make(new THREE.ConeGeometry(2.1, 3.6, 7), 0x2f8a3c, pines, 3.2, 1, true);
-  make(new THREE.ConeGeometry(1.5, 2.9, 7), 0x3b9c48, pines, 5.0, 1, true);
-  make(new THREE.IcosahedronGeometry(2.1, 0), 0x4fae3e, rounds, 3.6, 0.95, true);
+  make(pineGeo(), 0x2f8a3c, pines, 0, 1, true);
+  make(roundGeo(), 0x4fae3e, rounds, 0, 0.95, true);
+  make(bushGeo(), 0x4a9a3a, bushes, 0, 1, true);
   make(new THREE.DodecahedronGeometry(1, 0), 0x8f8a82, rocks, 0.35, 0.75, true);
   // cacti: a tall stem + two arms
   make(new THREE.CylinderGeometry(0.32, 0.38, 3.6, 7), 0x3f8a3a, cacti, 1.8, 1, true);

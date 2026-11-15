@@ -33,6 +33,7 @@ import { pushOut } from "./colliders.js";
 import * as H from "./hud.js";
 import * as IN from "./input.js";
 import { initMenus, UI } from "./menus.js";
+import { Extras, TRICKS } from "./extras.js";
 
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
@@ -65,7 +66,7 @@ const G = {
   // fast travel to your home (from the phone)
   goHome(h) { if (crime.noTeleport()) return; const yaw = h.yaw + Math.PI, f = freeSpot(h.garage.x, h.garage.z, yaw, mine() ? mine().m.len : 2); teleportMe(f.x, f.z, yaw); SFX.phone(); H.toast("Home sweet home!", h.name, "good"); },
 };
-let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs, drops, camp, traffic;
+let sky, world, fx, jobs, crime, fishing, interiors, mp, heist, npcs, drops, camp, traffic, extras;
 const cam = { yaw: Math.PI, pitch: 0.3, zoom: 1, x: 0, y: 5, z: 0, tx: 0, ty: 0, tz: 0, snap: true };
 
 // ---------------------------------------------------------------- your vehicles + trailers in the world
@@ -371,6 +372,8 @@ function actions() {
       }
     }
   }
+  // T on heavy equipment: raise the bucket / dig
+  if (c && !out.T && vehicleById(c.s.id).heavy && !G.race) out.T = { text: c.s.id === "skidsteer" ? (c.armUp ? "Lower the bucket" : "Raise the bucket") : c.dig ? "Stop digging" : "Dig!", fn: () => extras.heavyT(c) };
   // T on a dirt bike or a quad (when there's no trailer to hitch): wheelie!
   if (c && !out.T && c.b.t.wheelie && !G.race) out.T = { text: c.b.wheelie ? "Stop the wheelie" : "Wheelie! (keep holding W)", fn: () => { G.wheelieTap = true; } };
   // E: ride a dirt bike / quad into a truck bed, or take it back out
@@ -760,6 +763,17 @@ export const GAME = {
     scene.remove(c.m.root); const m = buildCar(c.s); scene.add(m.root); c.m = m; c.b.model = m; placeModel(c.b);
     if (cost) { SFX.cash(); H.bumpMoney(); } else SFX.click(); fx.sparks(c.b.x, c.b.y + 0.8, c.b.z, 10); save(); return true;
   },
+  // bolt-on mods (Mud & Chrome: light bars, running boards, antennas, winch, bike bars/pads/grips, supermoto, helmets, mower deck)
+  setMod(kind, val, cost) {
+    const c = mine(); if (!c) return false;
+    if (c.bedHost && c.bedHost.loaded.length) { SFX.nope(); H.toast("Take the ride out of the back first", "", "warn"); return false; }
+    if (cost && !spend(cost)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
+    c.s[kind] = val; c.s["own_" + kind] = [...new Set([...(c.s["own_" + kind] || []), val])];
+    scene.remove(c.m.root); const m = buildCar(c.s); scene.add(m.root); c.m = m; c.b.model = m; c.bedHost = null; retune(c.b); placeModel(c.b);
+    if (cost) { SFX.cash(); H.bumpMoney(); } else SFX.click(); fx.sparks(c.b.x, c.b.y + 1.0, c.b.z, 10); save(); return true;
+  },
+  dayMode() { S.dayMode = ((S.dayMode || 0) + 1) % 3; save(); return S.dayMode; },
+  radio() { audio(); IN.forceTap("KeyN"); },
   buyScrubber() { if (!spend(25)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; } S.scrubber = true; SFX.cash(); H.bumpMoney(); save(); return true; },
   scrubFx(done) {
     const c = mine(); if (!c) return; SFX.wash(); for (let i = 0; i < 3; i++) fx.splash(c.b.x + (Math.random() - 0.5) * 2.5, c.b.y + 1.4, c.b.z + (Math.random() - 0.5) * 3, 6);
@@ -849,6 +863,7 @@ function frame(now) {
 }
 function tick(dt) {
   G.time += dt;
+  extras.clock(dt);
   const blocked = G.mode === "side" || G.mode === "modal" || G.mode === "map";
   const c = mine();
   const raceLock = G.race && G.race.state === "count";
@@ -873,7 +888,8 @@ function tick(dt) {
     if (IN.pressed("KeyG")) { if (c && c.police) { G.siren = !G.siren; SFX.click(); H.toast(G.siren ? "🚨 Siren ON" : "Siren off", "", "", 1200); } else if (c) SFX.nope(); }
     if (IN.pressed("KeyH")) (c && ["hauler", "monster"].includes(c.s.id) ? SFX.hornBig : SFX.horn)();
     if (IN.pressed("KeyR")) resetVehicle();
-  }
+    extras.keys(IN.pressed, c);
+  } else IN.pressed("KeyN");
   // driving
   if (c) {
     const inp = blocked || raceLock ? { thr: 0, steer: 0, hand: true } : IN.drive();
@@ -881,7 +897,9 @@ function tick(dt) {
     if (G.mode === "side" && G.panel === "customs") { c.b.vx = c.b.vz = 0; c.b.x += (36 - c.b.x) * 0.2; c.b.z += (-40 - c.b.z) * 0.2; c.b.yaw += dt * 0.35; } // (spinning on the turntable)
     const b = stepCar(c.b, inp, dt);
     carEffects(c, b, inp, dt);
+    extras.tick(dt, c);
   } else {
+    extras.tick(dt, null);
     const w = IN.walk(); const fx = Math.sin(cam.yaw), fz = Math.cos(cam.yaw);
     const frozen = blocked || G.lockWalk || !!crime.ko || !!G.ride || (fishing.busy && fishing.state !== "wait");
     if (fishing.state === "wait" && Math.hypot(w.x, w.y) > 0.3) fishing.cancel(); // (walking away reels the line in)
@@ -1138,6 +1156,9 @@ function draw(dt) {
   for (const bc of [jobBeacon, gpsBeacon, ...Object.values(G.hot || {})]) if (bc.visible) { bc.userData.ring.rotation.z = G.time; bc.children[0].material.opacity = 0.22 + Math.sin(G.time * 4) * 0.08; }
   if (G.race) { G.race.hoop.rotation.z = 0; G.race.hoopRing.material.opacity = 0.6 + Math.sin(G.time * 6) * 0.3; }
   animateWorld(world, G.time, dt, camera.position, !!G.race);
+  // day + night (the sky, the light, the clouds), then headlights, grass, tricks, the winch cable
+  extras.dark = sky.update(S.tod ?? 0.33); { const e = 1 - extras.dark * 0.85; world.clouds.material.emissive.setRGB(0.6 * e, 0.66 * e, 0.72 * e); world.clouds.material.color.setScalar(0.25 + 0.75 * e); }
+  extras.draw(dt, c, camera.position, G.time, !inside() && G.mode !== "thumb");
   updateCamera(dt);
   renderer.render(scene, camera);
   hudTick(dt);
@@ -1174,10 +1195,13 @@ function hudTick(dt) {
       if (A.F) list.push({ key: "F", text: A.F.text }); if (A.T) list.push({ key: "T", text: A.T.text, warn: A.T.warn });
       if (A.Q) list.push({ key: "Q", text: A.Q.text, warn: A.Q.warn, hot: fishing.state === "bite" });
       if (c && c.police) list.push({ key: "G", text: G.siren ? "Siren off" : "Siren on" });
+      if (c) { const v = vehicleById(c.s.id); if (v.mower) list.push({ key: "B", text: c.blades ? "Blades off" : "Blades on (mow!)" }); if (c.s.winch && !v.bike && !v.mower) list.push({ key: "J", text: extras.winch ? "Let go of the winch" : "Winch", warn: c.b.spinOut > 0 || (c.b.surf === SURF.MUD && speedOf(c.b) < 1.5) }); }
     }
+    { const th = extras.hint(c); if (th) list.push({ key: "", text: th, hot: true }); }
     if (G.race && G.race.state === "go" && c && (c.b.flipped || (G.race && Math.hypot(me.x - target?.x, me.z - target?.z) > 90))) list.push({ key: "R", text: "Back to the track" });
   }
   H.hints(list);
+  { const el = $("clockTxt"); if (el) { const tt = extras.timeText(); if (el.textContent !== tt) el.textContent = (extras.dark > 0.5 ? "🌙 " : "☀️ ") + tt; } }
   if (G.hold && G.actions && G.actions.E && G.actions.E.hold) H.holdBar(G.hold.t / G.actions.E.hold); else H.holdBar(0);
 }
 function syncSave() {
@@ -1201,6 +1225,10 @@ async function boot() {
   sky = makeSky(scene);
   world = buildWorld(scene);
   fx = new FX(scene);
+  // tricks, winch, lights, mowing, heavy equipment, the clock + the radio (extras.js)
+  extras = new Extras(scene, { toast: H.toast, pay, bumpMoney: () => H.bumpMoney(), money, fx, S, save, low: !quality || IN.touch, inRace: () => !!G.race,
+    radioText: (t) => { const el = $("radioTxt"); if (el) { el.textContent = t; el.classList.toggle("hidden", !t); } } });
+  extras.dark = sky.update(S.tod ?? 0.33);
   jobBeacon = beacon(0xffd23a); gpsBeacon = beacon(0xc86aff);
   H.setMapBase(mapCanvas(1024));
   await loadBikeModel();
@@ -1302,6 +1330,7 @@ async function boot() {
   $("bMap").addEventListener("click", () => { audio(); UI.map(); });
   $("bMute").addEventListener("click", () => { audio(); GAME.muted(!S.muted); });
   $("bView").addEventListener("click", () => { toggleFP(); $("canvas").focus(); });
+  $("bRadio").addEventListener("click", () => { audio(); IN.forceTap("KeyN"); $("canvas").focus(); });
   $("jailBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); audio(); crime.jailTry(); });
   if (S.driving && G.CARS.has(S.driving) && !G.CARS.get(S.driving).on) { const c = G.CARS.get(S.driving); G.me.car = c; G.me.p.root.visible = false; cam.yaw = c.b.yaw; }
   for (const c of G.CARS.values()) if (c.m.rider) c.m.rider.root.visible = c === mine();
@@ -1360,5 +1389,6 @@ const MV = {
   goIn(id) { const bd = buildingById(id); const w = G.me.w; if (mine()) exitCar(); teleportMe(bd.dx + Math.sin(bd.out) * 1.2, bd.dz + Math.cos(bd.out) * 1.2, bd.out + Math.PI); const a = actions(); if (a.E && a.E.text.includes(bd.name.split(" ")[0]) || (a.E && /inside|tour/i.test(a.E.text))) { a.E.fn(); return a.E.text; } return a.E && a.E.text; },
   walkTo(lx, lz) { const w = G.me.w, P = interiors.cur ? { x: w.x - interiors.local(w).x, z: w.z - interiors.local(w).z } : { x: 0, z: 0 }; w.x = P.x + lx; w.z = P.z + lz; return MV.actions(); },
 };
+MV.extras = () => extras;
 window.MV = MV;
 boot().catch((e) => { console.error(e); $("loading").querySelector("span").textContent = "Oops! Something went wrong: " + e.message; });

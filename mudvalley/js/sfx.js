@@ -16,6 +16,8 @@ export function audio() {
 }
 export function setMuted(m) { muted = m; if (master) master.gain.setTargetAtTime(m ? 0 : 0.7, ac.currentTime, 0.03); }
 export const isMuted = () => muted;
+// the sound system itself (for the car radio): null until the first tap or key
+export const audioOut = () => (ac && master ? { ac, master } : null);
 
 function tone(f, len, type = "square", slide = 0, vol = 0.5, delay = 0) {
   if (!ac || muted) return;
@@ -63,6 +65,11 @@ export const SFX = {
   job() { [440, 554, 659].forEach((f, i) => tone(f, 0.12, "triangle", 0, 0.3, i * 0.07)); },
   pickup() { tone(700, 0.08, "square", 0, 0.25); tone(1050, 0.12, "square", 0, 0.25, 0.07); },
   air() { tone(500, 0.3, "triangle", 1200, 0.25); },
+  winch() { tone(160 + Math.random() * 20, 0.26, "sawtooth", 0, 0.1); noise(0.2, 900, 0.12, "bandpass"); },
+  trick() { tone(700, 0.12, "square", 1400, 0.18); },
+  bail() { noise(0.4, 900, 0.5, "lowpass", 0, 200); tone(300, 0.4, "sawtooth", 80, 0.25); },
+  mow() { noise(0.18, 1800, 0.08, "bandpass"); },
+  lights() { tone(1400, 0.04, "square", 0, 0.15); tone(1000, 0.05, "square", 0, 0.15, 0.05); },
   flip() { noise(0.35, 800, 0.4, "bandpass", 0, 2500); tone(200, 0.3, "triangle", 500, 0.2); },
   step() { noise(0.04, 600, 0.12); },
   jump() { tone(300, 0.15, "square", 600, 0.18); },

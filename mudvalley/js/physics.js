@@ -63,7 +63,7 @@ export function stepCar(b, inp, dt) {
   if (!b.air) {
     // steering: turns faster at medium speed, slower at very high speed
     const sp = Math.hypot(b.vx, b.vz), fwdSign = b.vf < -0.3 ? -1 : 1;
-    const curve = sp < 5 ? sp / 5 : 1 - 0.42 * Math.min(1, (sp - 5) / (t.top * 0.9 + 1));
+    const curve = t.pivot ? 1 : sp < 5 ? sp / 5 : 1 - 0.42 * Math.min(1, (sp - 5) / (t.top * 0.9 + 1)); // (zero-turn mowers + skid steers spin in place)
     let target = -b.steer * t.turn * curve * fwdSign * (inp.hand ? 1.45 : 1) * (b.wa > 0.2 ? 0.45 : 1);
     if (b.burn) target = -b.steer * 2.6; // (a burnout + steering = spin around in a circle)
     b.yawRate += (target - b.yawRate) * Math.min(1, dt * 10);
@@ -178,7 +178,7 @@ export function placeModel(b) {
   // a wheelie tips the whole ride back around its back wheel
   const wa = b.wa || 0, rz = M.rearZ || 0;
   M.root.position.set(b.x + Math.sin(b.yaw) * rz * (1 - Math.cos(wa)), b.y + 0.06 - rz * Math.sin(wa), b.z + Math.cos(b.yaw) * rz * (1 - Math.cos(wa)));
-  M.root.rotation.set(-b.pitch - wa, b.yaw, b.roll, "YXZ");
+  M.root.rotation.set(-b.pitch - wa - (b.tPitch || 0), b.yaw + (b.tYaw || 0), b.roll + (b.tRoll || 0), "YXZ"); // (t* = air tricks: flips + whips)
   M.lift.position.y = (M.liftY || 0) + b.susp;
   M.lift.rotation.set(-b.bodyPitch, 0, b.bodyRoll);
 }
