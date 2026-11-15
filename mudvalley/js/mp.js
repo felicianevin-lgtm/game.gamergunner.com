@@ -49,6 +49,15 @@ export class MP {
   constructor(api) {
     this.api = api; this.ws = null; this.code = ""; this.id = 0; this.name = ""; this.host = 0; this.status = "off";
     this.players = new Map(); this.msgs = []; this.unread = 0; this.sendT = 0; this.lastCar = null; this.rt = ""; this.closing = false; this.muted = false; this.chatRoom = true;
+    // tell the relay you're playing (every 30 s): signed-in players' friends then see "Playing Mud Valley RP" on the
+    // GunnerVerse home page, with a Join button when you're in a lobby (relay presence() + social.js)
+    this.pingId = Array.from({ length: 16 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(Math.random() * 36)]).join("");
+    this.ping(); setInterval(() => this.ping(), 30000);
+  }
+  ping() {
+    const a = account(), b = { i: this.pingId, m: "v", r: this.on ? 1 : 0, c: this.on ? this.code : "" };
+    if (a) { b.t = a.t; if (a.d) b.d = a.d; }
+    fetch(RELAY + "/ping", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).catch(() => {});
   }
   get on() { return this.status === "in"; }
   get copsOff() { return this.on && this.copsOn === false; }
@@ -84,7 +93,7 @@ export class MP {
     switch (m.t) {
       case "welcome":
         this.id = m.id; this.name = m.n; this.host = m.h; this.rt = m.rt || ""; this.status = "in"; this.chatRoom = m.cr !== 0; this.copsOn = m.co !== 0; this.parkSent = ""; this.parkT = 0.3; this.roomSent = null; this.rideSent = null;
-        if (!m.re) { this.clearPlayers(); for (const p of m.players || []) this.addPlayer(p); this.say("", "You joined lobby " + this.code + " as " + m.n + ".", "sys"); }
+        if (!m.re) { this.ping(); this.clearPlayers(); for (const p of m.players || []) this.addPlayer(p); this.say("", "You joined lobby " + this.code + " as " + m.n + ".", "sys"); }
         this.sendLook(); this.sendRole(true); this.lastCar = null; A.changed(); break;
       case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; this.parkSent = ""; this.parkT = 0.6; this.roomSent = null; this.rideSent = null; break;
       case "mvroom": { const p = this.players.get(m.id); if (p) p.room = typeof m.r === "string" ? m.r : ""; break; }

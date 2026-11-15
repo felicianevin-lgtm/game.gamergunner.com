@@ -304,7 +304,7 @@
     }).catch(function () { route(); });
   }
   function statusText(f) {
-    if (f.st === "game") return '<span class="st on-game"><span class="live-dot"></span>Playing GunnerVerse' + (f.m === "t" ? " (Story)" : "") + "</span>";
+    if (f.st === "game") return '<span class="st on-game"><span class="live-dot"></span>Playing ' + (f.m === "v" ? "Mud Valley RP" : "GunnerVerse" + (f.m === "t" ? " (Story)" : "")) + "</span>";
     if (f.st === "hub") return '<span class="st on-hub"><span class="hub-dot"></span>Online</span>';
     return '<span class="st off">Offline</span>';
   }
@@ -323,6 +323,17 @@
       }).join("") : '<p class="side-none">' + (social.friends.length ? "Nobody's on right now." : 'No friends yet. <a href="#/friends">Add some!</a>') + "</p>");
   }
   function joinFriend(f) {
+    if (f.m === "v") { // Mud Valley RP: it opens right into their lobby
+      openModal('<h2 id="modalTitle">Join ' + esc(personName(f)) + "</h2>" +
+        "<p>Mud Valley RP will open and you'll join " + esc(personName(f)) + "'s lobby (code " + esc(f.c) + ").</p>" +
+        '<div class="modal-actions"><button type="button" class="btn ghost" id="jCancel">Cancel</button><button type="button" class="btn" id="jGo">▶ Open Mud Valley</button></div>');
+      document.getElementById("jCancel").onclick = closeModal;
+      document.getElementById("jGo").onclick = function () {
+        closeModal(); api("/hub/play", { g: "mudvalley" }).catch(function () {});
+        openFull(withRelay("mudvalley/?join=" + encodeURIComponent(f.c)));
+      };
+      return;
+    }
     openModal('<h2 id="modalTitle">Join ' + esc(personName(f)) + "</h2>" +
       "<p>GunnerVerse will open. Tap <b>Play</b>, then pick <b>SANDBOX</b> and you'll join " + esc(personName(f)) + "'s game (room " + esc(f.c) + ").</p>" +
       '<div class="modal-actions"><button type="button" class="btn ghost" id="jCancel">Cancel</button><button type="button" class="btn" id="jGo">▶ Open GunnerVerse</button></div>');

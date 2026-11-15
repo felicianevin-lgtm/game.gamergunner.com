@@ -1361,6 +1361,9 @@ async function boot() {
   $("hud").classList.remove("hidden");
   S.stats.played++; save();
   if (!S.intro && !TEST) UI.intro();
+  // ?join=12345678: a friend's lobby, from the Join button on the GunnerVerse home page
+  const joinCode = (Q.get("join") || "").replace(/\D/g, "");
+  if (/^\d{8}$/.test(joinCode)) setTimeout(() => mp.join(joinCode), 600);
   requestAnimationFrame((t) => { last = t; frame(t); });
 }
 
