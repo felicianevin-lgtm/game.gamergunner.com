@@ -1301,7 +1301,7 @@ async function boot() {
       if (inside()) return [];
       const wp = new THREE.Vector3(), wd = new THREE.Vector3();
       const world = (root) => { root.updateWorldMatrix(true, false); root.getWorldPosition(wp); root.getWorldDirection(wd); return { x: wp.x, y: wp.y, z: wp.z, yaw: Math.atan2(wd.x, wd.z) }; };
-      const rel = (p) => { const r = my.m.root.position, yw = my.b.yaw, dx = p.x - r.x, dz = p.z - r.z, cs = Math.cos(yw), sn = Math.sin(yw); return { x: dx * cs - dz * sn, z: dx * sn + dz * cs, y: p.y - r.y, yaw: p.yaw - yw }; };
+      const rel = (p) => { const r = my.m.root.position, yw = my.b.yaw, dx = p.x - my.b.x, dz = p.z - my.b.z, cs = Math.cos(yw), sn = Math.sin(yw); return { x: dx * cs - dz * sn, z: dx * sn + dz * cs, y: p.y - r.y, yaw: p.yaw - yw }; };
       const withMe = (c) => !!(my && c.on && (c.on.bed ? c.on.truck === my : c.on.hitched === my.b));
       for (const c of G.CARS.values()) {
         if (c === my) continue;

@@ -68,6 +68,11 @@ export const TIRES = [
 ];
 export const ENGINE_COST = [0, 600, 1500, 3500, 7000];
 export const LIFT_COST = [0, 400, 800, 1200];
+// lowering kits (every ride but dirt bikes + quads): sits closer to the road, grips better on pavement, worse off-road
+export const LOWER_COST = [0, 300, 550, 800];
+export const LOWER_NAMES = ["Stock height", "Lowered 1 (-6 cm)", "Lowered 2 (-12 cm)", "SLAMMED (-20 cm)"];
+const LOWER_M = [0, 0.06, 0.12, 0.2];
+export const canLower = (v) => !(v.bike || v.quad);
 export const NEONS = [null, 0x3ad0ff, 0xff3ad8, 0x6aff3a, 0xffd23a, 0xff3a3a, 0xffffff];
 // trucks with a bed a dirt bike or quad can ride in (bed floor height + the middle of the bed, in the truck's own space)
 // (front/back = where the bed starts + ends: the flatbed mod swaps everything in there for a steel deck)
@@ -141,7 +146,7 @@ const CODE = [
   [(c) => TIRES.findIndex((t) => t.id === c.tires), (c, n) => { if (TIRES[n]) c.tires = TIRES[n].id; }],
   num("engine"), num("lift"), num("neon"), num("camber"), num("offset", 1), num("bedLen", 1), yes("flatbed"),
   [(c) => Math.round(rustOf(c) * 35), (c, n) => { c.rust = n / 35; }],
-  num("lbar"), num("boards"), num("antenna"), yes("winch"), num("bars"), num("pad", 0, 1), num("grips"), yes("moto"), num("kit"), num("kitCol"), num("helmet", 1),
+  num("lbar"), num("boards"), num("antenna"), yes("winch"), num("bars"), num("pad", 0, 1), num("grips"), yes("moto"), num("kit"), num("kitCol"), num("helmet", 1), num("lower"),
 ];
 const stockCode = new Map();
 export function modCode(car) {
@@ -167,8 +172,9 @@ export function tune(car) {
   if (t === "allterrain") { off.dirt += 0.08; off.grass += 0.08; off.mud += 0.1; top *= 0.98; }
   if (t === "mud") { off.dirt += 0.12; off.grass += 0.12; off.mud += 0.3; top *= 0.94; grip *= 0.92; }
   off.dirt += 0.03 * car.lift; off.grass += 0.03 * car.lift; off.mud += 0.04 * car.lift; grip *= 1 - 0.04 * car.lift;
+  const lw = canLower(v) ? car.lower || 0 : 0; if (lw) { off.dirt -= 0.03 * lw; off.grass -= 0.03 * lw; off.mud -= 0.05 * lw; grip *= 1 + 0.03 * lw; }
   for (const k in off) off[k] = Math.min(1, off[k]);
-  const crawl = Math.min(1, (v.crawl ?? 0.5) + (t === "mud" ? 0.08 : t === "allterrain" ? 0.04 : 0) + 0.02 * car.lift);
+  const crawl = Math.min(1, (v.crawl ?? 0.5) + (t === "mud" ? 0.08 : t === "allterrain" ? 0.04 : 0) + 0.02 * car.lift - 0.03 * lw);
   return modTune(car, { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, quad: !!v.quad, wheelie: !!(v.bike || v.quad), pivot: !!v.pivot, engine: v.engine * (1 + 0.04 * car.engine) });
 }
 // 0..1 bars for the dealership
@@ -405,7 +411,7 @@ export function applyLook(C, car) {
   const od = (OFFSETS[car.offset ?? 1] || OFFSETS[1]).d; // (wheel offset: the wheels poke out or tuck in)
   const ca = (CAMBERS[car.camber ?? 0] || CAMBERS[0]).a;
   for (const w of C.wheels) if (!w.bike) { w.pivot.position.x = w.x + w.side * od; w.pivot.rotation.z = w.side * ca; }
-  C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? 0 : car.lift) * 0.17; // (dirt bikes don't get lifted)
+  C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? 0 : car.lift) * 0.17 - (canLower(vehicleById(car.id)) ? LOWER_M[car.lower || 0] || 0 : 0); // (dirt bikes don't get lifted, bikes + quads don't get lowered)
   C.liftY = C.lift.position.y;
   C.scoop.visible = car.engine >= 2; const bl = C.scoop.getObjectByName("blower"); if (bl) bl.visible = car.engine >= 4;
   C.body.traverse((o) => { if (o.name === "pipe") o.visible = car.engine >= 3; });

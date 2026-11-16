@@ -25,7 +25,8 @@ const ROLES = ["civ", "robber", "cop"];
 // your parked rides / trailers / camp near you, as short text (the relay's "mvpark", 12 at most): kind|id|color|x|z|yaw|towing
 // kind: c = a ride, t = a trailer, p = camp stuff. towing = 1: that trailer is hooked to the ride you're driving
 // (an 8th part, y, is the height: for rides up in a truck bed or on a trailer deck)
-const parkText = (k, id, c, x, z, yaw, h, y) => [k, id, hex(c ?? 0x888888), Math.round(x * 10) / 10, Math.round(z * 10) / 10, (Math.round(Math.atan2(Math.sin(yaw), Math.cos(yaw)) * 100) / 100), h ? 1 : 0, ...(y === undefined ? [] : [Math.round(y * 100) / 100])].join("|");
+const PARK_RE = /^[ctp]\|[a-z0-9_]{1,16}\|[0-9a-f]{6}\|-?\d{1,4}(\.\d)?\|-?\d{1,4}(\.\d)?\|-?\d(\.\d{1,2})?\|[01](\|-?\d{1,4}(\.\d{1,2})?)?$/;
+const parkText = (k, id, c, x, z, yaw, h, y) => [k, id, hex(Math.round(+(c ?? 0x888888)) & 0xffffff), Math.round(x * 10) / 10, Math.round(z * 10) / 10, (Math.round(Math.atan2(Math.sin(yaw), Math.cos(yaw)) * 100) / 100), h ? 1 : 0, ...(y === undefined ? [] : [Math.round(y * 100) / 100])].join("|");
 function parkModel(it) {
   if (it.k === "c") { if (vehicleById(it.id).id !== it.id) return null; const m = buildCar({ id: it.id, paint: it.c, rims: "chrome", tires: "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0 }); if (m.rider) m.rider.root.visible = false; return m.root; }
   if (it.k === "t") { if (!trailerById(it.id)) return null; const m = buildTrailer(it.id, it.c); if (m.awning) m.awning.visible = !it.h; return m.root; }
@@ -93,7 +94,8 @@ export class MP {
     switch (m.t) {
       case "welcome":
         this.id = m.id; this.name = m.n; this.host = m.h; this.rt = m.rt || ""; this.status = "in"; this.chatRoom = m.cr !== 0; this.copsOn = m.co !== 0; this.parkSent = ""; this.parkT = 0.3; this.roomSent = null; this.rideSent = null;
-        if (!m.re) { this.ping(); this.clearPlayers(); for (const p of m.players || []) this.addPlayer(p); this.say("", "You joined lobby " + this.code + " as " + m.n + ".", "sys"); }
+        if (!m.re) { this.ping(); this.say("", "You joined lobby " + this.code + " as " + m.n + ".", "sys"); }
+        this.clearPlayers(); for (const p of m.players || []) this.addPlayer(p); // (after a reconnect too: everybody comes back, not just whoever joins next)
         this.sendLook(); this.sendRole(true); this.lastCar = null; A.changed(); break;
       case "join": this.addPlayer(m); this.say("", m.n + " joined the lobby! 👋", "sys"); A.toast("👋 " + m.n + " joined", "", "good", 2500); this.roleT = 0.5; this.parkSent = ""; this.parkT = 0.6; this.roomSent = null; this.rideSent = null; break;
       case "mvroom": { const p = this.players.get(m.id); if (p) p.room = typeof m.r === "string" ? m.r : ""; break; }
@@ -106,7 +108,7 @@ export class MP {
       case "shot": { const p = this.players.get(m.id); if (p && Array.isArray(m.p) && Array.isArray(m.x)) A.shot(m.p, m.x, m.w); break; }
       case "leave": { const p = this.players.get(m.id); if (p) { this.say("", p.n + " left.", "sys"); this.removePlayer(m.id); } break; }
       case "away": { const p = this.players.get(m.id); if (p) p.away = true; break; }
-      case "back": { const p = this.players.get(m.id); if (p) p.away = false; break; }
+      case "back": { const p = this.players.get(m.id); if (p) p.away = false; this.roleT = 0.5; this.parkSent = ""; this.parkT = 0.6; this.roomSent = null; this.rideSent = null; break; } // (they reconnected: send them your trailers, rides + camp again)
       case "s": { const p = this.players.get(m.id); if (p) { p.tx = m.p[0]; p.ty = m.p[1]; p.tz = m.p[2]; p.tr = m.r; p.walk = !!m.w; if (p.x === undefined) { p.x = p.tx; p.y = p.ty; p.z = p.tz; p.r = p.tr; } } break; }
       case "look": { const p = this.players.get(m.id); if (p) { p.k = m.k; this.rebuild(p); } break; }
       case "car": { const p = this.players.get(m.id); if (p) { p.v = m.v; this.rebuild(p); } break; }
@@ -207,7 +209,7 @@ export class MP {
     this.parkT = (this.parkT ?? 0) - dt; this.parkAge = (this.parkAge || 0) + dt;
     if (this.parkT <= 0 && this.api.parked) {
       this.parkT = 1;
-      const l = []; let size = 30; for (const q of this.api.parked()) { const t = parkText(...q); if (size + t.length + 3 > 500 || l.length >= 12) break; l.push(t); size += t.length + 3; } // (a relay message is 512 bytes at most)
+      const l = []; let size = 30; for (const q of this.api.parked()) { const t = parkText(...q); if (!PARK_RE.test(t)) continue; if (size + t.length + 3 > 500 || l.length >= 12) break; l.push(t); size += t.length + 3; } // (a relay message is 512 bytes at most)
       const str = l.join(";");
       if (str !== this.parkSent || this.parkAge > 10) { this.parkSent = str; this.parkAge = 0; this.send({ t: "mvpark", l }); }
     }
