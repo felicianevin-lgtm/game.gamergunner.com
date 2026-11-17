@@ -6,6 +6,10 @@ import * as THREE from "/create/vendor/three.module.js";
 
 export const LEN = 12000; // meters of track (12 km)
 export const DECK = 1.25; // the top of the train's floor
+export const LOBBY_X = -5000; // the lobby town (far from the track)
+export const MID_X = 6000; // the Halfway Post: reach it and the Midway pad opens in the lobby
+export const CHASM = [11880, 11940]; // the canyon before Sundown: the drawbridge goes across it
+export const BRIDGE_LEVER = { x: 11858, z: -7 };
 const CH = 200; // ground chunk length
 
 // ---------------------------------------------------------------- a seeded random (the same world every run)
@@ -23,10 +27,11 @@ export const TOWNS = [
 ];
 export const FORTS = [{ x: 5300, side: -1, name: "Fort Cinder" }];
 export const KEEPS = [{ x: 8700, side: 1, name: "Crimson Keep" }];
-const FLAT = [[0, 120, 70], ...TOWNS.map((t) => [t.x - 30, t.x + 250, 80]), ...FORTS.map((f) => [f.x - 40, f.x + 80, 110]), ...KEEPS.map((f) => [f.x - 50, f.x + 90, 120]), [LEN - 120, LEN + 200, 80]];
+const FLAT = [[-60, 150, 70], [LOBBY_X - 80, LOBBY_X + 80, 120], [MID_X - 40, MID_X + 120, 70], [11700, 11880, 70], ...TOWNS.map((t) => [t.x - 30, t.x + 250, 80]), ...FORTS.map((f) => [f.x - 40, f.x + 80, 110]), ...KEEPS.map((f) => [f.x - 50, f.x + 90, 120]), [LEN - 120, LEN + 200, 80]];
 
 const hash = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
 export function groundH(x, z) {
+  if (x > CHASM[0] && x < CHASM[1]) return -45; // (the canyon)
   const az = Math.abs(z);
   let h = Math.sin(x * 0.011 + z * 0.006) * 2.2 + Math.sin(x * 0.027 - z * 0.019) * 1.2 + Math.sin(z * 0.031 + 1.7) * 0.9 + Math.sin(x * 0.0021) * 4;
   h = Math.max(0, h + 3) * Math.min(1, Math.max(0, (az - 9) / 45)); // (flat near the track, dunes further out)
@@ -213,17 +218,118 @@ function station(P) {
   for (let i = 0; i < 4; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), MAT.lamp); l.position.set(x - 10 + i * 12, 3.2, -4.4); P.g.add(l); deco(P, 0.15, 3, 0.15, x - 10 + i * 12, 0, -4.4, MAT.iron); }
 }
 
+// a wall of pointed logs (one InstancedMesh for the logs + one for the tips); gaps = {n|s|w|e: [[a, b], ...]}
+const logGeo = new THREE.CylinderGeometry(0.32, 0.36, 1, 7), tipGeo = new THREE.ConeGeometry(0.34, 0.9, 7);
+function palisade(P, x0, x1, z0, z1, H = 4.5, gaps = {}) {
+  const pts = [], add = (x, z) => pts.push([x, z]);
+  const edge = (a, b, fixed, alongX, gl = []) => {
+    let s = a; const segs = [];
+    for (const [g0, g1] of [...gl].sort((p, q) => p[0] - q[0])) { segs.push([s, g0]); s = g1; }
+    segs.push([s, b]);
+    for (const [p0, p1] of segs) {
+      if (p1 - p0 < 0.3) continue;
+      for (let t = p0; t <= p1; t += 0.66) alongX ? add(t, fixed) : add(fixed, t);
+      if (alongX) P.cols.push({ x0: p0, x1: p1, y0: 0, y1: H, z0: fixed - 0.4, z1: fixed + 0.4 });
+      else P.cols.push({ x0: fixed - 0.4, x1: fixed + 0.4, y0: 0, y1: H, z0: p0, z1: p1 });
+    }
+  };
+  edge(x0, x1, z0, true, gaps.n); edge(x0, x1, z1, true, gaps.s); edge(z0, z1, x0, false, gaps.w); edge(z0, z1, x1, false, gaps.e);
+  const logs = new THREE.InstancedMesh(logGeo, MAT.woodD, pts.length), tips = new THREE.InstancedMesh(tipGeo, MAT.woodD, pts.length), m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), sc = new THREE.Vector3();
+  pts.forEach(([x, z], i) => { const h = H + (hash(x, z) - 0.5) * 0.7; m.compose(v.set(x, h / 2, z), q, sc.set(1, h, 1)); logs.setMatrixAt(i, m); m.compose(v.set(x, h + 0.45, z), q, sc.set(1, 1, 1)); tips.setMatrixAt(i, m); });
+  logs.castShadow = tips.castShadow = true; logs.receiveShadow = true; P.g.add(logs, tips);
+}
+function startTown(P) {
+  palisade(P, -45, 140, -48, 48, 4.5, { w: [[-5, 5]], e: [[-5, 5]] });
+  building(P, 10, -24, 11, 8, 4.6, MAT.wood, "GENERAL STORE", 1, "store");
+  building(P, 28, -24, 9, 8, 4.4, MAT.red, "GUNSMITH", 1, "guns");
+  building(P, 46, -24, 9, 8, 4.4, MAT.woodL, "SHERIFF", 1, "sheriff");
+  building(P, 15, 24, 12, 9, 5.2, MAT.wood, "SALOON", -1, null);
+  building(P, 36, 24, 10, 8, 5.6, MAT.woodL, "HOTEL", -1, null);
+  deco(P, 50, 0.9, 4, 30, 0, -6.2, MAT.plank);
+  const st = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.6), signMat("FORT HOPE")); st.position.set(30, 3.2, -7.6); P.g.add(st);
+  deco(P, 0.2, 3, 0.2, 26, 0, -7.7, MAT.woodD); deco(P, 0.2, 3, 0.2, 34, 0, -7.7, MAT.woodD);
+  coalPile(P, 70, -10); coalPile(P, 90, 10);
+  for (const [x, z] of [[-30, -30], [-30, 30], [120, -30], [120, 30]]) { deco(P, 3, 7, 3, x, 0, z, MAT.wood); deco(P, 4, 0.4, 4, x, 7, z, MAT.roof); }
+  P.name = "Fort Hope";
+}
+function midPost(P) {
+  const x = MID_X;
+  palisade(P, x - 20, x + 100, -40, 40, 4.5, { w: [[-5, 5]], e: [[-5, 5]] });
+  building(P, x + 15, -22, 11, 8, 4.6, MAT.wood, "GENERAL STORE", 1, "store");
+  building(P, x + 33, -22, 9, 8, 4.4, MAT.red, "GUNSMITH", 1, "guns");
+  building(P, x + 51, -22, 9, 8, 4.4, MAT.woodL, "SHERIFF", 1, "sheriff");
+  building(P, x + 25, 22, 14, 9, 5, MAT.woodL, "HALFWAY POST", -1, null);
+  deco(P, 40, 0.9, 4, x + 30, 0, -6.2, MAT.plank);
+  const st = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.6), signMat("HALFWAY POST - 6 KM")); st.position.set(x + 30, 3.2, -7.6); P.g.add(st);
+  coalPile(P, x + 70, -10); coalPile(P, x + 80, 10);
+  P.name = "Halfway Post";
+}
+// the canyon + the drawbridge (two halves that swing down) + the lever that lowers it
+function bridge(P) {
+  const [a, b] = CHASM;
+  for (const [x, dir] of [[a, 1], [b, -1]]) {
+    for (const z of [-4.5, 4.5]) { deco(P, 1, 12, 1, x - dir * 1, 0, z, MAT.stone); deco(P, 1.6, 1, 1.6, x - dir * 1, 12, z, MAT.stoneD); }
+    const leaf = new THREE.Group(); leaf.position.set(x, 0.2, 0); P.g.add(leaf);
+    const L2 = (b - a) / 2;
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(L2, 0.4, 7), MAT.woodD); deck.position.x = dir * L2 / 2; deck.castShadow = deck.receiveShadow = true; leaf.add(deck);
+    for (const z of [-0.75, 0.75]) { const r = new THREE.Mesh(new THREE.BoxGeometry(L2, 0.16, 0.1), MAT.rail); r.position.set(dir * L2 / 2, 0.28, z); leaf.add(r); }
+    for (const z of [-3.4, 3.4]) { const r = new THREE.Mesh(new THREE.BoxGeometry(L2, 1, 0.15), MAT.iron); r.position.set(dir * L2 / 2, 0.7, z); leaf.add(r); }
+    leaf.userData.dir = dir; leaf.rotation.z = dir * 1.45;
+    (P.leaves ||= []).push(leaf);
+  }
+  const lx = BRIDGE_LEVER.x, lz = BRIDGE_LEVER.z;
+  deco(P, 1.2, 1.2, 0.6, lx, 0, lz, MAT.iron);
+  const lev = new THREE.Group(); lev.position.set(lx, 1.2, lz); P.g.add(lev);
+  const st = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.2, 0.12), MAT.iron); st.position.y = 0.6; lev.add(st);
+  const kn = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), MAT.red); kn.position.y = 1.2; lev.add(kn);
+  lev.rotation.z = 0.6; P.lever = lev;
+  P.inter.push({ kind: "bridge", x: lx, z: lz + 1, y: 0, r: 2.6, name: "Bridge lever" });
+  const sg = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.4), signMat("DRAWBRIDGE - PULL LEVER")); sg.position.set(lx - 4, 3, lz - 1); P.g.add(sg);
+  deco(P, 0.2, 2.6, 0.2, lx - 6.5, 0, lz - 1, MAT.woodD); deco(P, 0.2, 2.6, 0.2, lx - 1.5, 0, lz - 1, MAT.woodD);
+  P.name = "The Drawbridge";
+}
+// THE LOBBY: a walled frontier town far from the track. Shops for cosmetics, classes + starting guns, and the pads.
+function padSign(text, sub, color) {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 128; const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const o = { c, t, last: "", draw(a, b2, col) { const k = a + b2 + col; if (k === o.last) return; o.last = k; const g = c.getContext("2d"); g.fillStyle = "#2a1608"; g.fillRect(0, 0, 256, 128); g.strokeStyle = col || "#f4e2b8"; g.lineWidth = 6; g.strokeRect(5, 5, 246, 118); g.fillStyle = col || "#f4e2b8"; g.textAlign = "center"; g.font = "bold 42px Georgia, serif"; g.fillText(a, 128, 56); g.font = "bold 28px Georgia, serif"; g.fillText(b2, 128, 102); t.needsUpdate = true; } };
+  o.draw(text, sub, color); return o;
+}
+function lobby(P) {
+  const X = LOBBY_X;
+  palisade(P, X - 50, X + 50, -50, 50, 5);
+  building(P, X - 30, -30, 12, 9, 5, MAT.red, "OUTFITTER", 1, "outfit");
+  building(P, X - 10, -30, 12, 9, 5.4, MAT.woodL, "CLASS OFFICE", 1, "classes");
+  building(P, X + 10, -30, 10, 9, 4.6, MAT.wood, "GUNSMITH", 1, "lobbyguns");
+  building(P, X + 32, -30, 12, 9, 5.2, MAT.wood, "SALOON", 1, null);
+  P.pads = [];
+  for (let i = 0; i < 5; i++) {
+    const x = X + 32 - i * 16, z = 28, mid = i === 4;
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(6, 0.3, 6), mid ? MAT.gold : MAT.plank); pad.position.set(x, 0.15, z); pad.receiveShadow = true; P.g.add(pad);
+    const ring = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.2, 6.4), mid ? MAT.red : MAT.woodD); ring.position.set(x, 0.05, z); P.g.add(ring);
+    for (const sx of [-1, 1]) deco(P, 0.25, 4.4, 0.25, x + sx * 2.6, 0, z + 3.2, MAT.woodD);
+    const sg = padSign(mid ? "MIDWAY" : "TRAIN " + (i + 1), mid ? "locked" : "0 / 4", mid ? "#ffd23a" : null);
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(5, 2.5), new THREE.MeshBasicMaterial({ map: sg.t })); board.position.set(x, 4.2, z + 3.3); board.rotation.y = Math.PI; P.g.add(board);
+    P.pads.push({ x, z, mid, sign: sg, pad });
+  }
+  for (let i = 0; i < 10; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), MAT.wood); b.position.set(X - 44 + (i % 2) * 2, 0.5, -10 + i * 3); P.g.add(b); }
+  const tw = X + 40; for (const [a, b] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) deco(P, 0.3, 6, 0.3, tw + a, 0, 8 + b, MAT.woodD);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 3.2, 12), MAT.wood); tank.position.set(tw, 7.6, 8); P.g.add(tank);
+  const big = new THREE.Mesh(new THREE.PlaneGeometry(14, 2.6), signMat("LAST TRAIN WEST")); big.position.set(X, 8, 49.4); big.rotation.y = Math.PI; P.g.add(big);
+  P.spawn = { x: X, z: 0 };
+  P.name = "Lobby";
+}
+
 // ---------------------------------------------------------------- the list of everything (made once per run)
 export function makePlaces() {
   srand(777);
   const list = [];
   const add = (x, type, data = {}) => list.push({ x, type, ...data, built: false });
-  add(0, "depot");
+  add(0, "depot"); add(LOBBY_X, "lobby"); add(MID_X, "midway"); add(CHASM[0], "bridge");
   for (const t of TOWNS) add(t.x, "town", { t });
   for (const f of FORTS) add(f.x, "fort", { f });
   for (const k of KEEPS) add(k.x, "keep", { k });
   add(LEN, "station");
-  const busy = (x) => list.some((p) => Math.abs(p.x - x) < (p.type === "town" ? 300 : p.type === "fort" || p.type === "keep" ? 150 : 50));
+  const busy = (x) => list.some((p) => Math.abs(p.x - x) < (p.type === "town" ? 300 : p.type === "fort" || p.type === "keep" || p.type === "midway" ? 160 : p.type === "bridge" ? 250 : p.type === "depot" ? 180 : 50));
   for (let x = 250; x < LEN - 150; x += rr(90, 190)) {
     if (busy(x)) continue;
     const r = rnd(), side = rnd() < 0.5 ? -1 : 1;
@@ -253,7 +359,7 @@ export class World {
     for (const p of this.places) {
       const near = p.x > px - 300 && p.x < px + 450;
       if (near && !p.built) { this.build(p); onBuilt && onBuilt(p); }
-      else if (!near && p.built && p.x < px - 300) this.unbuild(p);
+      else if (!near && p.built && (p.x < px - 300 || p.x > px + 800)) this.unbuild(p);
     }
   }
   build(p) {
@@ -268,7 +374,10 @@ export class World {
     else if (p.type === "coal") { coalPile(P, p.x, p.z); P.foes.push({ x: p.x + 5, z: p.z * 1.8 }); }
     else if (p.type === "mine") mine(P, p.x, p.z);
     else if (p.type === "camp") { const y = groundH(p.x, p.z); const t = new THREE.Mesh(new THREE.ConeGeometry(2.4, 3, 6), MAT.canvas); t.position.set(p.x, y + 1.5, p.z); P.g.add(t); const f = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.6, 6), MAT.red); f.position.set(p.x + 4, y + 0.3, p.z); P.g.add(f); for (let i = 0; i < 3; i++) P.spots.push({ x: p.x + rr(-4, 4), z: p.z + rr(-4, 4), y }); P.foes.push({ x: p.x + 6, z: p.z, kind: "runner" }, { x: p.x - 6, z: p.z }); }
-    else if (p.type === "depot") { building(P, 20, -16, 12, 8, 4.5, MAT.woodL, "DEPOT", 1, "store"); deco(P, 40, 0.9, 4, 30, 0, -6.2, MAT.plank); coalPile(P, 60, -9); }
+    else if (p.type === "depot") startTown(P);
+    else if (p.type === "lobby") lobby(P);
+    else if (p.type === "midway") midPost(P);
+    else if (p.type === "bridge") bridge(P);
     this.scene.add(P.g);
     p.P = P; p.built = true;
     this.cols.push(...P.cols); this.lamps.push(...P.lamps); this.inter.push(...P.inter); this.inside.push(...P.inside);
@@ -293,20 +402,21 @@ export class World {
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
     const ground = new THREE.Mesh(geo, MAT.sand); ground.position.x = x0 + CH / 2; ground.receiveShadow = true; g.add(ground);
     if (x0 < LEN + 100 && x0 + CH > -40) {
-      const a = Math.max(x0, -40), b = Math.min(x0 + CH, LEN + 60), len = b - a, mid = (a + b) / 2;
+      const A = Math.max(x0, -40), B = Math.min(x0 + CH, LEN + 60);
+      for (const [a, b] of [[A, Math.min(B, CHASM[0])], [Math.max(A, CHASM[1]), B]]) { if (b - a < 1) continue; const len = b - a, mid = (a + b) / 2;
       for (const z of [-0.75, 0.75]) { const r = new THREE.Mesh(new THREE.BoxGeometry(len, 0.16, 0.1), MAT.rail); r.position.set(mid, 0.38, z); g.add(r); }
       const bal = new THREE.Mesh(new THREE.BoxGeometry(len, 0.2, 3.4), MAT.ballast); bal.position.set(mid, 0.1, 0); bal.receiveShadow = true; g.add(bal);
       const n = Math.floor(len / 0.9), ties = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 0.12, 2.5), MAT.tie, n), m = new THREE.Matrix4();
       for (let i = 0; i < n; i++) { m.makeTranslation(a + i * 0.9 + 0.45, 0.24, 0); ties.setMatrixAt(i, m); }
       ties.receiveShadow = true; g.add(ties);
-    }
+    } }
     // cacti, rocks, telegraph poles
     srand(c * 9176 + 3);
     const cac = new THREE.InstancedMesh(this.cactusGeo, MAT.cactus, 40), rock = new THREE.InstancedMesh(this.rockGeo, MAT.rock, 40), m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), v = new THREE.Vector3();
     let nc = 0, nr = 0;
     for (let i = 0; i < 70; i++) {
       const x = x0 + rnd() * CH, z = (rnd() < 0.5 ? -1 : 1) * (10 + rnd() * 200), k = rnd();
-      if (this.places.some((p) => Math.abs(p.x + 60 - x) < 140 && (p.type === "town" || p.type === "fort" || p.type === "keep" || p.type === "station") && Math.abs(z) < 130)) continue;
+      if (this.places.some((p) => Math.abs(p.x + 60 - x) < 140 && (p.type === "town" || p.type === "fort" || p.type === "keep" || p.type === "station" || p.type === "depot" || p.type === "lobby" || p.type === "midway" || p.type === "bridge") && Math.abs(z) < 130)) continue;
       const y = groundH(x, z);
       if (k < 0.55 && nc < 40) { q.setFromAxisAngle(v.set(0, 1, 0), rnd() * 6); const sc = 0.7 + rnd() * 0.8; m.compose(v.set(x, y - 0.1, z), q, s.set(sc, sc, sc)); cac.setMatrixAt(nc++, m); }
       else if (nr < 40) { q.setFromAxisAngle(v.set(rnd(), 1, rnd()).normalize(), rnd() * 6); const sc = 0.5 + rnd() * 2.2; m.compose(v.set(x, y, z), q, s.set(sc, sc * 0.7, sc)); rock.setMatrixAt(nr++, m); }
