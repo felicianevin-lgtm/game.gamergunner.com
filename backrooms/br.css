@@ -36,6 +36,8 @@ body.touch #touchBtns { display: flex; }
 #touchBtns button { pointer-events: auto; width: 62px; height: 62px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.5); background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 26px; touch-action: none; }
 body.touch #stamWrap { bottom: auto; top: 14px; }
 body.touch #rocks { bottom: auto; top: 36px; }
+#keyHud { position: absolute; left: 16px; bottom: 84px; margin: 0; font-weight: 800; color: #ffd531; text-shadow: 0 1px 4px #000; }
+body.touch #keyHud { bottom: auto; top: 58px; }
 
 /* panels */
 .panel { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(60, 50, 15, 0.85), rgba(15, 12, 4, 0.96)); z-index: 6; overflow-y: auto; touch-action: pan-y; }

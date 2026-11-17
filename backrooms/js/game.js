@@ -1,5 +1,5 @@
 // THE BACKROOMS game engine, shared by two games (each game's js/main.js calls run({levels, saveKey})):
-//   The Backrooms (site/backrooms/): four levels, Level 0 the Lobby -> the Poolrooms -> Level Fun -> the Deep Lobby.
+//   The Backrooms (site/backrooms/): five levels, Level 0 the Lobby -> the Poolrooms -> Level Fun -> the Parking Garage -> the Deep Lobby.
 //   Backrooms Survival (site/backroomsurvival/): twelve levels, more monsters every level.
 // First person. A new maze every time you play a level. Caught = try that level again. Progress is saved in this browser.
 // Escaping the last level wins the Backrooms hazmat suit and the Backrooms monster suit for your avatar (avatar.js unlockSuit).
@@ -87,7 +87,8 @@ function startHum(kind) {
   try {
     const a = audio(), g = a.createGain(); g.gain.value = kind === "pool" ? 0.0 : 0.018; g.connect(master);
     const o1 = a.createOscillator(), o2 = a.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 60; o2.type = "sine"; o2.frequency.value = 120;
-    const f = a.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = kind === "party" ? 400 : 260;
+    const f = a.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = kind === "party" ? 400 : kind === "garage" ? 190 : 260;
+    if (kind === "garage") { o1.frequency.value = 50; o2.frequency.value = 100; g.gain.value = 0.026; } // (a deeper buzz: big lights and fans)
     o1.connect(f); o2.connect(f); f.connect(g); o1.start(); o2.start();
     hum = { g, o: [o1, o2] };
   } catch {}
@@ -124,7 +125,23 @@ const SFX = {
   lightsOut: () => { noise(0.05, 3000, 0.9, "highpass"); tone(120, 0.4, "sawtooth", 40, 0.5, 0.02); },
   giggleLow: () => [440, 495, 440, 523, 440].forEach((f, i) => tone(f / 2.2, 0.16, "square", f / 2.6, 0.35, i * 0.13)),
   doom: () => { tone(49, 2.5, "sawtooth", 41, 0.9); tone(52, 2.5, "sawtooth", 43, 0.7); noise(2.2, 160, 0.5); },
+  // the Parking Garage: the key, the locked door, Skinwalker footsteps and its awful half-human scream, far-off clanks
+  keyGet: () => { [880, 1175, 1568].forEach((f, i) => tone(f, 0.18, "triangle", 0, 0.5, i * 0.08)); noise(0.06, 5000, 0.4, "highpass"); },
+  rattle: () => { for (let i = 0; i < 4; i++) { noise(0.05, 1800, 0.6, "bandpass", i * 0.07); tone(220, 0.05, "square", 180, 0.2, i * 0.07); } },
+  clack: (v = 1) => { tone(1250, 0.035, "square", 700, 0.3 * v); noise(0.04, 3200, 0.35 * v, "highpass"); },
+  swShriek: (v = 1) => { tone(420, 1.0, "sawtooth", 1500, 0.55 * v); tone(445, 1.0, "square", 1380, 0.3 * v, 0.04); tone(300, 0.6, "sawtooth", 150, 0.4 * v, 0.6); noise(0.9, 2200, 0.6 * v, "bandpass"); },
+  clank: () => { const f = 120 + Math.random() * 80; tone(f, 0.9, "triangle", f * 0.7, 0.28); tone(f * 2.7, 0.5, "sine", f * 2.2, 0.12); noise(0.25, 700, 0.25); },
 };
+// A Skinwalker talks in voices it copied (the browser's own speech voice, slowed way down and pitched low).
+const MY_NAME = (() => { try { return (localStorage.getItem("gv_name") || "").replace(/[^\w ]/g, "").slice(0, 16); } catch { return ""; } })();
+const MIMIC = ["hello?", "is someone there?", "help me", "over here", "come here", "where are you?", "I can see you", "it's okay. come out", ...(MY_NAME ? [MY_NAME + "?", "come here, " + MY_NAME] : [])];
+function mimic(text, vol = 1) {
+  try {
+    const sp = window.speechSynthesis; if (!sp || sp.speaking) return;
+    const u = new SpeechSynthesisUtterance(text); u.pitch = 0.05; u.rate = 0.7; u.volume = Math.max(0.08, Math.min(1, vol)); sp.speak(u);
+  } catch {}
+}
+function hush() { try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch {} }
 function growl(len, vol) {
   try {
     const a = audio(), t = a.currentTime, o = a.createOscillator(), lfo = a.createOscillator(), lg = a.createGain(), bp = a.createBiquadFilter(), g = a.createGain();
@@ -236,7 +253,8 @@ if (touch) {
 async function startLevel(n) {
   loading = true; playing = false; dying = 0; dyingLook = null; cut = null; clearGore();
   $("jump").classList.remove("on"); $("dead").classList.add("hidden"); overlay("black").classList.remove("on"); // (the caught screen goes away)
-  stopMusicNow();
+  stopMusicNow(); hush();
+  P.key = false; $("keyHud").classList.add("hidden");
   $("loadMsg").textContent = "Loading " + LEVELS[n].name + "…"; $("loadMsg").classList.remove("hidden");
   if (L) { scene.remove(L.group); L.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
   for (const m of mons) scene.remove(m.c.g);
@@ -257,12 +275,12 @@ async function startLevel(n) {
     const c = await make(m.kind);
     scene.add(c.g);
     // [walk, chase, how far it sees, name]. The Crawler (the water monster) is the fastest thing down here.
-    const S = { bacteria: [1.6, 4.6, 20, "the Bacteria"], entity: [1.6, 4.6, 20, "the Entity"], crawler: [5, 27, 0, "the Crawler"], partygoer: [1.5, 4.7, 16, "a Partygoer"], clark: [2.4, 5.6, 26, "Captain Clark"] }[m.kind];
+    const S = { bacteria: [1.6, 4.6, 20, "the Bacteria"], entity: [1.6, 4.6, 20, "the Entity"], crawler: [5, 27, 0, "the Crawler"], partygoer: [1.5, 4.7, 16, "a Partygoer"], clark: [2.4, 5.6, 26, "Captain Clark"], skinwalker: [1.7, 5.2, 22, "a Skinwalker"] }[m.kind];
     const y = m.kind === "crawler" ? L.pool.FLOOR : 0;
-    mons.push({ kind: m.kind, c, pos: V(m.x, y, m.z), yaw: Math.random() * 6, walk: S[0], chase: S[1], seeR: S[2], name: S[3], state: "wander", goal: null, path: null, pathT: 0, seeT: 0, lastSeen: null, searchT: 0, distract: null, alarm: 0, giggleT: 3 + Math.random() * 5, growlT: 4 + Math.random() * 4, stepD: 0, stepN: 0 });
+    mons.push({ kind: m.kind, c, pos: V(m.x, y, m.z), yaw: Math.random() * 6, walk: S[0], chase: S[1], seeR: S[2], name: S[3], state: "wander", goal: null, path: null, pathT: 0, seeT: 0, lastSeen: null, searchT: 0, distract: null, alarm: 0, giggleT: 3 + Math.random() * 5, growlT: 4 + Math.random() * 4, talkT: 5 + Math.random() * 10, stepD: 0, stepN: 0 });
   }
   drawLayout();
-  startHum(L.pool ? "pool" : L.party ? "party" : "lobby");
+  startHum(L.pool ? "pool" : L.party ? "party" : L.garage ? "garage" : "lobby");
   $("loadMsg").classList.add("hidden");
   $("lvlName").textContent = def.name; $("lvlSub").textContent = def.sub; $("goal").textContent = def.goal;
   const t = $("title"); t.classList.remove("on"); void t.offsetWidth; t.classList.add("on");
@@ -322,7 +340,16 @@ function updatePlayer(dt) {
   // rocks: pick up (E) and throw (F / click)
   let nearRock = null;
   for (const R of rocks) if (R.m.position.distanceTo(P.pos.clone().setY(R.m.position.y)) < 1.8 && Math.abs(R.m.position.y - P.pos.y) < 1.5) nearRock = R;
-  $("prompt").textContent = nearRock && P.rocks < 3 ? (touch ? "Tap ✋ to pick up the rock" : "Press E to pick up the rock") : "";
+  let say = nearRock && P.rocks < 3 ? (touch ? "Tap ✋ to pick up the rock" : "Press E to pick up the rock") : "";
+  // the KEY (the Parking Garage): pick it up and the EXIT unlocks
+  const K = L.key, nearKey = K && !P.key && Math.hypot(K.x - P.pos.x, K.z - P.pos.z) < 1.7 && Math.abs(K.y - (P.pos.y + 0.9)) < 1.6;
+  if (nearKey) say = touch ? "Tap ✋ to take the KEY" : "Press E to take the KEY";
+  if (wantGrab && nearKey) {
+    P.key = true; K.mesh.visible = false; K.light.visible = false; if (L.unlock) L.unlock(); SFX.keyGet();
+    $("keyHud").classList.remove("hidden"); $("goal").textContent = "You have the KEY! The EXIT is open. Get there... quietly.";
+    const tt = $("title"); tt.classList.remove("on"); void tt.offsetWidth; tt.classList.add("on");
+    wantGrab = false;
+  }
   if (wantGrab && nearRock && P.rocks < 3) { scene.remove(nearRock.m); rocks.splice(rocks.indexOf(nearRock), 1); P.rocks++; SFX.pickup(); }
   if (wantThrow && P.rocks > 0) {
     P.rocks--; SFX.throw();
@@ -337,8 +364,12 @@ function updatePlayer(dt) {
   $("stam").style.width = P.stamina * 100 + "%";
   $("stamWrap").classList.toggle("low", P.stamina < 0.25 || !!P.tired);
   $("water").classList.toggle("on", P.inWater);
-  // the exit
-  if (Math.hypot(P.pos.x - L.exit.x, P.pos.z - L.exit.z) < L.exit.r) levelDone();
+  // the exit (locked until you have the key, on levels that have one)
+  if (Math.hypot(P.pos.x - L.exit.x, P.pos.z - L.exit.z) < L.exit.r + (L.key ? 1.2 : 0)) {
+    if (L.key && !P.key) { say = "🔒 LOCKED. Find the KEY in one of the little rooms."; if ((P.rattleT = (P.rattleT || 0) - dt) < 0) { P.rattleT = 1.6; SFX.rattle(); } }
+    else if (Math.hypot(P.pos.x - L.exit.x, P.pos.z - L.exit.z) < L.exit.r) levelDone();
+  }
+  $("prompt").textContent = say;
 }
 function updateRocks(dt) {
   for (let i = flying.length - 1; i >= 0; i--) {
@@ -404,13 +435,13 @@ function updateMonsters(dt) {
       m.seeT = 0.2;
       const mEye = V(m.pos.x, m.c.height * 0.85, m.pos.z);
       const canSee = d < 2.2 || (d < m.seeR && sees(mEye, eyeP));
-      if (canSee) { if (m.state !== "chase") { SFX.chase(); if (m.kind === "partygoer") SFX.giggle(); } m.state = "chase"; m.lastSeen = P.pos.clone(); m.lostT = 0; }
-      else if (m.state === "chase") { if ((m.lostT = (m.lostT || 0) + 0.2) > 1.2) { m.state = "search"; m.searchT = 6; } } // (it has to lose you for a moment before it gives up: no flickering on and off)
-      else if (P.noise > 0 && d < 14 && m.state === "wander") { m.state = "search"; m.lastSeen = P.pos.clone(); m.searchT = 5; }
+      if (canSee) { if (m.state !== "chase") { SFX.chase(); if (m.kind === "partygoer") SFX.giggle(); if (m.kind === "skinwalker") { hush(); SFX.swShriek(0.6); } } m.state = "chase"; m.lastSeen = P.pos.clone(); m.lostT = 0; }
+      else if (m.state === "chase") { if ((m.lostT = (m.lostT || 0) + 0.2) > 1.2) { m.state = "search"; m.searchT = m.kind === "skinwalker" ? 12 : 6; } } // (Skinwalkers keep looking longer) // (it has to lose you for a moment before it gives up: no flickering on and off)
+      else if (P.noise > 0 && d < (m.kind === "skinwalker" ? 20 : 14) && m.state === "wander") { m.state = "search"; m.lastSeen = P.pos.clone(); m.searchT = m.kind === "skinwalker" ? 9 : 5; }
     }
     if (m.state === "chase") { goal = P.pos; speed = m.chase; }
     else if (m.state === "search") { goal = m.lastSeen; speed = (m.walk + m.chase) / 2; m.searchT -= dt; if (m.searchT <= 0 || Math.hypot(goal.x - m.pos.x, goal.z - m.pos.z) < 1) m.state = "wander"; }
-    else { if (!m.goal || Math.hypot(m.goal.x - m.pos.x, m.goal.z - m.pos.z) < 1 || m.pathT < -15) { const g = L.grid; m.goal = cellMid(g, Math.floor(Math.random() * g.W), Math.floor(Math.random() * g.H)); m.pathT = 0; } goal = m.goal; }
+    else { if (!m.goal || Math.hypot(m.goal.x - m.pos.x, m.goal.z - m.pos.z) < 1 || m.pathT < -15) { const g = L.grid, oc = g.open && g.open[Math.floor(Math.random() * g.open.length)]; m.goal = oc ? cellMid(g, oc[0], oc[1]) : cellMid(g, Math.floor(Math.random() * g.W), Math.floor(Math.random() * g.H)); m.pathT = 0; } goal = m.goal; }
     // find the way (rooms of the maze)
     const g = L.grid, mc = cellOf(g, m.pos), gc = cellOf(g, goal);
     if (m.pathT <= 0 || !m.via) { m.via = nextStep(g, mc, gc); m.pathT = 0.25; }
@@ -422,6 +453,11 @@ function updateMonsters(dt) {
       const v = Math.max(0, 1 - d / 20);
       m.stepD += sp * dt; if (m.stepD > 1.35) { m.stepD = 0; if (v > 0) (m.stepN++ % 2 ? SFX.pegStep : SFX.bootStep)(v); }
       if ((m.growlT -= dt) < 0) { m.growlT = m.state === "chase" ? 2.5 + Math.random() * 2 : 6 + Math.random() * 6; if (d < 24) SFX.growl(Math.max(0.25, v)); }
+    }
+    if (m.kind === "skinwalker") { // bony clicking footsteps... and it talks, in voices it copied (one of them is yours)
+      const v = Math.max(0, 1 - d / 16);
+      m.stepD += sp * dt; if (m.stepD > 1.1) { m.stepD = 0; if (v > 0) SFX.clack(v); }
+      if ((m.talkT -= dt) < 0) { m.talkT = 9 + Math.random() * 12; if (d < 26 && m.state !== "chase") mimic(MIMIC[Math.floor(Math.random() * MIMIC.length)], 1 - d / 28); }
     }
     if (m.state === "chase") danger = Math.max(danger, 1 - Math.min(1, d / m.seeR));
     if (d < (m.kind === "clark" ? 1.3 : 1.1)) return caught(m);
@@ -455,11 +491,12 @@ function move(m, to, speed, dt, rad) {
 function caught(m) {
   if (dying || god) return;
   dying = 0.001; deathBy = m.name; playing = false;
-  stopMusicNow(); stopHum();
+  stopMusicNow(); stopHum(); hush();
   $("danger").style.opacity = "0"; dangerV = 0;
   if (document.pointerLockElement) document.exitPointerLock();
   if (m.kind === "clark" && m.c.pose) return clarkCutscene(m);
   if (m.kind === "bacteria" && m.c.pose) return bacteriaCutscene(m);
+  if (m.kind === "skinwalker" && m.c.pose) return swCutscene(m);
   if ((m.kind === "crawler" || m.kind === "partygoer") && m.c.face) return catchScene(m);
   SFX.scream();
   $("jump").classList.remove("on"); void $("jump").offsetWidth; $("jump").classList.add("on");
@@ -498,6 +535,7 @@ function clarkCutscene(m) {
 function updateCut(dt) {
   if (cut.kind === "bac") return updateBacCut(dt);
   if (cut.kind === "catch") return updateCatch(dt);
+  if (cut.kind === "sw") return updateSwCut(dt);
   const c = cut, m = c.m, t = (c.t += dt), H = c.H;
   const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)), seg = (a, b) => ease((t - a) / (b - a));
   const at = (k, when, fn) => { if (t >= when && !c.done[k]) { c.done[k] = 1; fn(); } };
@@ -825,6 +863,85 @@ function updateCatch(dt) {
   flyGore(dt);
 }
 
+// ---------------------------------------------------------------- a Skinwalker's catch (the Parking Garage)
+// It grabs you and lifts you up over its head... SLAMS you down on the ground. Picks you up and slings you up into the
+// roof: SLAM. Slams you on the ground again. Then it slowly carries you up to its face... it's wearing YOUR face. It
+// tilts its head, whispers in your own voice, screams. Lights out. Seen through your eyes; concrete dust and a few
+// cartoon red bits, then the CAUGHT screen.
+const DUST = new THREE.MeshLambertMaterial({ color: 0x8d8f8e });
+function swCutscene(m) {
+  clearGore(); gore = new THREE.Group(); scene.add(gore);
+  const p = V(P.pos.x, L.floorY, P.pos.z);
+  const toYou = V(P.pos.x - m.pos.x, 0, P.pos.z - m.pos.z); if (toYou.lengthSq() < 1e-4) toYou.set(0, 0, 1); toYou.normalize();
+  const base = Math.atan2(toYou.x, toYou.z);
+  let best = null; // (it faces the way with the most room in front of it, so you don't go through a wall)
+  for (let k = 0; k < 8; k++) { const a = base + k * Math.PI / 4, d = V(Math.sin(a), 0, Math.cos(a)), r = roomFrom(p, d, 3) + (k === 0 ? 0.8 : 0); if (!best || r > best.r) best = { d, r }; }
+  const dir = best.d, gap = Math.max(0.5, Math.min(0.9, roomFrom(p, dir.clone().negate(), 2) - 0.45));
+  m.pos.set(p.x - dir.x * gap, 0, p.z - dir.z * gap); m.yaw = Math.atan2(dir.x, dir.z);
+  m.c.g.position.copy(m.pos); m.c.g.rotation.set(0, m.yaw, 0); m.c.pose({});
+  const fr = Math.max(0.65, Math.min(1.25, gap + best.r - 0.4)), Hc = L.ceilingH || 4;
+  cut = { kind: "sw", m, t: 0, dir, right: V(dir.z, 0, -dir.x), eye: camera.position.clone(), done: {}, bits: [], heartT: 0,
+    high: m.pos.clone().addScaledVector(dir, fr * 0.6).setY(Math.min(Hc - 0.75, 3.35)), // (held up over its head)
+    floor: m.pos.clone().addScaledVector(dir, fr).setY(0.28), // (on the ground in front of it)
+    roof: m.pos.clone().addScaledVector(dir, fr * 0.75).setY(Hc - (L.garage ? 0.62 : 0.25)) }; // (up against the roof, under the beams)
+  overlay("black").classList.remove("on");
+  SFX.grab(); SFX.swShriek(); flash(0.3); jumpFlash();
+}
+function swSlam(at, up, red) {
+  SFX.slam(); flash(red ? 0.9 : 0.6); cut.shakeT = 0.3;
+  // (a little away from your eyes, toward it, so the bits fly past instead of covering the screen)
+  const p = up > 0 ? at.clone().setY(L.floorY + 0.06).addScaledVector(cut.dir, -0.55) : at.clone().add(V(0, 0.3, 0)).addScaledVector(cut.dir, -0.35);
+  burst(p, 22, V(0, up * 1.6, 0), [DUST], 0.05);
+  if (red) burst(p.clone().add(V(0, 0.1, 0)), 14, V(0, 2, 0), [RED], 0.05);
+}
+function updateSwCut(dt) {
+  const c = cut, m = c.m, t = (c.t += dt);
+  const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x)), seg = (a, b) => ease((t - a) / (b - a));
+  const lin = (a, b) => Math.max(0, Math.min(1, (t - a) / (b - a))), fast = (a, b) => lin(a, b) ** 2; // (fast: speeds up, like being slammed)
+  const at = (k, when, fn) => { if (t >= when && !c.done[k]) { c.done[k] = 1; fn(); } };
+  m.c.g.position.copy(m.pos); m.c.g.rotation.set(0, m.yaw, 0); m.c.g.updateMatrixWorld(true);
+  const face = m.c.face(V());
+  if (!c.held) c.held = face.clone().addScaledVector(c.dir, 0.6).add(V(0, -0.04, 0));
+  const cam = V(); let roll = 0, shake = 0.02, lean = 0, tilt = 0, up = 0, down = 0;
+  if (t < 0.4) { cam.copy(c.eye); shake = 0.04; } // it grabs you
+  else if (t < 1.0) { cam.lerpVectors(c.eye, c.high, seg(0.4, 0.95)); roll = Math.sin(t * 10) * 0.08; shake = 0.04; up = seg(0.4, 0.9); } // ...lifts you up over its head
+  else if (t < 1.25) { cam.lerpVectors(c.high, c.floor, fast(1.0, 1.25)); roll = 0.45 * lin(1.0, 1.25); lean = lin(1.0, 1.25); up = 1 - lin(1.0, 1.25); } // SLAM on the ground
+  else if (t < 1.7) { cam.copy(c.floor); roll = 0.45; lean = 1; shake = t < 1.45 ? 0.14 : 0.02; }
+  else if (t < 2.1) { cam.lerpVectors(c.floor, c.roof, fast(1.7, 2.1)); roll = 0.45 - 0.95 * lin(1.7, 2.1); lean = 1 - lin(1.7, 2.1); up = lin(1.7, 2.1); } // slung up into the roof
+  else if (t < 2.5) { cam.copy(c.roof); roll = -0.5; up = 1; shake = t < 2.3 ? 0.15 : 0.03; }
+  else if (t < 2.8) { cam.lerpVectors(c.roof, c.floor, fast(2.5, 2.8)); roll = -0.5 + 0.95 * lin(2.5, 2.8); lean = lin(2.5, 2.8); up = 1 - lin(2.5, 2.8); } // SLAM on the ground again
+  else if (t < 3.5) { cam.copy(c.floor); roll = 0.45; lean = 1 - seg(3.2, 3.5); shake = t < 3.0 ? 0.16 : 0.01; }
+  else { // slowly carried up to its face
+    const k = seg(3.5, 4.7);
+    cam.lerpVectors(c.floor, c.held, k); roll = 0.45 * (1 - k) + Math.sin(t * 2) * 0.03; shake = 0.01; lean = 0.2 * (1 - k);
+    tilt = seg(4.3, 4.8) * 0.55; down = 0.2 * k;
+    if (t >= 4.85) { cam.addScaledVector(c.dir, -0.22 * seg(4.85, 4.98)); shake = 0.12; } // (it lunges into you)
+  }
+  // its hands hold you by the sides
+  const R = c.right, hands = t < 0.25 ? null : [cam.clone().addScaledVector(R, -0.24).add(V(0, -0.28, 0)), cam.clone().addScaledVector(R, 0.24).add(V(0, -0.28, 0))];
+  m.c.pose({ hands, lean, tilt, up, down });
+  const look = m.c.face(V());
+  at("lift", 0.45, () => SFX.whoosh());
+  at("slam1", 1.25, () => swSlam(c.floor, 1));
+  at("sling", 1.72, () => SFX.whoosh());
+  at("roof", 2.1, () => swSlam(c.roof, -1));
+  at("slam2", 2.8, () => swSlam(c.floor, 1, true));
+  at("dark1", 3.02, () => overlay("black").classList.add("on"));
+  at("dark2", 3.28, () => overlay("black").classList.remove("on"));
+  if (t > 3.5 && t < 4.85 && (c.heartT -= dt) < 0) { c.heartT = 0.55; SFX.heart(); }
+  at("voice", 4.25, () => mimic(MY_NAME ? "found you, " + MY_NAME : "found you", 1));
+  at("scream", 4.85, () => { hush(); SFX.swShriek(1.2); SFX.screech(); jumpFlash(); flash(1); });
+  at("out", 5.0, () => overlay("black").classList.add("on"));
+  at("doom", 5.4, () => SFX.doom());
+  at("over", 6.0, () => { $("deadBy").textContent = "A Skinwalker got you!"; $("dead").classList.remove("hidden"); });
+  if ((c.shakeT = (c.shakeT || 0) - dt) > 0) shake = Math.max(shake, 0.12);
+  cam.x += (Math.random() - 0.5) * shake; cam.y += (Math.random() - 0.5) * shake; cam.z += (Math.random() - 0.5) * shake;
+  c.look = c.look ? c.look.lerp(look, Math.min(1, dt * 12)) : look.clone();
+  camera.position.copy(cam); camera.up.set(0, 1, 0); camera.lookAt(c.look); camera.rotateZ(roll);
+  lamp.position.set(cam.x, cam.y + 0.6, cam.z);
+  flyGore(dt);
+}
+
 // ---------------------------------------------------------------- the map (top right; M or a tap makes it big)
 // The level's layout is drawn once from above (walls, platforms, water, the exit); every frame the part around you
 // is copied in, then the monsters (red dots) and you (the yellow arrow).
@@ -837,12 +954,12 @@ function drawLayout() {
   for (const b of L.boxes) { x0 = Math.min(x0, b.x0); z0 = Math.min(z0, b.z0); x1 = Math.max(x1, b.x1); z1 = Math.max(z1, b.z1); }
   const c = document.createElement("canvas"); c.width = Math.ceil((x1 - x0) * MAP_PX); c.height = Math.ceil((z1 - z0) * MAP_PX);
   const x = c.getContext("2d"), X = (v) => (v - x0) * MAP_PX, Z = (v) => (v - z0) * MAP_PX;
-  x.fillStyle = L.pool ? "#d9eef2" : L.bg === 0x2a1030 ? "#3a1a40" : "#5a5130"; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = L.mapBg || (L.pool ? "#d9eef2" : L.bg === 0x2a1030 ? "#3a1a40" : "#5a5130"); x.fillRect(0, 0, c.width, c.height);
   x.fillStyle = "rgba(60,170,210,0.75)"; for (const w of L.water) x.fillRect(X(w.x0), Z(w.z0), (w.x1 - w.x0) * MAP_PX, (w.z1 - w.z0) * MAP_PX);
   const top = L.ceilingH ? L.ceilingH - 1.5 : 99;
   for (const b of L.boxes) { // walls, platforms, pillars (not the floor, the ceiling or the arches overhead)
     if (b.y1 <= L.floorY + 0.1 || b.y0 >= top) continue;
-    x.fillStyle = b.y1 - b.y0 < 2 && L.pool ? "#ffffff" : L.pool ? "#9fb7bd" : "#e8d88a";
+    x.fillStyle = L.mapWall || (b.y1 - b.y0 < 2 && L.pool ? "#ffffff" : L.pool ? "#9fb7bd" : "#e8d88a");
     x.fillRect(X(b.x0), Z(b.z0), Math.max(1.5, (b.x1 - b.x0) * MAP_PX), Math.max(1.5, (b.z1 - b.z0) * MAP_PX));
   }
   x.fillStyle = "#4dff7a"; x.beginPath(); x.arc(X(L.exit.x), Z(L.exit.z), 7, 0, 7); x.fill();
@@ -916,8 +1033,8 @@ $("again").onclick = () => { $("dead").classList.add("hidden"); startLevel(lvl);
 $("start").onclick = () => { audio(); $("menu").classList.add("hidden"); save.set(0); startLevel(0); };
 $("cont").onclick = () => { audio(); $("menu").classList.add("hidden"); startLevel(save.get()); };
 $("playAgain").onclick = () => { $("done").classList.add("hidden"); startLevel(0); };
-$("controls").innerHTML = touch ? "Left side: walk · Right side: look · 🏃 run · ⤒ jump · ✋ pick up rock · 🪨 throw · tap the map to make it big"
-  : "<b>WASD</b> walk · <b>Mouse</b> or <b>arrow keys</b> look · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> pick up a rock · <b>F</b> or <b>click</b> throw it · <b>M</b> big map · <b>Esc</b> pause";
+$("controls").innerHTML = touch ? "Left side: walk · Right side: look · 🏃 run · ⤒ jump · ✋ pick up · 🪨 throw · tap the map to make it big"
+  : "<b>WASD</b> walk · <b>Mouse</b> or <b>arrow keys</b> look · <b>Shift</b> run · <b>Space</b> jump · <b>E</b> pick up (rocks, keys) · <b>F</b> or <b>click</b> throw it · <b>M</b> big map · <b>Esc</b> pause";
 // Each game's js/main.js starts it: run({ levels, saveKey })
 export function run(cfg) {
   LEVELS = cfg.levels; SAVE_KEY = cfg.saveKey || SAVE_KEY;
@@ -938,6 +1055,8 @@ function tick(dt) {
   time += dt;
   if (L && L.waterMesh) { L.waterMesh.material.map.offset.x = Math.sin(time * 0.3) * 0.05; L.waterMesh.material.map.offset.y = time * 0.02; }
   if (L) for (const f of L.flicker) if (Math.random() < 0.04) f.visible = !f.visible || Math.random() < 0.6;
+  if (L && L.key && L.key.mesh.visible) { L.key.mesh.rotation.y += dt * 1.6; L.key.mesh.position.y = L.key.y + 0.1 + Math.sin(time * 2.2) * 0.03; L.key.light.intensity = 1.3 + Math.sin(time * 5) * 0.4; }
+  if (L && L.exitDoor) L.exitDoor.userData.update(dt);
   if (dying) { dying += dt; if (cut) updateCut(dt); else if (dyingLook) camera.quaternion.slerpQuaternions(dyingLook.from, dyingLook.to, Math.min(1, dying * 5)); return; }
   if (!playing || paused || loading) return;
   updatePlayer(dt);
@@ -947,6 +1066,7 @@ function tick(dt) {
   drawMap();
   if (L.pool && Math.random() < dt * 0.4) SFX.drip();
   if (L.party && Math.random() < dt * 0.08) SFX.party();
+  if (L.garage && Math.random() < dt * 0.05) SFX.clank();
 }
 requestAnimationFrame(frame);
 let god = false, frozen = false; // (testing only)

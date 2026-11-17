@@ -6,11 +6,13 @@
 //             made creepier here: taller and thinner, grimy, head tilted, twitching, long arms reaching for you
 //   clark     the final level: Captain Clark (models/captain-clark.glb, Gamer Gunner's model). 3.7 m tall, hunched, darker;
 //             he reaches for you while he chases. pose() holds him still for his cutscene.
+//   skinwalker Sublevel B3 (the Parking Garage): tall, thin, long arms, long black hair, a pale mask of YOUR face (original design)
 // make(kind) -> {g: Object3D (feet at 0, facing +z), animate(dt, speed), height}. Models load once (preload) and are
 // cloned; if a model can't load, a stand-in made of shapes is used so the game still works.
 import * as THREE from "/create/vendor/three.module.js";
 import { GLTFLoader } from "/create/vendor/GLTFLoader.js";
 import { clone as cloneSkinned } from "/create/vendor/SkeletonUtils.js";
+import { avatarPicture, loadAvatar } from "/create/js/avatar.js";
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const M = (c, o) => new THREE.MeshLambertMaterial({ color: c, ...(o || {}) });
@@ -319,6 +321,126 @@ function bacteria() {
     g.updateMatrixWorld(true);
   } };
 }
+// THE SKINWALKERS (Sublevel B3, original design, made of shapes): very tall and very thin, grey-tan skin, bony,
+// arms that hang down past its knees with long dark fingers, long black hair... and a pale mask made of YOUR face
+// (a picture of your own GunnerVerse avatar's head, drained of color). It walks slow and twitchy and runs hunched over.
+// pose() is for its catch cutscene: its hands reach for points in the world (a two-joint arm), lean, and a head tilt.
+let MASK = null;
+function maskTex() {
+  if (MASK) return MASK;
+  const c = document.createElement("canvas"); c.width = c.height = 256;
+  const x = c.getContext("2d"), t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; MASK = t;
+  const paint = (img) => {
+    x.clearRect(0, 0, 256, 256);
+    x.save(); x.beginPath(); x.ellipse(128, 128, 120, 126, 0, 0, 7); x.clip();
+    x.fillStyle = "#d6ccbb"; x.fillRect(0, 0, 256, 256);
+    if (img) { // your head, close up (the curved mask shows pictures backwards, so it's drawn flipped)
+      x.save(); x.translate(256, 0); x.scale(-1, 1);
+      const s = img.width, k = 0.6; x.drawImage(img, s * (0.52 - k / 2), s * (0.48 - k / 2), s * k, s * k, -8, -8, 272, 272); // (your hat / hair and face)
+      x.restore();
+      x.globalCompositeOperation = "saturation"; x.fillStyle = "#808080"; x.fillRect(0, 0, 256, 256); // (all the color drained out)
+      x.globalCompositeOperation = "multiply"; x.fillStyle = "#e9dfcc"; x.fillRect(0, 0, 256, 256);
+      x.globalCompositeOperation = "source-over";
+    } else { // (no avatar picture: a plain pale face with dark eye holes and a thin smile)
+      x.fillStyle = "#1a1210"; for (const s of [-1, 1]) { x.beginPath(); x.ellipse(128 + s * 44, 112, 20, 13, 0, 0, 7); x.fill(); }
+      x.strokeStyle = "#3a2a24"; x.lineWidth = 4; x.beginPath(); x.moveTo(88, 182); x.quadraticCurveTo(128, 200, 168, 182); x.stroke();
+    }
+    const gr = x.createRadialGradient(128, 128, 60, 128, 128, 130); gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, "rgba(25,12,6,0.8)");
+    x.fillStyle = gr; x.fillRect(0, 0, 256, 256);
+    x.strokeStyle = "rgba(30,20,15,0.6)"; x.lineWidth = 2; // (cracks)
+    for (const [a, b, cc, d] of [[60, 20, 82, 70], [82, 70, 74, 104], [200, 236, 182, 196], [182, 196, 196, 170]]) { x.beginPath(); x.moveTo(a, b); x.lineTo(cc, d); x.stroke(); }
+    x.restore(); t.needsUpdate = true;
+  };
+  paint(null);
+  try { const url = avatarPicture(loadAvatar(), 256); if (url) { const im = new Image(); im.onload = () => paint(im); im.src = url; } } catch {}
+  return t;
+}
+function skinwalker() {
+  const g = new THREE.Group(), root = pivot(g, 0, 0, 0);
+  const skin = new THREE.MeshStandardMaterial({ color: 0x8c8172, roughness: 0.9 }), dark = M(0x2b2420), hairM = M(0x0b0a09), nail = M(0x161210);
+  const cap = (parent, r, len, x, y, z, m = skin) => { const c = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), m); c.position.set(x, y, z); c.castShadow = true; parent.add(c); return c; };
+  const HIP = 1.5;
+  const hips = pivot(root, 0, HIP, 0);
+  cap(hips, 0.12, 0.16, 0, 0, 0).rotation.z = Math.PI / 2;
+  const chest = pivot(hips, 0, 0.04, 0);
+  cap(chest, 0.085, 0.42, 0, 0.32, 0); // (a thin waist: you can see its spine)
+  cap(chest, 0.19, 0.24, 0, 0.78, 0.01).scale.set(1.15, 1, 0.72); // (ribs)
+  for (let k = 0; k < 4; k++) cap(chest, 0.02, 0.22, 0, 0.62 + k * 0.08, 0.15, dark).rotation.z = Math.PI / 2; // (ribs showing)
+  for (const s of [-1, 1]) cap(chest, 0.075, 0.14, s * 0.23, 0.96, 0).rotation.z = s * 1.3; // (bony shoulders)
+  const neck = pivot(chest, 0, 1.02, 0.04);
+  cap(neck, 0.055, 0.22, 0, 0.13, 0);
+  const head = pivot(neck, 0, 0.3, 0.02);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), dark); skull.scale.set(1, 1.25, 1.05); skull.position.set(0, 0.1, -0.02); head.add(skull);
+  const mask = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 14, Math.PI / 2 - 0.85, 1.7, Math.PI / 2 - 0.95, 1.9), new THREE.MeshBasicMaterial({ map: maskTex(), color: 0xbdb6aa, side: THREE.DoubleSide }));
+  mask.scale.set(0.95, 1.15, 0.7); mask.position.set(0, 0.1, 0.03); head.add(mask);
+  const hair = [];
+  for (let k = 0; k < 11; k++) { const a = -2.3 + k * 0.46, h = pivot(head, Math.sin(a) * 0.14, 0.26, Math.cos(a) * 0.1 - 0.04); box(h, 0.035, 0.75 + (k % 3) * 0.12, 0.02, hairM, 0, -0.38 - (k % 3) * 0.06, 0); hair.push(h); }
+  const legs = [], arms = [];
+  for (const s of [-1, 1]) {
+    const thigh = pivot(hips, s * 0.13, 0, 0); cap(thigh, 0.075, 0.55, 0, -0.38, 0);
+    const knee = pivot(thigh, 0, -0.75, 0); cap(knee, 0.055, 0.56, 0, -0.36, 0);
+    const foot = pivot(knee, 0, -0.73, 0); box(foot, 0.11, 0.06, 0.32, skin, 0, 0.02, 0.08);
+    for (let f = 0; f < 3; f++) { const c = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.12, 5), nail); c.rotation.x = Math.PI / 2; c.position.set((f - 1) * 0.035, 0.0, 0.29); foot.add(c); }
+    legs.push({ thigh, knee, foot, s });
+    const sh = pivot(chest, s * 0.3, 0.98, 0); cap(sh, 0.06, 0.72, 0, -0.43, 0);
+    const el = pivot(sh, 0, -0.86, 0); cap(el, 0.05, 0.72, 0, -0.42, 0);
+    const hand = pivot(el, 0, -0.84, 0); box(hand, 0.1, 0.14, 0.05, skin, 0, -0.06, 0);
+    for (let f = 0; f < 4; f++) { const fi = pivot(hand, (f - 1.5) * 0.028, -0.12, 0); cap(fi, 0.012, 0.26, 0, -0.14, 0, dark); fi.rotation.z = (f - 1.5) * 0.1; }
+    arms.push({ sh, el, hand, s, sign: 0 });
+  }
+  let t = 0, jerk = 0, jx = 0, jy = 0, jz = 0;
+  const LA = 0.86, LB = 0.84, mtx = new THREE.Matrix4(), X = V(), Y = V(), Z = V(), tmp = V();
+  function reach(a, world) { // point the shoulder and bend the elbow so the hand ends up at a point in the world
+    g.updateMatrixWorld(true);
+    const loc = chest.worldToLocal(tmp.copy(world)).sub(a.sh.position);
+    const d = Math.min(LA + LB - 0.01, Math.max(0.15, loc.length())), dir = loc.normalize();
+    const cl = (v) => Math.max(-1, Math.min(1, v));
+    const angS = Math.acos(cl((LA * LA + d * d - LB * LB) / (2 * LA * d))), angE = Math.PI - Math.acos(cl((LA * LA + LB * LB - d * d) / (2 * LA * LB)));
+    X.crossVectors(dir, V(a.s * 0.4, -1, -0.3)); if (X.lengthSq() < 1e-6) X.set(1, 0, 0); X.normalize();
+    const u = dir.clone().applyAxisAngle(X, angS);
+    Y.copy(u).negate(); Z.crossVectors(X, Y);
+    mtx.makeBasis(X, Y, Z); a.sh.quaternion.setFromRotationMatrix(mtx);
+    if (!a.sign) { const err = (sg) => { a.el.rotation.set(sg * angE, 0, 0); g.updateMatrixWorld(true); return a.hand.getWorldPosition(V()).distanceTo(world); }; a.sign = err(1) < err(-1) ? 1 : -1; }
+    a.el.rotation.set(a.sign * angE, 0, 0);
+  }
+  return { g, height: 2.95,
+  face(v) { return head.localToWorld(v.set(0, 0.1, 0.17)); },
+  mouth(v) { return head.localToWorld(v.set(0, 0.0, 0.17)); },
+  hand(i, v) { return arms[i].hand.localToWorld(v.set(0, -0.12, 0.02)); },
+  animate(dt, sp, chasing) {
+    if (!(sp >= 0)) sp = 0;
+    t += dt * (1.5 + sp * 1.35);
+    const w = Math.min(1, sp / 2.2), st = Math.sin(t), ct = Math.cos(t);
+    for (const l of legs) {
+      const sw = -st * l.s * 0.6 * w, bend = Math.max(0, ct * l.s) * 1.0 * w + 0.1;
+      l.thigh.rotation.set(sw - 0.05 - (chasing ? 0.25 : 0), 0, 0); l.knee.rotation.set(bend + (chasing ? 0.35 : 0), 0, 0); l.foot.rotation.set(-(sw + bend) * 0.9, 0, 0);
+    }
+    hips.position.y = HIP - (chasing ? 0.18 : 0.06 * w) + Math.abs(ct) * 0.06 * w;
+    hips.rotation.set(0, st * 0.12 * w, st * 0.05 * w);
+    jerk -= dt; if (jerk <= 0) { jerk = 0.25 + Math.random() * 1.8; jx = (Math.random() - 0.5) * 0.6; jy = (Math.random() - 0.5) * 1.2; jz = (Math.random() - 0.5) * 1.1; } // (sudden twitches: its head snaps around)
+    jx *= Math.exp(-dt * 5); jy *= Math.exp(-dt * 5); jz *= Math.exp(-dt * 3);
+    chest.rotation.set((chasing ? 0.55 : 0.18) * Math.max(w, 0.4), -st * 0.2 * w, 0);
+    neck.rotation.set(-(chasing ? 0.45 : 0.1) + jx * 0.4, jy * 0.3, 0);
+    head.rotation.set(jx, jy, jz + Math.sin(t * 0.4) * 0.12);
+    for (const a of arms) { // long arms dangle and swing; running, they trail behind it
+      const swing = st * a.s * 0.5 * w;
+      if (chasing) a.sh.rotation.set(0.75 + Math.sin(t * 2 + a.s) * 0.35, 0, a.s * 0.15);
+      else a.sh.rotation.set(swing - 0.05, 0, a.s * 0.08);
+      a.el.rotation.set(chasing ? -0.2 : -0.12 - Math.max(0, -swing) * 0.4, 0, 0);
+      a.hand.rotation.set(Math.sin(t * 1.3 + a.s) * 0.25, 0, 0);
+    }
+    hair.forEach((h, i) => { h.rotation.x = Math.sin(t * 1.2 + i) * 0.15 + (chasing ? 0.35 : 0); h.rotation.z = Math.cos(t + i * 2) * 0.12; });
+  },
+  // cutscene pose: o.hands = [world point or null, world point or null], o.lean 0..1, o.tilt (head tilts to one side)
+  pose(o) {
+    for (const l of legs) { l.thigh.rotation.set(-0.1 - (o.lean || 0) * 0.5, 0, 0); l.knee.rotation.set(0.2 + (o.lean || 0) * 0.7, 0, 0); l.foot.rotation.set(-0.1, 0, 0); }
+    hips.position.y = HIP - (o.lean || 0) * 0.35; hips.rotation.set(0, 0, 0);
+    chest.rotation.set(0.12 + (o.lean || 0) * 0.75, 0, 0); neck.rotation.set(-(o.lean || 0) * 0.5 + (o.up || 0) * -0.5 + (o.down || 0) * 0.6, 0, 0);
+    head.rotation.set(0, 0, o.tilt || 0);
+    arms.forEach((a, i) => { const p = o.hands && o.hands[i]; a.hand.rotation.set(0, 0, 0); if (p) reach(a, p); else { a.sh.rotation.set(-0.2, 0, a.s * 0.12); a.el.rotation.set(-0.3, 0, 0); } });
+    g.updateMatrixWorld(true);
+  } };
+}
 // Stand-ins if a model file can't load: a yellow smiling partygoer, a tall captain.
 function standIn(kind) {
   if (kind === "partygoer") {
@@ -336,6 +458,7 @@ export async function make(kind) {
   if (kind === "entity") return entity();
   if (kind === "crawler") return crawler();
   if (kind === "bacteria") return bacteria();
+  if (kind === "skinwalker") return skinwalker();
   const scene = await preload(kind);
   if (!scene) return standIn(kind);
   return fromModel(kind, scene, kind === "clark" ? CLARK_H : 3.15); // (the Partygoers got taller too)
