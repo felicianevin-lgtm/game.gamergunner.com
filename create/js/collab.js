@@ -152,11 +152,12 @@ export function connectStudio(sid, hooks) {
     const list = [...people.values()];
     hooks.onPeople(list.map((p) => ({ u: p.u, n: p.n, c: p.c, doing: doing(p), on: true })), meta, you);
   }
-  // what I'm doing -> everyone else (when it changes, and every 3 s anyway)
+  // what I'm doing -> everyone else (when it changes, and every 20 s anyway; the relay remembers the last one, and fewer
+  // messages = less Cloudflare time on the free plan)
   function presence(p) {
     if (!ready || !ws || ws.readyState !== 1) return;
     const text = JSON.stringify(p), now = Date.now();
-    if (text === lastP && now - lastPAt < 3000) return;
+    if (text === lastP && now - lastPAt < 20000) return;
     lastP = text; lastPAt = now;
     ws.send(JSON.stringify({ t: "p", ...p }));
   }

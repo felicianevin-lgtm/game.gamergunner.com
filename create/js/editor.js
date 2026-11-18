@@ -2137,7 +2137,7 @@ function frame() {
   renderer.render(scene, camera);
 }
 function sendPresence() {
-  const now = performance.now(); if (now - presT < 250) return; presT = now;
+  const now = performance.now(); if (now - presT < 400) return; presT = now; // (2-3 a second at most)
   const half = (v) => Math.round(v * 2) / 2;
   const h2 = (($("modal").classList.contains("hidden") ? null : $("modalBox").querySelector("h2")) || {}).textContent || "";
   const a = document.hidden ? "away" : playing ? "play" : transform.dragging ? { translate: "move", rotate: "rotate", scale: "scale" }[tool] : scriptOpen() ? "script" : /monster/i.test(h2) ? "monster" : selected && guiItem(selected) ? "gui" : selected ? "select" : "look";

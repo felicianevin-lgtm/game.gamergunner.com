@@ -56,6 +56,7 @@ export class MP {
     this.ping(); setInterval(() => this.ping(), 30000);
   }
   ping() {
+    if (document.hidden) return; // (a tab in the background doesn't count as playing: saves Cloudflare requests)
     const a = account(), b = { i: this.pingId, m: "v", r: this.on ? 1 : 0, c: this.on ? this.code : "" };
     if (a) { b.t = a.t; if (a.d) b.d = a.d; }
     fetch(RELAY + "/ping", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).catch(() => {});
