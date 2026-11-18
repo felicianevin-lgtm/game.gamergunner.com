@@ -50,6 +50,14 @@ export const VEHICLES = [
   { id: "skidsteer", name: "Dig Dog Skid Steer", price: 11000, top: 9, acc: 8, grip: 9, turn: 3.2, off: { dirt: 1, grass: 1, mud: 0.92 }, size: 1, tow: 1, color: 0xffb020, engine: 58, open: true, heavy: true, pivot: true, crawl: 0.97, desc: "Heavy equipment! A little loader that spins in place. T raises and lowers the bucket." },
   { id: "excavator", name: "Mini Digger Excavator", price: 24000, top: 5.5, acc: 5, grip: 9, turn: 1.4, off: { dirt: 1, grass: 1, mud: 1 }, size: 2, tow: 0, color: 0xffc21a, engine: 52, open: true, heavy: true, pivot: true, crawl: 1, desc: "A mini excavator on rubber tracks. Hold T to dig, and the cab swings around on top!" },
   { id: "ztmower", name: "Zero-Turn Pro Mower", price: 3800, top: 11, acc: 9, grip: 8.5, turn: 3.4, off: { dirt: 0.9, grass: 1, mud: 0.6 }, size: 1, tow: 1, color: 0xe0203a, engine: 120, open: true, mower: true, pivot: true, crawl: 0.75, desc: "A real lawn mower that actually CUTS THE GRASS. Spins in place. B = blades on/off. Get paid to mow!" },
+  // electric dirt bikes (motos): light, crazy torque, silent. Battery + brake upgrades at Mud & Chrome (⚡ E-Moto tab)
+  { id: "blackout", name: "Blackout E-Moto", price: 4200, top: 26, acc: 17, grip: 7.3, turn: 2.8, off: { dirt: 1, grass: 0.95, mud: 0.74 }, size: 1, tow: 0, color: 0x1a1a22, engine: 520, open: true, bike: true, electric: true, emoto: true, crawl: 0.9, desc: "A light, all-black electric dirt bike. Silent, sneaky and SO quick off the line. Great wheelies!" },
+  { id: "ultrab", name: "Hornet Ultra-B E-Moto", price: 6800, top: 31, acc: 19, grip: 7.5, turn: 2.7, off: { dirt: 1, grass: 0.96, mud: 0.78 }, size: 1, tow: 0, color: 0xffd23a, engine: 480, open: true, bike: true, electric: true, emoto: true, crawl: 0.93, desc: "The big electric moto: a full-size frame, a huge battery, long suspension and a torque punch that pulls wheelies all day." },
+  { id: "move10", name: "Movement 10 Pro E-Moto", price: 8900, top: 34, acc: 20, grip: 7.6, turn: 2.7, off: { dirt: 1, grass: 0.96, mud: 0.8 }, size: 1, tow: 0, color: 0x2ac0a0, engine: 460, open: true, bike: true, electric: true, emoto: true, crawl: 0.94, desc: "A pro race electric moto. Fastest e-moto in the valley. Bolt on the Ceron 72V battery and Ultra-B brakes to make it a monster." },
+  // a little off-road go-kart with a roll cage
+  { id: "dirtkart", name: "Mud Rat Dirt Kart", price: 2600, top: 23, acc: 13.5, grip: 7.8, turn: 2.9, off: { dirt: 1, grass: 0.96, mud: 0.82 }, size: 1, tow: 0, color: 0xff7a1a, engine: 215, open: true, crawl: 0.84, air: 0.9, desc: "A tube-frame dirt kart with a roll cage, knobby tires and a loud little engine. Low, slidey, and SO much fun." },
+  // a boat! (lives at the Big Bass Lake Marina)
+  { id: "bassboat", name: "Metal-Flake Bass Boat", price: 14000, top: 27, acc: 8.5, grip: 7, turn: 1.5, off: { dirt: 0.1, grass: 0.1, mud: 0.1 }, size: 2, tow: 0, color: 0x2a5ad0, engine: 90, open: true, boat: true, crawl: 0.1, desc: "A sparkly 20-foot bass boat with a big outboard, casting decks and a trolling motor. It waits for you at the Big Bass Lake Marina. Stop on the lake, press F to stand up on the deck and fish for MUSKIE!" },
   { id: "lawntractor", name: "Lawn Tractor 42 inch", price: 1500, top: 8, acc: 7, grip: 8, turn: 2.5, off: { dirt: 0.85, grass: 1, mud: 0.5 }, size: 1, tow: 1, color: 0x3a9a3a, engine: 110, open: true, mower: true, crawl: 0.65, desc: "A classic riding mower that cuts real grass (B = blades on/off). Pulls the small trailer too." },
   // police cars (you get these when you join the police; they never show up at the dealership)
   { id: "cruiser", name: "Police Cruiser", price: 0, police: true, top: 40, acc: 13, grip: 8.5, turn: 2.1, off: { dirt: 0.7, grass: 0.62, mud: 0.45 }, size: 2, tow: 0, color: 0xf4f4f4, engine: 95, crawl: 0.45, desc: "A sturdy police car with a light bar and a siren (G)." },
@@ -134,6 +142,17 @@ function flatbed(C, B) {
   C.flatY = y + 0.06;
 }
 export const PRICES = { paint: 150, rims: 200, neon: 500 };
+// tire size (Mud & Chrome → 🛞 Wheels): dirt bikes, quads, side-by-sides, buggies + the dirt kart
+export const TIRE_DIA = [{ name: "Small (-2 in)", k: 0.88, price: 250 }, { name: "Stock size", k: 1, price: 0 }, { name: "Tall (+2 in)", k: 1.08, price: 300 }, { name: "Taller (+4 in)", k: 1.16, price: 450 }, { name: "GIANT (+6 in)", k: 1.26, price: 650 }];
+export const TIRE_WID = [{ name: "Skinny", k: 0.8, price: 200 }, { name: "Stock width", k: 1, price: 0 }, { name: "Wide", k: 1.2, price: 300 }, { name: "Extra wide", k: 1.4, price: 450 }, { name: "FAT", k: 1.65, price: 650 }];
+export const canTireSize = (v) => !!(v.bike || v.quad || ["sxs", "sxs4", "buggy", "dirtkart"].includes(v.id));
+// a snorkel kit: the air intake goes way up high, so you can go through deep water + mud without flooding the engine
+export const SNORKEL_PRICE = 450;
+export const canSnorkel = (v) => !v.bike && !v.boat && !v.mower && !v.police && !["sports", "drift", "foxhatch", "muscle", "hyper", "jeep", "monster", "swamp"].includes(v.id);
+// electric moto upgrades
+export const BATTS = [{ name: "Stock 60V battery", price: 0, desc: "The battery it came with" }, { name: "Ceron 72V Power Battery", price: 1400, desc: "+15% top speed, +20% punch off the line" }];
+export const BRAKES = [{ name: "Stock brakes", price: 0, desc: "Normal brakes" }, { name: "Ultra-B 4-piston brakes", price: 650, desc: "Huge rotors + gold calipers: stops WAY faster" }];
+const INTAKE = { jeep: 1.9, racemower: 1.5, monster: 2.7, swamp: 2.7, dumper: 1.6, hauler: 1.6, excavator: 1.5, skidsteer: 1.2, trailboss: 1.45, prerunner: 1.2 };
 
 // how rusty it is (0 = shiny, 1 = crusty). The Rusty Pickup comes rusty.
 export const rustOf = (car) => car.rust ?? (car.id === "pickup" ? 1 : 0);
@@ -147,6 +166,7 @@ const CODE = [
   num("engine"), num("lift"), num("neon"), num("camber"), num("offset", 1), num("bedLen", 1), yes("flatbed"),
   [(c) => Math.round(rustOf(c) * 35), (c, n) => { c.rust = n / 35; }],
   num("lbar"), num("boards"), num("antenna"), yes("winch"), num("bars"), num("pad", 0, 1), num("grips"), yes("moto"), num("kit"), num("kitCol"), num("helmet", 1), num("lower"),
+  num("tdia", 1), num("twid", 1), yes("snork"), num("batt"), num("brk"),
 ];
 const stockCode = new Map();
 export function modCode(car) {
@@ -162,7 +182,7 @@ export function carFromCode(id, code, paint) {
 // a fresh owned vehicle
 export function newCar(id, uid) {
   const v = vehicleById(id);
-  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "monster" || id === "swamp" || id === "mudmower" || id === "racemower" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner", "suv", "rally"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null, ...(id === "drift" ? { camber: 2, ownCamber: [0, 2], offset: 2, ownOffset: [1, 2], rims: "black" } : {}) };
+  return { uid, id, paint: v.color, rims: id === "sxs" || id === "sxs4" ? "black" : "chrome", tires: (v.quad || v.bike) && v.off.dirt > 0.8 || id === "dirtkart" || id === "monster" || id === "swamp" || id === "mudmower" || id === "racemower" || id === "sxs" || id === "sxs4" ? "mud" : ["jeep", "trailboss", "prerunner", "suv", "rally"].includes(id) ? "allterrain" : "street", engine: 0, limit: 1, lift: 0, neon: 0, dirt: 0, x: 0, z: 0, yaw: 0, on: null, ...(id === "drift" ? { camber: 2, ownCamber: [0, 2], offset: 2, ownOffset: [1, 2], rims: "black" } : {}) };
 }
 // final driving numbers after upgrades
 export function tune(car) {
@@ -174,8 +194,17 @@ export function tune(car) {
   off.dirt += 0.03 * car.lift; off.grass += 0.03 * car.lift; off.mud += 0.04 * car.lift; grip *= 1 - 0.04 * car.lift;
   const lw = canLower(v) ? car.lower || 0 : 0; if (lw) { off.dirt -= 0.03 * lw; off.grass -= 0.03 * lw; off.mud -= 0.05 * lw; grip *= 1 + 0.03 * lw; }
   for (const k in off) off[k] = Math.min(1, off[k]);
-  const crawl = Math.min(1, (v.crawl ?? 0.5) + (t === "mud" ? 0.08 : t === "allterrain" ? 0.04 : 0) + 0.02 * car.lift - 0.03 * lw);
-  return modTune(car, { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, quad: !!v.quad, wheelie: !!(v.bike || v.quad), pivot: !!v.pivot, engine: v.engine * (1 + 0.04 * car.engine) });
+  // tire size: tall tires climb + float in mud (but are slower to spin up), wide ones grip + float
+  const dk = canTireSize(v) ? (TIRE_DIA[car.tdia ?? 1] || TIRE_DIA[1]).k : 1, wk = canTireSize(v) ? (TIRE_WID[car.twid ?? 1] || TIRE_WID[1]).k : 1;
+  off.mud += (dk - 1) * 0.6 + (wk - 1) * 0.22; off.dirt += (dk - 1) * 0.3; off.grass += (dk - 1) * 0.2; acc *= 1 - (dk - 1) * 0.45; top *= (1 + (dk - 1) * 0.12) * (1 - (wk - 1) * 0.06); grip *= 1 + (wk - 1) * 0.12;
+  // electric motos: the big battery
+  if (v.emoto && car.batt) { top *= 1.15; acc *= 1.2; }
+  for (const k in off) off[k] = Math.min(1, off[k]);
+  const crawl = Math.min(1, (v.crawl ?? 0.5) + (t === "mud" ? 0.08 : t === "allterrain" ? 0.04 : 0) + 0.02 * car.lift - 0.03 * lw + (dk - 1) * 0.4);
+  // how high the engine breathes from (water or mud over it = the engine floods). Snorkels raise it way up.
+  let intake = INTAKE[v.id] ?? (v.bike ? (v.electric ? 0.62 : 0.75) : v.quad ? 0.8 : v.mower ? 0.6 : v.boat ? 99 : v.open ? 0.95 : ["sports", "drift", "foxhatch", "muscle", "hyper", "cruiser", "interceptor", "rally"].includes(v.id) ? 0.62 : 1.1);
+  intake += 0.17 * car.lift - (LOWER_M[lw] || 0) + (dk - 1) * 0.6 + (car.snork && canSnorkel(v) ? (v.quad ? 1.65 : 1.5) : 0);
+  return modTune(car, { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, quad: !!v.quad, wheelie: !!(v.bike || v.quad), pivot: !!v.pivot, engine: v.engine * (1 + 0.04 * car.engine), intake, brake: v.emoto && car.brk ? 1.7 : 1, boat: !!v.boat });
 }
 // 0..1 bars for the dealership
 export function statBars(id, car) {
@@ -261,7 +290,7 @@ const XMAT = new Map();
 function bikeMat(B, mat, C) {
   if (!B.colors) return (BIKE_MAT[mat] || (() => M.trim))(C);
   if (B.paint.includes(mat)) return C.paint;
-  if (B.tire.includes(mat)) return M.tire;
+  if (B.tire.includes(mat)) return C.tireMat || M.tire;
   const hx = B.colors[mat] || "3a3d44";
   if (!XMAT.has(hx)) { const c = parseInt(hx, 16), shiny = ["c8ccd2", "9a9aa0", "c9a64a", "8a8d92"].includes(hx); XMAT.set(hx, shiny ? new THREE.MeshPhongMaterial({ color: c, shininess: 80, specular: 0x888888 }) : new THREE.MeshLambertMaterial({ color: c })); }
   return XMAT.get(hx);
@@ -269,7 +298,7 @@ function bikeMat(B, mat, C) {
 // which color of the model is which part
 const BIKE_MAT = {
   color_4634441: (C) => C.paint, // the plastics (your paint color)
-  color_2829873: () => M.seat, color_2828838: () => M.tire, color_0: (C) => C.rimMat, color_15277357: () => M.chrome,
+  color_2829873: () => M.seat, color_2828838: (C) => C.tireMat || M.tire, color_0: (C) => C.rimMat, color_15277357: () => M.chrome,
   color_10988977: () => M.frame, color_12561038: () => M.fork, color_14077624: () => M.engine, color_6383466: () => M.trim, color_16448250: () => M.white,
 };
 // dirt bike suspension (Mud & Chrome): taller suspension = the whole bike grows, so the wheels always match
@@ -314,13 +343,13 @@ function profile(p, pts, w, mat, x = 0, bev = 0.05) {
 function wheel(car, x, z, r, w, front, opts = {}) {
   const pivot = new THREE.Group(); pivot.position.set(x, r, z);
   const spin = new THREE.Group(); pivot.add(spin);
-  const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 16), M.tire); tire.rotation.z = Math.PI / 2; spin.add(tire);
+  const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 16), car.tireMat || M.tire); tire.rotation.z = Math.PI / 2; spin.add(tire);
   const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.58, r * 0.58, w + 0.04, 10), car.rimMat); rim.rotation.z = Math.PI / 2; spin.add(rim);
   const hub = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, r * 0.22, r * 0.9), car.rimMat); spin.add(hub);
   const hub2 = hub.clone(); hub2.rotation.x = Math.PI / 2; spin.add(hub2);
   // knobby tread (shows with mud / all-terrain tires)
   const knobs = new THREE.Group(); spin.add(knobs);
-  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, k = new THREE.Mesh(new THREE.BoxGeometry(w * 1.04, r * 0.16, r * 0.3), M.tire); k.position.set(0, Math.cos(a) * r, Math.sin(a) * r); k.rotation.x = -a; knobs.add(k); }
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, k = new THREE.Mesh(new THREE.BoxGeometry(w * 1.04, r * 0.16, r * 0.3), car.tireMat || M.tire); k.position.set(0, Math.cos(a) * r, Math.sin(a) * r); k.rotation.x = -a; knobs.add(k); }
   car.root.add(pivot);
   bakeGroup(spin, (o) => o === knobs); bakeGroup(knobs); // (glue the wheel parts together: fewer things to draw)
   const W = { pivot, spin, knobs, x, z, r0: r, r, front, side: Math.sign(x) || 1, bike: !!opts.bike };
@@ -359,12 +388,13 @@ export function buildCar(car, opts = {}) {
   const paint2 = new THREE.MeshPhongMaterial({ color: new THREE.Color(car.paint).multiplyScalar(0.7), shininess: 50, specular: 0x444444 });
   const rimMat = new THREE.MeshPhongMaterial({ color: 0xd8dde3, shininess: 100, specular: 0xffffff });
   const rustMat = new THREE.MeshLambertMaterial({ color: 0x8a4a22, transparent: true }); // (scrub it off at Mud & Chrome)
-  const C = { root, lift, body, paint, paint2, rimMat, rustMat, wheels: [], seat: V3(0.42, 0.9, 0.2), hitch: V3(0, 0.6, -2.5), len: 4.6, wid: 2.1, hood: null, pipes: [], rider: null, id: car.id, extras: {} };
+  const tireMat = new THREE.MeshLambertMaterial({ color: 0x1e1f22 }); // (each ride has its own: mud cakes onto it)
+  const C = { root, lift, body, paint, paint2, rimMat, rustMat, tireMat, wheels: [], seat: V3(0.42, 0.9, 0.2), hitch: V3(0, 0.6, -2.5), len: 4.6, wid: 2.1, hood: null, pipes: [], rider: null, id: car.id, extras: {} };
   C.car = car;
   BUILD[car.id](C, v);
   if (BEDS[car.id] && bedD(car)) stretchBed(C, BEDS[car.id], bedD(car));
   if (car.flatbed && BEDS[car.id]) flatbed(C, bedOf(car));
-  C.rearZ = Math.min(...C.wheels.map((w) => w.z)); // (wheelies tip back around the back wheel)
+  C.rearZ = C.wheels.length ? Math.min(...C.wheels.map((w) => w.z)) : 0; // (wheelies tip back around the back wheel)
   // engine upgrade parts, neon glow, rider
   C.scoop = new THREE.Group(); body.add(C.scoop);
   if (C.hood) { bx(C.scoop, 0.7, 0.18, 0.9, C.hood.x, C.hood.y + 0.09, C.hood.z, M.dark); const bl = new THREE.Group(); bl.name = "blower"; C.scoop.add(bl); bx(bl, 0.6, 0.35, 0.6, C.hood.x, C.hood.y + 0.3, C.hood.z + 0.05, M.chrome); bx(bl, 0.5, 0.12, 0.4, C.hood.x, C.hood.y + 0.53, C.hood.z + 0.05, M.dark); }
@@ -396,22 +426,29 @@ function glowTex() {
   r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(0.5, "rgba(255,255,255,0.4)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64);
   return (GT = new THREE.CanvasTexture(c));
 }
-const MUD = new THREE.Color(0x5a3d24), tmp = new THREE.Color();
+const MUD = new THREE.Color(0x5a3d24), TMUD = new THREE.Color(0x4e3520), tmp = new THREE.Color();
 // paint, rims, tires, lift, engine parts, neon (call again after customizing)
 export function applyLook(C, car) {
   C.paint.color.set(car.paint).lerp(MUD, Math.min(0.75, car.dirt || 0));
   C.paint2.color.set(car.paint).multiplyScalar(0.7).lerp(MUD, Math.min(0.75, car.dirt || 0));
-  C.rimMat.color.set((RIMS.find((r) => r.id === car.rims) || RIMS[0]).c);
+  C.rimMat.color.set((RIMS.find((r) => r.id === car.rims) || RIMS[0]).c).lerp(TMUD, Math.min(0.55, (car.tmud || 0) * 0.5));
   const tk = car.tires === "mud" ? 1.12 : car.tires === "allterrain" ? 1.05 : 1;
   const real = C.wheels[0] && C.wheels[0].model; // (the real bike already has knobby tires)
+  const v0 = vehicleById(car.id), dk = canTireSize(v0) ? (TIRE_DIA[car.tdia ?? 1] || TIRE_DIA[1]).k : 1, wk = canTireSize(v0) ? (TIRE_WID[car.twid ?? 1] || TIRE_WID[1]).k : 1;
+  let grow = 0;
   for (const w of C.wheels) {
-    if (w.model) continue;
-    w.r = w.r0 * tk; w.spin.scale.set(car.tires === "mud" ? 1.15 : 1, tk, tk); w.knobs.visible = car.tires !== "street";
+    if (!w.base) w.base = w.spin.scale.clone();
+    if (w.model) { w.r = w.r0 * dk; w.spin.scale.set(w.base.x * wk, w.base.y * dk, w.base.z * dk); grow += w.r0 * (dk - 1); continue; }
+    w.r = w.r0 * tk * dk; w.spin.scale.set((car.tires === "mud" ? 1.15 : 1) * wk * w.base.x, tk * dk * w.base.y, tk * dk * w.base.z); w.knobs.visible = car.tires !== "street" && !(car.moto && w.bike);
+    grow += w.r0 * tk * (dk - 1);
   }
+  grow = C.wheels.length ? grow / C.wheels.length : 0;
+  // mud caked on the tires (and splashed on the rims): car.tmud 0 = clean .. 1 = covered
+  if (C.tireMat) C.tireMat.color.setHex(0x1e1f22).lerp(TMUD, Math.min(0.9, (car.tmud || 0) * 0.95));
   const od = (OFFSETS[car.offset ?? 1] || OFFSETS[1]).d; // (wheel offset: the wheels poke out or tuck in)
   const ca = (CAMBERS[car.camber ?? 0] || CAMBERS[0]).a;
   for (const w of C.wheels) if (!w.bike) { w.pivot.position.x = w.x + w.side * od; w.pivot.rotation.z = w.side * ca; }
-  C.lift.position.y = (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? 0 : car.lift) * 0.17 - (canLower(vehicleById(car.id)) ? LOWER_M[car.lower || 0] || 0 : 0); // (dirt bikes don't get lifted, bikes + quads don't get lowered)
+  C.lift.position.y = grow + (C.wheels[0] && !real ? C.wheels[0].r0 * (tk - 1) : 0) + (C.wheels[0] && C.wheels[0].bike ? 0 : car.lift) * 0.17 - (canLower(vehicleById(car.id)) ? LOWER_M[car.lower || 0] || 0 : 0); // (dirt bikes don't get lifted, bikes + quads don't get lowered)
   C.liftY = C.lift.position.y;
   C.scoop.visible = car.engine >= 2; const bl = C.scoop.getObjectByName("blower"); if (bl) bl.visible = car.engine >= 4;
   C.body.traverse((o) => { if (o.name === "pipe") o.visible = car.engine >= 3; });
@@ -1182,6 +1219,123 @@ BUILD.ztmower = (C) => {
   C.pipes.push(V3(0.3, 0.6, -1.12));
   C.deck = { z: 0.42, w: 1.5 };
   for (const s of [-1, 1]) { wheel(C, s * 0.48, 0.92, 0.16, 0.12, 0); wheel(C, s * 0.6, -0.65, 0.36, 0.32, 0); }
+};
+// ================================================================ electric dirt bikes (e-motos)
+// A slim aluminum frame with a big battery box where the engine would be, the motor down by the swingarm pivot driving
+// a chain, dirt bike plastics, a long flat seat, upside-down forks, knobby 19-inch wheels. style: "black" (the light
+// all-black Blackout), "ultra" (the big Hornet Ultra-B), "move" (the Movement 10 Pro: race plastics, the biggest battery)
+function emoto(C, k, style) {
+  const b = C.body, P = C.paint, K = (v) => v * k, car = C.car || {};
+  const blk = style === "black", gold = new THREE.MeshPhongMaterial({ color: 0xd8a830, shininess: 90, specular: 0xbbbbbb });
+  const frameM = blk ? M.dark : M.frame, accent = blk ? M.red : M.white;
+  C.len = K(1.95); C.wid = 0.74; C.seat.set(0, K(0.84), K(-0.22)); C.hitch = null; C.hood = null;
+  const fz = K(0.66), rz = K(-0.66), r = K(blk ? 0.3 : 0.33), tw = K(blk ? 0.09 : 0.11);
+  // frame: twin spars from the steering head down to the swingarm pivot, a cradle under the battery
+  const head = V3(0, K(0.98), K(0.43)), piv = V3(0, K(0.47), K(-0.2)), low = V3(0, K(0.3), K(0.18));
+  for (const s of [-1, 1]) { tube(b, V3(s * K(0.06), head.y, head.z), V3(s * K(0.12), piv.y + K(0.12), piv.z + K(0.05)), K(0.03), frameM); tube(b, V3(s * K(0.12), piv.y + K(0.12), piv.z + K(0.05)), V3(s * K(0.1), piv.y, piv.z), K(0.03), frameM); }
+  tube(b, head, low, K(0.032), frameM); tube(b, low, V3(0, K(0.32), K(-0.14)), K(0.03), frameM);
+  for (const s of [-1, 1]) tube(b, V3(s * K(0.1), K(0.82), K(-0.2)), V3(s * K(0.08), K(0.86), K(-0.8)), K(0.02), frameM); // subframe
+  // the battery box (bigger on the Movement + with the 72V battery), with a charge light
+  const bw = K(style === "move" || car.batt ? 0.27 : 0.23), bh = K(style === "move" ? 0.4 : 0.36), bl = K(0.5);
+  bx(b, bw, bh, bl, 0, K(0.62), K(0.1), M.dark, 0.18);
+  bx(b, bw + 0.012, K(0.025), K(0.16), 0, K(0.75), K(0.18), car.batt ? new THREE.MeshBasicMaterial({ color: 0x6aff3a }) : M.glow, 0.18);
+  if (car.batt) bx(b, bw + 0.014, K(0.08), K(0.14), 0, K(0.56), K(0.04), M.red, 0.18); // the "72V" sticker
+  // the motor + controller by the pivot, a chain to the back sprocket
+  cy(b, K(0.1), K(0.16), 0, K(0.36), K(-0.08), M.engine, 14, 0, Math.PI / 2); bx(b, K(0.12), K(0.1), K(0.18), K(0.1), K(0.42), K(-0.04), M.dark);
+  tube(b, V3(K(0.09), K(0.36), K(-0.08)), V3(K(0.09), r, rz), K(0.012), M.dark); cy(b, K(0.1), 0.012, K(0.09), r, rz, M.chrome, 16, 0, Math.PI / 2);
+  // swingarm + rear shock
+  for (const s of [-1, 1]) tube(b, V3(s * K(0.08), piv.y, piv.z), V3(s * (tw / 2 + 0.03), r, rz), K(0.028), frameM);
+  tube(b, V3(0, K(0.74), K(-0.18)), V3(0, K(0.45), K(-0.38)), K(0.035), car.brk ? gold : M.red);
+  // plastics: shrouds over the battery (your color), a long flat seat, a rear fender that sweeps up, side number plates
+  pod(C, { zf: K(0.48), zb: K(-0.06), w: K(0.17), b: K(0.58), tops: [[K(0.48), K(0.92)], [K(0.3), K(0.98)], [K(0.06), K(0.9)], [K(-0.06), K(0.82)]], round: K(0.1), top: 0.85 }, P);
+  pod(C, { zf: K(0.12), zb: K(-0.66), w: K(0.12), b: K(0.78), tops: [[K(0.12), K(0.86)], [K(-0.2), K(0.88)], [K(-0.66), K(0.9)]], round: K(0.06) }, M.seat);
+  pod(C, { zf: K(-0.52), zb: K(-1.02), w: K(0.1), b: K(0.82), tops: [[K(-0.52), K(0.9)], [K(-0.8), K(0.98)], [K(-1.02), K(1.06)]], round: K(0.08), top: 0.7 }, blk ? M.dark : P);
+  for (const s of [-1, 1]) bx(b, 0.012, K(0.2), K(0.3), s * K(0.12), K(0.72), K(-0.62), accent, 0.15); // side number plates
+  bx(b, K(0.08), K(0.035), 0.02, 0, K(0.96), K(-1.02), M.tail);
+  // front end (turns with the bars): upside-down forks, a number plate with a round LED headlight, a front fender, bars
+  const fork = new THREE.Group(); fork.position.set(0, 0, fz); b.add(fork); C.forks = [fork]; C.steerG = fork;
+  for (const s of [-1, 1]) { tube(fork, V3(s * K(0.08), r, 0), V3(s * K(0.08), K(0.62), K(-0.1)), K(0.03), blk ? M.dark : M.chrome); tube(fork, V3(s * K(0.08), K(0.6), K(-0.1)), V3(s * K(0.075), K(1.02), K(-0.25)), K(0.038), blk ? M.dark : gold); }
+  bx(fork, K(0.2), K(0.04), K(0.08), 0, K(1.0), K(-0.25), M.dark); tube(fork, V3(0, K(1.04), K(-0.26)), V3(0, K(1.1), K(-0.3)), K(0.02), M.dark);
+  tube(fork, V3(-K(0.38), K(1.12), K(-0.31)), V3(K(0.38), K(1.12), K(-0.31)), K(0.016), blk ? M.dark : M.frame);
+  for (const s of [-1, 1]) bx(fork, K(0.1), K(0.04), K(0.04), s * K(0.34), K(1.12), K(-0.31), M.seat);
+  bx(fork, K(0.16), K(0.035), K(0.5), 0, r * 2 + K(0.05), K(0.04), blk ? M.dark : P, -0.1); // front fender
+  bx(fork, K(0.24), K(0.24), K(0.03), 0, K(0.86), K(-0.1), blk ? M.dark : accent, -0.35); // number plate
+  if (style !== "black") { const hl = new THREE.Mesh(new THREE.CylinderGeometry(K(0.06), K(0.06), 0.03, 14), M.light); hl.rotation.x = Math.PI / 2 - 0.35; hl.position.set(0, K(0.86), K(-0.08)); fork.add(hl); }
+  bx(fork, K(0.08), K(0.05), 0.012, 0, K(1.09), K(-0.2), M.glow, -0.6); // the little screen
+  // brakes: Ultra-B = huge rotors + gold calipers
+  const rot = car.brk ? K(0.15) : K(0.11);
+  cy(fork, rot, 0.008, -K(0.07), r, 0, M.frame, 18, 0, Math.PI / 2); cy(b, rot * 0.9, 0.008, -K(0.08), r, rz, M.frame, 18, 0, Math.PI / 2);
+  bx(fork, 0.03, K(0.08), K(0.06), -K(0.08), r + rot * 0.7, -K(0.02), car.brk ? gold : M.dark); bx(b, 0.03, K(0.07), K(0.06), -K(0.09), r + rot * 0.7, rz + K(0.05), car.brk ? gold : M.dark);
+  if (style === "move") { for (const s of [-1, 1]) bx(b, 0.012, K(0.05), K(0.4), s * K(0.175), K(0.86), K(0.2), M.white, 0.08); } // race stripes on the shrouds
+  wheel(C, 0, fz, r, tw, 1, { bike: true }); wheel(C, 0, rz, r, tw * 1.15, 0, { bike: true });
+}
+BUILD.blackout = (C) => emoto(C, 0.94, "black");
+BUILD.ultrab = (C) => emoto(C, 1.1, "ultra");
+BUILD.move10 = (C) => emoto(C, 1.13, "move");
+
+// ================================================================ the dirt kart
+BUILD.dirtkart = (C) => {
+  const b = C.body, P = C.paint;
+  C.len = 2.35; C.wid = 1.5; C.seat.set(0, 0.36, -0.2); C.hitch = null; C.hood = null;
+  bx(b, 0.95, 0.06, 2.05, 0, 0.28, 0, M.dark); // the floor pan
+  for (const s of [-1, 1]) { tube(b, V3(s * 0.48, 0.32, 0.95), V3(s * 0.5, 0.32, -0.95), 0.035, P); tube(b, V3(s * 0.48, 0.32, 0.3), V3(s * 0.72, 0.36, 0.0), 0.03, P); tube(b, V3(s * 0.72, 0.36, 0.0), V3(s * 0.48, 0.32, -0.4), 0.03, P); } // side rails + nerf bars
+  // the roll cage
+  for (const s of [-1, 1]) { tube(b, V3(s * 0.45, 0.32, 0.55), V3(s * 0.38, 1.25, -0.05), 0.035, P); tube(b, V3(s * 0.45, 0.32, -0.55), V3(s * 0.38, 1.25, -0.4), 0.035, P); tube(b, V3(s * 0.38, 1.25, -0.05), V3(s * 0.38, 1.25, -0.4), 0.035, P); }
+  for (const z of [-0.05, -0.4]) tube(b, V3(-0.38, 1.25, z), V3(0.38, 1.25, z), 0.035, P);
+  tube(b, V3(-0.45, 0.32, 0.55), V3(0.45, 0.32, 0.55), 0.03, P);
+  bx(b, 0.8, 0.03, 0.42, 0, 1.28, -0.22, M.dark); // roof panel
+  // the nose: a bumper loop + a little hood, the seat, the steering wheel
+  tube(b, V3(-0.4, 0.3, 1.12), V3(0.4, 0.3, 1.12), 0.03, M.dark); for (const s of [-1, 1]) tube(b, V3(s * 0.4, 0.3, 1.12), V3(s * 0.45, 0.32, 0.9), 0.03, M.dark);
+  pod(C, { zf: 1.05, zb: 0.45, w: 0.36, b: 0.3, tops: [[1.05, 0.42], [0.7, 0.52], [0.45, 0.58]], round: 0.12 }, P);
+  bx(b, 0.46, 0.08, 0.44, 0, 0.36, -0.22, M.seat); bx(b, 0.46, 0.5, 0.08, 0, 0.62, -0.48, M.seat, -0.25);
+  tube(b, V3(0, 0.45, 0.6), V3(0, 0.72, 0.25), 0.02, M.dark);
+  const sw = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.022, 6, 14), M.dark); sw.position.set(0, 0.74, 0.22); sw.rotation.x = -1.0; b.add(sw);
+  // the engine behind the seat, an air filter and an exhaust
+  bx(b, 0.42, 0.34, 0.36, 0.1, 0.5, -0.8, M.engine); bx(b, 0.2, 0.22, 0.2, 0.1, 0.78, -0.8, M.dark); cy(b, 0.09, 0.16, -0.18, 0.62, -0.78, M.red, 10, 0, Math.PI / 2);
+  tube(b, V3(0.3, 0.5, -0.85), V3(0.42, 0.6, -1.12), 0.035, M.chrome);
+  bx(b, 0.1, 0.05, 0.03, -0.3, 0.42, -1.04, M.tail); bx(b, 0.1, 0.05, 0.03, 0.3, 0.42, -1.04, M.tail);
+  for (const s of [-1, 1]) bx(b, 0.12, 0.08, 0.04, s * 0.22, 0.42, 1.12, M.light);
+  C.pipes.push(V3(0.42, 0.6, -1.14));
+  for (const s of [-1, 1]) { wheel(C, s * 0.66, 0.78, 0.29, 0.22, 1); wheel(C, s * 0.7, -0.74, 0.34, 0.3, 0); }
+};
+
+// ================================================================ the bass boat
+// A V hull lofted from cross-sections (pointy bow, wide flat transom), metal-flake paint on top, a darker bottom, gray
+// carpet on the deck, a console with a windshield, two bucket seats, casting pedestals front + back, a big outboard and a
+// trolling motor on the bow. (2 hidden "wheels" so the rest of the game can treat it like any ride.)
+BUILD.bassboat = (C) => {
+  const b = C.body, P = C.paint, carpet = new THREE.MeshLambertMaterial({ color: 0x6a6e78 });
+  C.len = 6.4; C.wid = 2.3; C.seat.set(0.48, 1.0, -0.85); C.hitch = null; C.hood = null;
+  const zf = 3.15, zb = -3.1, S = [];
+  for (let z = zf; z > zb; z -= 0.12) S.push({ z }); S.push({ z: zb });
+  const half = (z) => (z > 0.5 ? 1.12 * Math.sqrt(Math.max(0.0015, (zf - z) / (zf - 0.5))) : 1.12);
+  const top = (z) => 0.8 + 0.14 * Math.max(0, (z - 1.4) / 1.75);
+  const keel = (z) => (z > 2.0 ? (z - 2.0) * 0.42 : 0);
+  // cross-section (counter-clockwise from the front): keel, right side, the deck across the top, left side
+  const sec = (q) => { const w = half(q.z), t = top(q.z), k = keel(q.z), c = Math.max(k, 0.24); return [[0, k], [w * 0.5, Math.max(k, 0.1)], [w * 0.95, c], [w, Math.max(c, 0.34)], [w * 0.98, t], [-w * 0.98, t], [-w, Math.max(c, 0.34)], [-w * 0.95, c], [-w * 0.5, Math.max(k, 0.1)]]; };
+  loft(b, S, sec, (k) => (k === 4 ? 2 : k === 0 || k === 1 || k === 7 || k === 8 ? 1 : 0), [P, C.paint2, carpet], true);
+  // a chrome rub rail along the top edge
+  for (let i = 0; i < S.length - 1; i += 1) { const z0 = S[i].z, z1 = S[i + 1].z; for (const s of [-1, 1]) tube(b, V3(s * half(z0), top(z0) - 0.02, z0), V3(s * half(z1), top(z1) - 0.02, z1), 0.025, M.chrome); }
+  // the console (right side) with a smoked windshield, a steering wheel + a little screen; a passenger console on the left
+  bx(b, 0.62, 0.62, 0.66, 0.5, top(0) + 0.3, -0.2, P); bx(b, 0.6, 0.3, 0.02, 0.5, top(0) + 0.76, 0.1, M.smoke, -0.5); bx(b, 0.3, 0.16, 0.02, 0.5, top(0) + 0.66, 0.02, M.glow, -0.5);
+  const sw = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 6, 16), M.dark); sw.position.set(0.5, top(0) + 0.62, -0.18); sw.rotation.x = -1.2; b.add(sw);
+  bx(b, 0.62, 0.5, 0.6, -0.5, top(0) + 0.25, -0.2, P); bx(b, 0.6, 0.26, 0.02, -0.5, top(0) + 0.66, 0.06, M.smoke, -0.5);
+  // two bucket seats + a back bench
+  for (const s of [-1, 1]) { bx(b, 0.5, 0.18, 0.48, s * 0.5, top(0) + 0.1, -0.85, M.seat); bx(b, 0.5, 0.5, 0.12, s * 0.5, top(0) + 0.38, -1.12, M.seat, -0.12); }
+  bx(b, 1.7, 0.3, 0.5, 0, top(0) + 0.12, -2.45, M.seat);
+  // casting pedestal seats (front deck + back deck)
+  for (const z of [1.9, -2.0]) { cy(b, 0.035, 0.42, 0, top(z) + 0.2, z, M.chrome, 8); bx(b, 0.42, 0.1, 0.4, 0, top(z) + 0.45, z, M.seat); bx(b, 0.42, 0.28, 0.08, 0, top(z) + 0.62, z - 0.2, M.seat, -0.1); }
+  // the outboard: a tall black cowling on the transom, the leg down into the water, a prop
+  const ob = new THREE.Group(); ob.position.set(0, top(zb), zb - 0.12); b.add(ob);
+  bx(ob, 0.5, 0.62, 0.62, 0, 0.32, -0.18, M.dark); bx(ob, 0.52, 0.06, 0.64, 0, 0.32, -0.18, P); bx(ob, 0.44, 0.12, 0.54, 0, 0.66, -0.2, M.dark);
+  bx(ob, 0.16, 1.05, 0.22, 0, -0.5, -0.18, M.dark); bx(ob, 0.36, 0.04, 0.42, 0, -0.62, -0.2, M.dark); cy(ob, 0.07, 0.2, 0, -0.92, -0.3, M.frame, 8, Math.PI / 2);
+  for (let i = 0; i < 3; i++) bx(ob, 0.04, 0.3, 0.06, 0, -0.92, -0.42, M.frame, 0, 0, (i * Math.PI * 2) / 3);
+  // the trolling motor on the bow, nav lights, rod locker + livewell lids
+  tube(b, V3(0.08, top(zf - 0.3) + 0.02, zf - 0.3), V3(0.08, -0.45, zf + 0.05), 0.022, M.dark); cy(b, 0.08, 0.28, 0.08, -0.48, zf + 0.05, M.dark, 8, Math.PI / 2);
+  bx(b, 0.07, 0.05, 0.05, 0.1, top(zf - 0.15) + 0.03, zf - 0.15, new THREE.MeshBasicMaterial({ color: 0x3aff6a })); bx(b, 0.07, 0.05, 0.05, -0.1, top(zf - 0.15) + 0.03, zf - 0.15, M.tail);
+  for (const [x, z, w, d] of [[0.42, 1.0, 0.5, 1.3], [-0.42, 1.0, 0.5, 1.3], [0, -2.95, 1.2, 0.25]]) bx(b, w, 0.02, d, x, top(z) + 0.01, z, M.trim);
+  // hidden wheels (so the rest of the game can treat it like any ride)
+  for (const [x, z, f] of [[0.7, 1.8, 1], [-0.7, 1.8, 1], [0.7, -1.8, 0], [-0.7, -1.8, 0]]) { const w = wheel(C, x, z, 0.2, 0.2, f); w.pivot.visible = false; }
 };
 BUILD.lawntractor = (C) => mower(C, false, true);
 BUILD.cruiser = (C) => police(C, false);

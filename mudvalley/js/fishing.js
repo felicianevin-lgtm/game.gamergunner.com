@@ -3,8 +3,8 @@
 // BITE! (the bobber dips and a "!" pops up: press Q fast) -> reel (hold Q to pull, let go to ease off: keep the
 // marker in the green zone and don't snap the line) -> show off your catch! Sell fish at the Bait & Tackle.
 import * as THREE from "/create/vendor/three.module.js";
-import { WATER_Y, POND } from "./layout.js";
-import { hAt, onPlatform } from "./terrain.js";
+import { WATER_Y, POND, LAKE } from "./layout.js";
+import { hAt, onPlatform, surfaceAt, SURF } from "./terrain.js";
 import { makeFish } from "./character.js";
 import { S, save, money } from "./save.js";
 import { SFX } from "./sfx.js";
@@ -18,10 +18,10 @@ export const RODS = [
   { id: "pro", name: "Pro Rod", price: 2000, color: 0xd4af37, bite: [2.5, 6], window: 1.35, power: 1.7, rare: 1.3, desc: "The best! Super easy reeling, and the only rod strong enough for legendary fish." },
 ];
 export const rodById = (id) => RODS.find((r) => r.id === id) || null;
-// where: "pond", "river" or "both". minRod: 0 basic, 1 good, 2 pro. w = weight range in pounds
+// where: "pond", "river", "lake" (Big Bass Lake), a few of those ("pond lake"), or "both" (anywhere). minRod: 0 basic, 1 good, 2 pro. w = weight range in pounds
 export const FISH = [
   { id: "minnow", name: "Mud Minnow", rarity: "Common", w: [0.1, 0.4], price: 12, color: 0x9a8a6a, where: "both", weight: 30 },
-  { id: "perch", name: "Sunny Perch", rarity: "Common", w: [0.3, 1.2], price: 28, color: 0xf0c040, where: "pond", weight: 26 },
+  { id: "perch", name: "Sunny Perch", rarity: "Common", w: [0.3, 1.2], price: 28, color: 0xf0c040, where: "pond lake", weight: 26 },
   { id: "bass", name: "Valley Bass", rarity: "Uncommon", w: [1, 4], price: 55, color: 0x5a9a3a, where: "both", weight: 16 },
   { id: "trout", name: "Rainbow Trout", rarity: "Uncommon", w: [0.8, 3.5], price: 70, color: 0xff8aa8, where: "river", weight: 18 },
   { id: "catfish", name: "Whisker Catfish", rarity: "Rare", w: [3, 12], price: 110, color: 0x6a6a7a, where: "both", weight: 8 },
@@ -29,6 +29,12 @@ export const FISH = [
   { id: "carp", name: "Golden Carp", rarity: "Epic", w: [2, 8], price: 320, color: 0xffc42a, where: "pond", weight: 3, minRod: 1 },
   { id: "koi", name: "Crystal Koi", rarity: "Epic", w: [1, 5], price: 600, color: 0x9af0ff, where: "pond", weight: 1.6, minRod: 2 },
   { id: "monster", name: "Mud Monster Catfish", rarity: "Legendary", w: [15, 40], price: 1500, color: 0x4a3a2a, where: "both", weight: 0.7, minRod: 2 },
+  // Big Bass Lake: big bass, walleye and MUSKIE (fish from the shore, the marina dock, or stand up on your bass boat's deck)
+  { id: "largemouth", name: "Largemouth Bass", rarity: "Uncommon", w: [2, 9], price: 95, color: 0x4a7a2a, where: "lake", weight: 18 },
+  { id: "walleye", name: "Golden Walleye", rarity: "Uncommon", w: [1.5, 8], price: 90, color: 0xc8a040, where: "lake", weight: 12 },
+  { id: "muskie", name: "Muskie", rarity: "Rare", w: [8, 32], price: 280, color: 0x8a9a62, where: "lake", weight: 6, spots: true },
+  { id: "tigermuskie", name: "Tiger Muskie", rarity: "Epic", w: [10, 38], price: 560, color: 0xb8ae62, where: "lake", weight: 2.4, minRod: 1, stripes: true },
+  { id: "ghostmuskie", name: "Ghost Muskie of Big Bass Lake", rarity: "Legendary", w: [42, 65], price: 2400, color: 0xdde6d4, where: "lake", weight: 0.45, minRod: 2, stripes: true },
   { id: "boot", name: "Rusty Old Boot", rarity: "Junk", w: [1, 1], price: 1, color: 0x6a4a2a, where: "both", weight: 5 },
 ];
 export const fishById = (id) => FISH.find((f) => f.id === id);
@@ -37,7 +43,7 @@ const DIFF = { Junk: 0.15, Common: 0.3, Uncommon: 0.5, Rare: 0.7, Epic: 0.85, Le
 export const COOLER = 30; // how many fish you can carry before you have to sell
 export function fishValue(f) { const F = fishById(f.id); if (!F) return 0; const k = F.w[1] > F.w[0] ? (f.w - F.w[0]) / (F.w[1] - F.w[0]) : 1; return Math.max(1, Math.round(F.price * (0.6 + 0.8 * k))); }
 export const coolerValue = () => S.fish.reduce((s, f) => s + fishValue(f), 0);
-const isWater = (x, z) => hAt(x, z) < WATER_Y - 0.25 && !onPlatform(x, z);
+const isWater = (x, z) => hAt(x, z) < WATER_Y - 0.25 && !onPlatform(x, z) && surfaceAt(x, z) !== SURF.MUD;
 
 export class Fishing {
   constructor(api) {
@@ -77,9 +83,9 @@ export class Fishing {
     if (!this.rod) { this.api.toast("No fishing rod", "Buy one at the Bait & Tackle by Lily Pond.", "warn"); return; }
     if (this.state === "idle") {
       const w = this.waterAhead();
-      if (!w) { SFX.nope(); this.api.toast("Face the water!", "Walk up to the edge of the pond or the river (or out on a dock) and look at the water.", "warn"); return; }
+      if (!w) { SFX.nope(); this.api.toast("Face the water!", "Walk up to the edge of the pond, the lake or the river (or out on a dock, or your boat) and look at the water.", "warn"); return; }
       if (S.fish.length >= COOLER) { SFX.nope(); this.api.toast("Your cooler is full!", "Sell your fish at the Bait & Tackle first.", "warn"); return; }
-      this.target = w; this.pond = Math.hypot(w.x - POND.x, w.z - POND.z) < POND.r + 3; this.state = "cast"; this.t = 0; return;
+      this.target = w; this.pond = Math.hypot(w.x - POND.x, w.z - POND.z) < POND.r + 3; this.lake = Math.hypot(w.x - LAKE.x, w.z - LAKE.z) < LAKE.r + 3; this.state = "cast"; this.t = 0; return;
     }
     if (this.state === "bite") { this.startReel(); return; }
     if (this.state === "wait") { this.api.toast("Reeled in", "Nothing yet. Cast again!", ""); this.cancel(); }
@@ -91,8 +97,9 @@ export class Fishing {
   }
   pickFish() {
     const rodI = RODS.indexOf(this.rod), rare = this.rod.rare;
-    const pool = FISH.filter((f) => (f.where === "both" || f.where === (this.pond ? "pond" : "river")) && (f.minRod || 0) <= rodI);
-    const wt = (f) => f.weight * (["Rare", "Epic", "Legendary"].includes(f.rarity) ? 1 + rare : 1);
+    const here = this.lake ? "lake" : this.pond ? "pond" : "river", boat = this.lake && this.api.onBoat && this.api.onBoat();
+    const pool = FISH.filter((f) => (f.where === "both" || f.where.split(" ").includes(here)) && (f.minRod || 0) <= rodI);
+    const wt = (f) => f.weight * (["Rare", "Epic", "Legendary"].includes(f.rarity) ? 1 + rare : 1) * (boat && f.where === "lake" && f.rarity !== "Uncommon" ? 1.8 : 1); // (out on your boat = more muskie!)
     let r = Math.random() * pool.reduce((s, f) => s + wt(f), 0);
     for (const f of pool) { r -= wt(f); if (r <= 0) return f; }
     return pool[0];
@@ -137,7 +144,7 @@ export class Fishing {
     S.fish.push(f); S.stats.fish++;
     const log = S.fishLog[F.id] || (S.fishLog[F.id] = { n: 0, best: 0 }); log.n++; const best = f.w > log.best; log.best = Math.max(log.best, f.w);
     // hold it up!
-    const fish = makeFish(F.color, clamp(0.6 + Math.sqrt(f.w) * 0.25, 0.5, 2.2)); fish.rotation.set(0, Math.PI / 2, Math.PI / 2); this.held = fish; this.api.person().hold(fish);
+    const fish = makeFish(F.color, clamp(0.6 + Math.sqrt(f.w) * 0.25, 0.5, 2.2), F.stripes ? "stripes" : F.spots ? "spots" : null, F.id.includes("muskie")); fish.rotation.set(0, Math.PI / 2, Math.PI / 2); this.held = fish; this.api.person().hold(fish);
     SFX.fish(); this.api.fx.splash(this.api.me().x + Math.sin(this.api.me().yaw) * 2, WATER_Y + 0.2, this.api.me().z + Math.cos(this.api.me().yaw) * 2, 12, 0.7);
     this.api.banner(F.name.toUpperCase() + "!", (F.rarity === "Junk" ? "Ha! " : "") + f.w + " lb · " + F.rarity + " · worth " + money(fishValue(f)) + (best && log.n > 1 ? " · NEW RECORD!" : log.n === 1 ? " · NEW FISH!" : ""));
     this.reel = null; save();

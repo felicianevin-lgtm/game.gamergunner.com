@@ -10,7 +10,7 @@ export const EDGE = 1835; // the fence around the whole map (invisible wall: you
 export const RING_R = 1300; // the Big Loop highway (a circle around everything)
 // the 4 long roads from the valley out to the Big Loop (straight, so the hills can make room for them)
 export const SPOKES = [[[40, -424], [40, -1300]], [[498, -220], [1282, -220]], [[80, 380], [80, 1297]], [[-440, -150], [-1291, -150]]];
-export const LAKE = { x: -600, z: 900, r: 150 }; // Big Bass Lake (south-west)
+export const LAKE = { x: -560, z: 860, r: 215 }; // Big Bass Lake (south-west): big + deep, with a marina, a bass boat and muskies
 export const FROST = { x: -350, z: -1560, h: 230, s: 140 }; // Frostpine Peak (the tallest mountain)
 export const WATER_Y = -1.2; // the river's (and the pond's) water level
 
@@ -42,6 +42,8 @@ export const FLATS = [
   { x: 452, z: 140, hx: 52, hz: 50, y: 2, b: 24 }, // Lily Pond
   { x: -458, z: -262, hx: 16, hz: 14, y: null, b: 14 }, // robber hideout in the woods
   { x: 330, z: 725, hx: 115, hz: 82, y: null, b: 30 }, // Valley Drift Park
+  { x: 718, z: 154, hx: 118, hz: 98, y: null, b: 30 }, // Ridgeline MX Park (the big dirt bike park)
+  { x: -318, z: 870, hx: 18, hz: 20, y: 0.6, b: 14 }, // Big Bass Lake Marina
   // the new houses
   { x: 246, z: -138, hx: 16, hz: 26, y: null, b: 12 }, { x: 210, z: 58, hx: 14, hz: 14, y: null, b: 12 }, { x: -428, z: 138, hx: 18, hz: 16, y: null, b: 12 },
   { x: 474, z: 84, hx: 18, hz: 16, y: null, b: 12 }, { x: 234, z: 342, hx: 34, hz: 24, y: null, b: 14 }, { x: -318, z: -200, hx: 34, hz: 24, y: null, b: 14 },
@@ -142,14 +144,26 @@ export const TRAILS = [
   { pts: loopAround(-1500, -450, 190, 230, 14, 0.18, 4), w: 7, loop: true, name: "woods" }, // Big Woods trails
   { pts: [[-1291, -150], [-1330, -240], [-1340, -300]], w: 7 },
   { pts: [[-1291, -150], [-1500, 60], [-1560, 300], [-1440, 520], [-1240, 640], [-1050, 700]], w: 7, name: "woods2" },
-  { pts: [[80, 880], [-120, 900], [-300, 880], [-430, 880]], w: 8, name: "lake" }, // to Big Bass Lake
+  { pts: [[80, 880], [-120, 900], [-260, 878], [-322, 868]], w: 8, name: "lake" }, // to Big Bass Lake (the marina)
   { pts: [[80, 520], [50, 514], [15, 508], [-25, 522], [-52, 556], [-66, 596], [-44, 630], [0, 632], [44, 626], [68, 602], [76, 566], [80, 550]], w: 8, name: "bog" }, // Mud Bog Park
   { pts: loopAround(700, 1080, 200, 150, 14, 0.2, 7), w: 8, loop: true, name: "bayou" }, // Bayou Bog (mud everywhere!)
   { pts: [[80, 1000], [300, 1040], [500, 1080]], w: 8 },
+  { pts: [[84, 575], [108, 575]], w: 7 }, // into The Abyss (the super deep mud pit)
+  // Ridgeline MX Park (east): the road in, plus a sand-wash trail along the north side
+  { pts: [[476, 4], [530, 26], [584, 56], [618, 78]], w: 8, name: "mxroad" },
+  // Red Rock Enduro: a LONG skinny dirt bike loop through the desert mesas
+  { pts: loopAround(1270, 650, 290, 210, 26, 0.3, 11), w: 3.4, loop: true, name: "enduro" },
+  { pts: [[1150, 490], [1160, 470], [1150, 440]], w: 3.4 },
+  // Big Woods Ridge Run: a second long single track loop in the Big Woods (north of the first one)
+  { pts: loopAround(-1180, -620, 230, 170, 24, 0.32, 5), w: 3.2, loop: true, name: "ridgerun" },
+  { pts: [[-1080, -128], [-1100, -300], [-1080, -450]], w: 3.2 },
   // Big Woods Single Track: a skinny, twisty dirt bike trail right through the trees
   { pts: [[-900, -128], [-905, -95], [-880, -60], [-850, -25], [-868, 12], [-910, 32], [-940, 70], [-915, 110], [-870, 130], [-832, 170], [-846, 215], [-890, 240], [-935, 266], [-960, 310], [-930, 350], [-880, 370], [-852, 410], [-892, 442], [-952, 432], [-1000, 400], [-1030, 352], [-1010, 302], [-1042, 252], [-1090, 232], [-1112, 182], [-1080, 132], [-1040, 100], [-1062, 50], [-1102, 20], [-1092, -30], [-1050, -70], [-1072, -105], [-1080, -128]], w: 3.2, name: "single" },
 ];
 // Valley Drift Park: a wide paved course full of hairpins (south of the valley)
+// Ridgeline MX Park: a big supercross-style loop (jumps get picked on the straights, terrain.js), whoops on the top straight
+export const MX2_TRACK = [[620, 80], [700, 72], [790, 78], [818, 110], [800, 140], [740, 128], [690, 140], [700, 170], [770, 172], [818, 195], [805, 232], [720, 236], [640, 230], [612, 200], [650, 170], [640, 140], [612, 115]];
+export const WHOOPS = { x0: 790, x1: 668, z0: 233, z1: 235 }; // (a row of little rollers, going west)
 export const DRIFT_TRACK = [[240, 662], [330, 656], [418, 666], [432, 700], [402, 721], [352, 713], [322, 737], [362, 760], [424, 770], [420, 796], [330, 797], [250, 791], [228, 752], [270, 731], [262, 700], [234, 690]];
 
 // mud pits {x, z, r}
@@ -165,6 +179,8 @@ export const MUDS = [
   { x: 20, z: 540, r: 13, deep: 1.7 }, { x: -18, z: 560, r: 9, deep: 1.2 }, { x: 54, z: 548, r: 8, deep: 1.1 },
   ...[0, 1, 2, 3, 4, 5, 6].map((i) => ({ x: -18 + i * 11, z: 616 + (i % 2) * 2, r: 6.8, deep: 1.25 })),
   { x: -48, z: 592, r: 14, deep: 1.4 },
+  // THE ABYSS: a giant, super deep mud pit (you need a snorkel to make it through the middle!)
+  { x: 130, z: 575, r: 21, deep: 2.05, abyss: true },
   // more mud on the trails
   { x: 252, z: 300, r: 8, deep: 1.2 }, { x: 360, z: 480, r: 7 }, { x: -430, z: -300, r: 8 }, { x: 1150, z: 520, r: 9 },
   // Big Woods
@@ -219,6 +235,11 @@ export const PLACES = {
   dock: { name: "River Fishing Dock", x: 150, z: -40, icon: "🎣", color: "#4ac0e0" },
   mudbowl: { name: "Mud Bowl", x: 270, z: 228, icon: "🟤", color: "#7a5030" },
   mudpark: { name: "Mud Bog Park", x: 10, z: 570, icon: "🟫", color: "#6a4020" },
+  abyss: { name: "The Abyss (super deep mud!)", x: 104, z: 575, icon: "🕳️", color: "#4a2a10" },
+  mx2: { name: "Ridgeline MX Park", x: 618, z: 80, icon: "🏍️", color: "#e0702a", r: 7 },
+  enduro: { name: "Red Rock Enduro Trail", x: 1150, z: 490, icon: "🏜️", color: "#d0602a" },
+  ridgerun: { name: "Big Woods Ridge Run", x: -1080, z: -450, icon: "🌲", color: "#3aa04a" },
+  marina: { name: "Big Bass Lake Marina (boats!)", x: -330, z: 868, icon: "🚤", color: "#2a9ad0" },
   // Copper Creek
   copper: { name: "Copper Creek", x: 452, z: -318, icon: "🏙️", color: "#e08a4a" },
   police: { name: "Police Station", x: 440, z: -332, icon: "👮", color: "#3a6aff", r: 6 },
@@ -238,7 +259,7 @@ export const PLACES = {
   desert: { name: "Red Rock Desert", x: 1150, z: 330, icon: "🌵", color: "#e07a3a" },
   frost: { name: "Frostpine Peak", x: -350, z: -1560, icon: "🏔️", color: "#cfe8ff" },
   woods: { name: "Big Woods Trails", x: -1500, z: -450, icon: "🌲", color: "#2a7a3a" },
-  lake: { name: "Big Bass Lake", x: -450, z: 880, icon: "🎣", color: "#4ac0e0" },
+  lake: { name: "Big Bass Lake", x: -560, z: 860, icon: "🎣", color: "#4ac0e0" },
   bayou: { name: "Bayou Bog", x: 700, z: 1080, icon: "🐊", color: "#6a5030" },
   bigloop: { name: "Big Loop Highway", x: 0, z: -1300, icon: "🛣️", color: "#8a8a8a" },
   single: { name: "Big Woods Single Track", x: -900, z: -128, icon: "🌲", color: "#5ad87a", r: 6 },

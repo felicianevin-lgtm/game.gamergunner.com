@@ -19,6 +19,8 @@ export const LOOKS = {
 // clothes (the clothing store, menus.js): top = 0 tee, 1 hoodie, 2 jacket, 3 tank top, 4 flannel, 5 jersey;
 // legs = 0 jeans, 1 shorts, 2 cargo pants; hat = 0 cap, 1 beanie, 2 cowboy hat, 3 bucket hat (cap: null = no hat);
 // glasses = 0 none, 1 sunglasses, 2 glasses; extra = 0 none, 1 gold chain, 2 backpack. acc = the second color (jacket inside, flannel checks...)
+// body shape (Threads Clothing → 🧍 Body): bw = width (0 skinny .. 4 huge), br = round (0 normal .. 3 super round)
+export const BODY_W = [0.82, 1, 1.15, 1.3, 1.5], BODY_R = [0, 0.35, 0.68, 1];
 export const CLOTH_COLORS = [0xffffff, 0x1a1a1e, 0x9aa0aa, 0xe0203a, 0xff7a1a, 0xffd23a, 0x8adf3a, 0x3aa04a, 0x2ac0a0, 0x3ad0ff, 0x2f8ae0, 0x2a3550, 0x6a3ad0, 0xff5ad8, 0x7a4a2a, 0xd8b890];
 let OUTFIT = {};
 export function setOutfit(o) { OUTFIT = o || {}; }
@@ -35,6 +37,7 @@ export function makePerson(look = LOOKS.you, scale = 1) {
   const hip = new THREE.Group(); hip.position.y = 0.9; body.add(hip);
   const m = { skin: mat(look.skin), shirt: mat(look.shirt), pants: mat(look.pants), shoes: mat(look.shoes), hair: mat(look.hair), cap: mat(look.cap || 0), mask: mat(look.mask || 0x222226), stripe: mat(0xf4f4f4), acc: mat(look.acc ?? 0xffffff), dark: mat(0x141418), gold: new THREE.MeshPhongMaterial({ color: 0xffc42a, shininess: 90, specular: 0xffffff }) };
   const torso = box(0.62, 0.7, 0.36, m.shirt); torso.position.y = 0.35; hip.add(torso);
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), m.shirt); belly.position.set(0, 0.32, 0.03); hip.add(belly); belly.visible = false;
   const stripes = new THREE.Group(); hip.add(stripes);
   for (const y of [0.15, 0.35, 0.55]) { const s = box(0.64, 0.07, 0.38, m.stripe); s.position.y = y; stripes.add(s); }
   const badge = box(0.12, 0.14, 0.03, new THREE.MeshBasicMaterial({ color: 0xffd23a })); badge.position.set(-0.16, 0.5, 0.19); hip.add(badge);
@@ -104,6 +107,13 @@ export function makePerson(look = LOOKS.you, scale = 1) {
     shades.visible = lk.glasses === 1 && !lk.mask; specs.visible = lk.glasses === 2 && !lk.mask; chain.visible = lk.extra === 1 && !lk.badge; pack.visible = lk.extra === 2;
     maskG.visible = !!lk.mask; if (lk.mask) m.mask.color.setHex(lk.mask);
     stripes.visible = !!lk.stripes; badge.visible = !!lk.badge; hair.visible = !lk.mask;
+    // body shape: wider shoulders + hips, a round belly
+    const w = lk.width ?? BODY_W[lk.bw ?? 1] ?? 1, r = lk.round ?? BODY_R[lk.br ?? 0] ?? 0, zk = 1 + r * 0.55;
+    torso.scale.set(w * (1 + r * 0.12), 1, zk);
+    for (const g of [stripes, checks, jersey, hood, jacket, chain, pack, badge]) g.scale.set(w * (1 + r * 0.12), 1, zk);
+    belly.visible = r > 0.02; belly.scale.set(0.31 * w * (0.95 + 0.25 * r), 0.34 * (0.85 + 0.3 * r), 0.18 + 0.24 * r); belly.position.z = 0.02 + 0.05 * r;
+    arms.forEach((a, i) => { a.position.x = (i ? 1 : -1) * (0.41 + 0.31 * (w - 1) + 0.09 * r); }); armM.forEach((a) => (a.scale.x = a.scale.z = 1 + (w - 1) * 0.4 + 0.25 * r));
+    legs.forEach((l, i) => { l.position.x = (i ? 1 : -1) * (0.16 + 0.12 * (w - 1) + 0.05 * r); }); legM.forEach((l) => { l.scale.x = 1 + (w - 1) * 0.6 + 0.3 * r; l.scale.z = 1 + 0.3 * r; });
   };
   P.setLook(look);
   // put a thing in the right hand (null = empty hands)
@@ -127,6 +137,13 @@ export function makePerson(look = LOOKS.you, scale = 1) {
       legs[0].rotation.x = legs[1].rotation.x = kind === "ride" ? -1.25 : -1.5;
       arms[0].rotation.x = arms[1].rotation.x = kind === "ride" ? -1.15 : -1.3; arms[0].rotation.z = 0.1; arms[1].rotation.z = -0.1;
       hip.position.y = 0.0; body.rotation.x = kind === "ride" ? 0.25 : 0;
+    } else if (kind === "kick") {
+      // kickstarting a dirt bike: stand up on the pegs, hands on the bars, the right leg comes up then STOMPS down
+      hip.position.y = 0.42; body.rotation.x = 0.18;
+      legs[0].rotation.x = -0.75; legs[0].rotation.z = 0.08;
+      legs[1].rotation.x = amt < 0.45 ? -0.2 - (amt / 0.45) * 1.45 : -1.65 + Math.min(1, (amt - 0.45) / 0.2) * 2.05;
+      legs[1].rotation.z = -0.12;
+      arms[0].rotation.x = arms[1].rotation.x = -1.2; arms[0].rotation.z = 0.12; arms[1].rotation.z = -0.12;
     } else if (kind === "wave") {
       arms[1].rotation.z = 2.6 + Math.sin(t * 9) * 0.35;
     } else if (kind === "jump") {
@@ -236,11 +253,12 @@ export function makeTaser() {
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   return g;
 }
-// a cartoon fish to hold up (color + size)
-export function makeFish(color = 0x8ab0c0, size = 1) {
+// a cartoon fish to hold up (color + size; marks = "stripes" (tiger muskie) or "spots"; long = a long skinny muskie body)
+export function makeFish(color = 0x8ab0c0, size = 1, marks = null, long = false) {
   const g = new THREE.Group(), m = new THREE.MeshLambertMaterial({ color });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), m); body.scale.set(0.55, 0.9, 1.6); g.add(body);
-  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.26, 4), m); tail.rotation.x = -Math.PI / 2; tail.position.z = -0.42; tail.scale.set(0.3, 1, 1); g.add(tail);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), m); body.scale.set(0.55, long ? 0.75 : 0.9, long ? 2.3 : 1.6); g.add(body);
+  if (marks) { const dk = new THREE.MeshLambertMaterial({ color: new THREE.Color(color).multiplyScalar(0.45) }); for (let i = 0; i < (long ? 7 : 5); i++) { const z = -0.3 + i * (long ? 0.11 : 0.12); if (marks === "stripes") { const st = box(0.255, 0.3, 0.035, dk); st.position.set(0, 0.0, z * (long ? 1.3 : 1)); st.scale.y = 1 - Math.abs(z) * 1.4; g.add(st); } else for (const s of [-1, 1]) { const sp = box(0.03, 0.05, 0.05, dk); sp.position.set(s * 0.115, 0.04 * (i % 2 ? 1 : -1), z * 1.3); g.add(sp); } } }
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.26, 4), m); tail.rotation.x = -Math.PI / 2; tail.position.z = long ? -0.6 : -0.42; tail.scale.set(0.3, 1, 1); g.add(tail);
   const fin = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.18, 3), m); fin.position.set(0, 0.2, 0); g.add(fin);
   for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), new THREE.MeshBasicMaterial({ color: 0x111111 })); e.position.set(s * 0.11, 0.05, 0.24); g.add(e); }
   g.scale.setScalar(size);

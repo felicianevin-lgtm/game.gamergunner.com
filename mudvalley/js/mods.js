@@ -83,7 +83,27 @@ export function addMods(C, car, v) {
   const g = new THREE.Group(); g.name = "mods"; C.body.add(g); C.mods = g;
   if (car.lbar || car.boards || car.antenna || car.winch) truckMods(C, car, v, g);
   if (v.bike) bikeMods(C, car);
+  if (car.snork && !v.bike && !v.boat && !v.mower) snorkel(C, v, g);
   if (C.rider && hasHelmet(v)) helmet(C, helmetOf(car, v));
+}
+
+// ---------------------------------------------------------------- the snorkel kit: a tall black air intake pipe
+// (quads: up beside the handlebars, higher than your head; trucks + side-by-sides: up the windshield post to the roof)
+function snorkel(C, v, g) {
+  const blk = lam(0x1a1a1e);
+  let x, z, y0, y1;
+  if (v.quad) { x = C.wid * 0.32; z = C.seat.z + 0.62; y0 = C.seat.y - 0.08; y1 = C.seat.y + 1.25; }
+  else {
+    const P = probe(C);
+    x = (P.side ? Math.abs(P.side.x) : C.wid / 2) + 0.04; z = P.roof ? P.roof.z + 0.75 : C.seat.z + 1.0;
+    y0 = (P.side ? P.side.y : 0.9) + 0.1; y1 = (P.roof ? P.roof.y : C.seat.y + 1.1) + 0.2;
+  }
+  rod(g, V3(x, y0, z), V3(x, y1, z - 0.05), 0.065, blk, 0.065, 10);
+  rod(g, V3(x, y0 - 0.02, z + 0.02), V3(x - 0.18, y0 - 0.12, z + 0.1), 0.06, blk, 0.06, 8); // into the airbox
+  rod(g, V3(x, y1 - 0.04, z - 0.05), V3(x, y1 + 0.08, z + 0.12), 0.065, blk, 0.07, 10); // the bend
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.2, 12), blk); head.rotation.x = Math.PI / 2; head.position.set(x, y1 + 0.1, z + 0.2); g.add(head); // the ram head
+  bx(g, 0.16, 0.08, 0.02, x, y1 + 0.1, z + 0.31, lam(0x3a3d44));
+  for (const t of [0.3, 0.65]) bx(g, 0.05, 0.05, 0.12, x - 0.03, y0 + (y1 - y0) * t, z - 0.06, lam(0x55585e)); // clamps
 }
 
 function truckMods(C, car, v, g) {

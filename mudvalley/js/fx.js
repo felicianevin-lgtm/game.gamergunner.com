@@ -3,7 +3,7 @@
 import * as THREE from "/create/vendor/three.module.js";
 import { groundAt } from "./terrain.js";
 
-const MAXC = 700, MAXP = 160;
+const MAXC = 700, MAXP = 160, MAXR = 700;
 export class FX {
   constructor(scene) {
     this.chunks = []; this.puffs = [];
@@ -11,6 +11,10 @@ export class FX {
     this.pm = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.38, depthWrite: false }), MAXP);
     for (const m of [this.cm, this.pm]) { m.frustumCulled = false; m.count = 0; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); }
     this.cm.setColorAt(0, new THREE.Color()); this.pm.setColorAt(0, new THREE.Color());
+    // tire ruts in the mud (flat dark strips that fade away after a while)
+    this.ruts = []; this.rutI = 0;
+    this.rm = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x2c1b0e }), MAXR); // (solid: see-through ones vanish in the Ultra graphics)
+    this.rm.frustumCulled = false; this.rm.count = 0; this.rm.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.rm.receiveShadow = true; scene.add(this.rm);
     this.M = new THREE.Matrix4(); this.q = new THREE.Quaternion(); this.v = new THREE.Vector3(); this.s = new THREE.Vector3(); this.c = new THREE.Color(); this.e = new THREE.Euler();
   }
   chunk(x, y, z, vx, vy, vz, size, color, life = 1, grav = 1, spin = 6) {
@@ -21,6 +25,8 @@ export class FX {
     if (this.puffs.length >= MAXP) this.puffs.shift();
     this.puffs.push({ x, y, z, vx, vy, vz, size, color, life, max: life, grow });
   }
+  // a tire rut (x, y, z = where the tire touches the mud, yaw = which way the ride points, w = tire width)
+  rut(x, y, z, yaw, w = 0.3) { const r = { x, y, z, yaw, w, life: 50 }; if (this.ruts.length < MAXR) this.ruts.push(r); else { this.ruts[this.rutI] = r; this.rutI = (this.rutI + 1) % MAXR; } }
   // mud flying up behind the wheels
   mud(x, y, z, dx, dz, n = 3, power = 1) {
     for (let i = 0; i < n; i++) this.chunk(x, y + 0.2, z, -dx * (2 + Math.random() * 4) * power + (Math.random() - 0.5) * 3, (3 + Math.random() * 5) * power, -dz * (2 + Math.random() * 4) * power + (Math.random() - 0.5) * 3, 0.08 + Math.random() * 0.14, [0x5a3d24, 0x6a4a2c, 0x4a311c][i % 3], 0.9 + Math.random() * 0.5);
@@ -30,6 +36,8 @@ export class FX {
     for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = (1 + Math.random() * 4) * power; this.chunk(x, y, z, Math.cos(a) * s, (3 + Math.random() * 5) * power, Math.sin(a) * s, 0.08 + Math.random() * 0.12, [0xd8f4ff, 0x8ad0f0, 0xffffff][i % 3], 0.8 + Math.random() * 0.4); }
     this.puff(x, y + 0.3, z, 0, 1, 0, 1.2 * power, 0xffffff, 0.6, 2.5);
   }
+  // a boat's wake: white water droplets, no big puffs
+  spray(x, y, z, dx, dz, n = 2, power = 1) { for (let i = 0; i < n; i++) this.chunk(x, y, z, -dx * (1 + Math.random() * 2.5) * power + (Math.random() - 0.5) * 1.6, (1.4 + Math.random() * 2.6) * power, -dz * (1 + Math.random() * 2.5) * power + (Math.random() - 0.5) * 1.6, 0.06 + Math.random() * 0.09, [0xffffff, 0xd8f4ff, 0xaee0f6][i % 3], 0.5 + Math.random() * 0.35); }
   confetti(x, y, z, n = 40) {
     const cols = [0xff3a5a, 0xffd23a, 0x3aa0ff, 0x4adf6a, 0xff7ad8, 0xffffff];
     for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 2 + Math.random() * 6; this.chunk(x, y, z, Math.cos(a) * s, 5 + Math.random() * 8, Math.sin(a) * s, 0.1 + Math.random() * 0.08, cols[i % cols.length], 1.6 + Math.random(), 0.45, 12); }
@@ -66,5 +74,13 @@ export class FX {
       this.pm.setMatrixAt(n, M); this.pm.setColorAt(n, c.set(p.color)); n++;
     }
     this.pm.count = n; this.pm.instanceMatrix.needsUpdate = true; if (this.pm.instanceColor) this.pm.instanceColor.needsUpdate = true;
+    n = 0;
+    for (const r of this.ruts) {
+      r.life -= dt; if (r.life <= 0) continue;
+      const k = Math.min(1, r.life / 12); // (they fade out over the last 12 s)
+      M.compose(v.set(r.x, r.y, r.z), q.setFromEuler(e.set(0, r.yaw, 0)), s.set(r.w * k + 0.02, 1, 0.62));
+      this.rm.setMatrixAt(n++, M);
+    }
+    this.rm.count = n; this.rm.instanceMatrix.needsUpdate = true;
   }
 }

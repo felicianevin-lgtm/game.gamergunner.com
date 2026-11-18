@@ -1,5 +1,5 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
-import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP, BED_LENS, OFFSETS, CAMBERS, LOWER_COST, LOWER_NAMES, canLower } from "./vehicles.js";
+import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP, BED_LENS, OFFSETS, CAMBERS, LOWER_COST, LOWER_NAMES, canLower, TIRE_DIA, TIRE_WID, canTireSize, SNORKEL_PRICE, canSnorkel, BATTS, BRAKES } from "./vehicles.js";
 import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
@@ -12,7 +12,7 @@ import { GEAR, BLASTERS, RANKS, rankOf, nextRank, lootCap, BOOK_PAY } from "./cr
 import { RODS, FISH, fishById, fishValue, coolerValue, COOLER, RARITY_COLOR } from "./fishing.js";
 import { QUICK } from "./mp.js";
 import { CAMP_ITEMS, campItem, CAMP_MAX, TENT_COLORS } from "./camp.js";
-import { CLOTH_COLORS, LOOKS } from "./character.js";
+import { CLOTH_COLORS, LOOKS, BODY_W, BODY_R } from "./character.js";
 import { itemById, packCap } from "./npcs.js";
 import { PARTS, partById, KINDS, SHIP_FEE, have } from "./parts.js";
 import * as IN from "./input.js";
@@ -21,7 +21,7 @@ export const CUTS = [{ name: "High (4 in)", desc: "Just a trim. Tall and fluffy.
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { blackout: "🏍️", ultrab: "🏍️", move10: "🏍️", dirtkart: "🏎️", bassboat: "🚤", gooseneck: "🚛", drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵"; Object.assign(ICON, { squarebody: "🛻", muscle: "🏎️", suv: "🚙", rally: "🏎️", skidsteer: "🚜", excavator: "🏗️", ztmower: "🚜", lawntractor: "🚜" }); Object.assign(ICON, { bike125f: "🏍️", dual250: "🏍️", ebike: "🚲", efat: "🚲", mudmower: "🚜", racemower: "🚜", camper: "🚐" });
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -113,13 +113,15 @@ function customs() {
   const c = GM.mine(); if (!c) return;
   if (GM.G.panel !== "customs") { const b = c.b; b.x = 36; b.z = -40; b.yaw = 0; b.vx = b.vz = 0; b.flipped = false; } // (onto the turntable in the bay)
   const s = c.s, v = vehicleById(s.id), t = tune(s);
-  const tabs = [["paint", "🎨 Paint"], ["wheels", "🛞 Wheels"], ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike ? [] : [["lift", canLower(v) ? "↕️ Lift / Lower" : "⬆️ Lift"]]), ...(BEDS[s.id] ? [["bed", "🛻 Bed"]] : []), ...(c.m.realBike ? [["susp", "🔧 Suspension"]] : []), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : []), ...(!v.bike ? [["truck", v.quad || v.heavy || v.mower || v.open ? "🔦 Lights + Winch" : "🔦 Truck Mods"]] : []), ...(v.bike ? [["bikemods", "🏍️ Bike Mods"]] : []), ...(v.bike || v.quad ? [["kit", "🎨 Graphics"]] : []), ...(hasHelmet(v) ? [["helmet", "⛑️ Helmet"]] : []), ...(v.mower ? [["deck", "🌱 Mower Deck"]] : [])];
-  if (v.bike && cTab === "lift") cTab = "paint";
+  const tabs = [["paint", "🎨 Paint"], ...(v.boat ? [] : [["wheels", "🛞 Wheels"]]), ["engine", "⚙️ Engine"], ["speed", "🎚️ Speed"], ...(v.bike || v.boat ? [] : [["lift", canLower(v) ? "↕️ Lift / Lower" : "⬆️ Lift"]]), ...(BEDS[s.id] ? [["bed", "🛻 Bed"]] : []), ...(c.m.realBike ? [["susp", "🔧 Suspension"]] : []), ["neon", "💡 Neon"], ...(c.m.hasRust ? [["rust", "🧽 Rust"]] : []), ...(!v.bike && !v.boat ? [["truck", v.quad || v.heavy || v.mower || v.open ? "🔦 Lights + Winch" : "🔦 Truck Mods"]] : []), ...(v.bike ? [["bikemods", "🏍️ Bike Mods"]] : []), ...(v.emoto ? [["emoto", "⚡ E-Moto"]] : []), ...(v.bike || v.quad ? [["kit", "🎨 Graphics"]] : []), ...(hasHelmet(v) ? [["helmet", "⛑️ Helmet"]] : []), ...(v.mower ? [["deck", "🌱 Mower Deck"]] : [])];
+  if ((v.bike || v.boat) && cTab === "lift") cTab = "paint";
   const maxLift = v.bike ? 0 : LIFT_COST.length - 1; // (dirt bikes don't get lift kits)
   if (s.lift > maxLift) s.lift = maxLift;
   let body = "";
   if (cTab === "paint") body = `<p class="note">Paint job: <b>${money(PRICES.paint)}</b> each</p><div class="swatches">${PAINTS.map((p) => `<button type="button" class="sw ${p === s.paint ? "on" : ""}" style="background:${hex(p)}" data-a="paint" data-v="${p}"></button>`).join("")}</div>`;
   if (cTab === "wheels") body = `<h3>Tires</h3><div class="opts">${TIRES.map((x) => `<button type="button" class="opt ${s.tires === x.id ? "on" : ""}" data-a="tires" data-v="${x.id}"><span>${x.name}<small>${x.desc}</small></span><em>${s.tires === x.id ? "✓" : x.price ? money(x.price) : "FREE"}</em></button>`).join("")}</div>
+    ${canTireSize(v) ? `<h3>Tire size: how tall</h3><p class="note">Taller tires = more ground clearance, better in mud + climbing, a bit slower to get going.</p><div class="opts">${TIRE_DIA.map((q, i) => `<button type="button" class="opt ${(s.tdia ?? 1) === i ? "on" : ""}" data-a="mod:tdia" data-v="${i}"><span>${q.name}</span><em>${(s.tdia ?? 1) === i ? "✓" : (s.own_tdia || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>
+    <h3>Tire size: how wide</h3><p class="note">Wide tires grip more and float on top of the mud. Skinny ones cut down through it.</p><div class="opts">${TIRE_WID.map((q, i) => `<button type="button" class="opt ${(s.twid ?? 1) === i ? "on" : ""}" data-a="mod:twid" data-v="${i}"><span>${q.name}</span><em>${(s.twid ?? 1) === i ? "✓" : (s.own_twid || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>` : ""}
     <h3>Rims (${money(PRICES.rims)})</h3><div class="swatches">${RIMS.map((r) => `<button type="button" class="sw ${s.rims === r.id ? "on" : ""}" style="background:${hex(r.c)}" title="${r.name}" data-a="rims" data-v="${r.id}"></button>`).join("")}</div>
     ${v.bike ? "" : `<h3>Wheel offset</h3><p class="note">How far the wheels stick out. Poke = wide and mean, tucked = tight under the fenders.</p><div class="opts">${OFFSETS.map((q, i) => `<button type="button" class="opt ${(s.offset ?? 1) === i ? "on" : ""}" data-a="offset" data-v="${i}"><span>${q.name}</span><em>${(s.offset ?? 1) === i ? "✓" : (s.ownOffset || [1]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>
     <h3>Camber</h3><p class="note">Tilts the tops of the wheels in. The stanced drift look!</p><div class="opts">${CAMBERS.map((q, i) => `<button type="button" class="opt ${(s.camber ?? 0) === i ? "on" : ""}" data-a="camber" data-v="${i}"><span>${q.name}</span><em>${(s.camber ?? 0) === i ? "✓" : (s.ownCamber || [0]).includes(i) || !q.price ? "FREE" : money(q.price)}</em></button>`).join("")}</div>`}`;
@@ -141,6 +143,7 @@ function customs() {
   if (cTab === "truck") body = `<p class="note">Bolt-on mods! Light bars light up at night (press <kbd>L</kbd> for your lights).${canWinch(v) ? " The winch pulls you out when you're stuck: press <kbd>J</kbd> near a tree, rock or pole." : ""}</p>
     <h3>💡 Light bar</h3>${optList(LIGHTBARS, s.lbar || 0, "lbar", "mod:lbar", (q) => q.price)}
     ${canWinch(v) ? `<h3>🪝 Front bumper winch</h3>${optList([{ name: "No winch" }, { name: "12,000 lb winch", desc: "Steel cable + a hook. J = winch yourself out of the mud!" }], s.winch || 0, "winch", "mod:winch", (q, i) => (i ? WINCH_PRICE : 0))}` : ""}
+    ${canSnorkel(v) ? `<h3>🤿 Snorkel kit</h3>${optList([{ name: "No snorkel", desc: "The engine breathes from down low" }, { name: "Snorkel kit", desc: "A tall air intake: drive through DEEP water + mud (like The Abyss) without flooding the engine" }], s.snork ? 1 : 0, "snork", "mod:snork", (q, i) => (i ? SNORKEL_PRICE : 0))}` : ""}
     ${isTruckish(v) && !v.open ? `<h3>🪜 Running boards</h3>${optList(BOARDS, s.boards || 0, "boards", "mod:boards", (q) => q.price)}` : ""}
     <h3>📡 Antenna</h3>${optList(ANTENNAS, s.antenna || 0, "antenna", "mod:antenna", (q) => q.price)}`;
   if (cTab === "bikemods") body = `<p class="note">Make your dirt bike YOURS.${c.m.steerG ? "" : " (Bars, pads and grips only show on the full-size dirt bikes.)"}</p>
@@ -148,6 +151,9 @@ function customs() {
     <h3>Bar pad (${money(PAD_PRICE)})</h3>${swList(PAD_COLORS, s.pad ?? 0, "mod:pad", true)}
     <h3>Grips (${money(GRIP_PRICE)})</h3>${swList(GRIP_COLORS, s.grips ?? 0, "mod:grips")}
     <h3>🛣️ Supermoto kit</h3>${optList([{ name: "Dirt wheels", desc: "Tall knobby wheels for the dirt" }, { name: "Supermoto wheels", desc: "Small, fat street tires: faster + grippier on roads, worse in dirt and mud" }], s.moto || 0, "moto", "mod:moto", (q, i) => (i ? MOTO_PRICE : 0))}`;
+  if (cTab === "emoto") body = `<p class="note">Electric moto upgrades! Your bike gets rebuilt with the new parts.</p>
+    <h3>🔋 Battery</h3>${optList(BATTS, s.batt || 0, "batt", "mod:batt", (q) => q.price)}
+    <h3>🛑 Brakes</h3>${optList(BRAKES, s.brk || 0, "brk", "mod:brk", (q) => q.price)}`;
   if (cTab === "kit") body = `<p class="note">A graphic kit printed right onto your plastics. ${money(KIT_PRICE)} for a new design, colors are free!</p>
     ${optList(KITS, s.kit || 0, "kit", "kit", (q, i) => (i ? KIT_PRICE : 0))}<h3>Graphics color</h3>${swList(KIT_COLORS, s.kitCol ?? 0, "kitCol")}`;
   if (cTab === "helmet") { const hi = helmetOf(s, v); body = `<p class="note">Safety first (and style)! A full-face motocross helmet with a peak and goggles. ${money(HELMET_PRICE)} each, and you keep the ones you buy.</p>
@@ -161,8 +167,8 @@ function customs() {
   onAct = (a, val, el, live) => {
     if (a === "tab") { cTab = val; SFX.click(); customs(); return; }
     if (a.startsWith("mod:")) {
-      const k = a.slice(4), i = +val, d = { pad: 0, bars: 0, grips: 0, helmet: 1, cut: 1 }[k] ?? 0, cur = k === "helmet" ? helmetOf(s, v) : s[k] ?? d, own = s["own_" + k] || [d];
-      const price = { lbar: () => LIGHTBARS[i].price, boards: () => BOARDS[i].price, antenna: () => ANTENNAS[i].price, winch: () => (i ? WINCH_PRICE : 0), bars: () => BAR_PRICE, pad: () => (i < 0 ? 0 : PAD_PRICE), grips: () => GRIP_PRICE, moto: () => (i ? MOTO_PRICE : 0), helmet: () => (i ? HELMET_PRICE : 0), cut: () => 0 }[k];
+      const k = a.slice(4), i = +val, d = { pad: 0, bars: 0, grips: 0, helmet: 1, cut: 1, tdia: 1, twid: 1 }[k] ?? 0, cur = k === "helmet" ? helmetOf(s, v) : k === "snork" ? (s.snork ? 1 : 0) : s[k] ?? d, own = s["own_" + k] || [d];
+      const price = { lbar: () => LIGHTBARS[i].price, boards: () => BOARDS[i].price, antenna: () => ANTENNAS[i].price, winch: () => (i ? WINCH_PRICE : 0), bars: () => BAR_PRICE, pad: () => (i < 0 ? 0 : PAD_PRICE), grips: () => GRIP_PRICE, moto: () => (i ? MOTO_PRICE : 0), helmet: () => (i ? HELMET_PRICE : 0), cut: () => 0, tdia: () => TIRE_DIA[i].price, twid: () => TIRE_WID[i].price, snork: () => (i ? SNORKEL_PRICE : 0), batt: () => BATTS[i].price, brk: () => BRAKES[i].price }[k];
       if (i !== cur && price) GM.setMod(k, i, own.includes(i) ? 0 : price());
       customs(); return;
     }
@@ -502,7 +508,7 @@ function careerHtml(back) {
 function fishLogHtml(back) {
   const n = Object.keys(S.fishLog).length;
   return `<h2>🐟 FISH LOG</h2>${back}<p class="note">Species found: <b>${n} / ${FISH.length}</b> · In your cooler: <b>${S.fish.length} / ${COOLER}</b> fish worth <b>${money(coolerValue())}</b></p>
-    <div class="list">${FISH.map((f) => { const L = S.fishLog[f.id]; return `<div class="item"><span class="ico" style="filter:${L ? "none" : "grayscale(1) brightness(0.4)"}">${f.id === "boot" ? "🥾" : "🐟"}</span><span class="nm"><b>${L ? esc(f.name) : "???"}<span class="tag" style="background:${RARITY_COLOR[f.rarity]}">${f.rarity}</span></b><small>${L ? "Caught " + L.n + " · biggest " + L.best + " lb" : "Not caught yet"} · ${f.where === "both" ? "pond + river" : f.where === "pond" ? "Lily Pond" : "the river"}${f.minRod ? " · needs a " + RODS[f.minRod].name : ""}</small></span><span class="pr">${L ? "~" + money(f.price) : ""}</span></div>`; }).join("")}</div>
+    <div class="list">${FISH.map((f) => { const L = S.fishLog[f.id]; return `<div class="item"><span class="ico" style="filter:${L ? "none" : "grayscale(1) brightness(0.4)"}">${f.id === "boot" ? "🥾" : "🐟"}</span><span class="nm"><b>${L ? esc(f.name) : "???"}<span class="tag" style="background:${RARITY_COLOR[f.rarity]}">${f.rarity}</span></b><small>${L ? "Caught " + L.n + " · biggest " + L.best + " lb" : "Not caught yet"} · ${f.where === "both" ? "anywhere" : f.where.split(" ").map((w) => ({ pond: "Lily Pond", river: "the river", lake: "Big Bass Lake" })[w]).join(" + ")}${f.minRod ? " · needs a " + RODS[f.minRod].name : ""}</small></span><span class="pr">${L ? "~" + money(f.price) : ""}</span></div>`; }).join("")}</div>
     <div class="btns"><button type="button" class="small" data-a="gpsBait">📍 Bait & Tackle</button></div>`;
 }
 // ---------------------------------------------------------------- Copper Creek shops + the police station + the hideout
@@ -570,7 +576,7 @@ const owns = (k, i) => !CLOTHES[k].list[i][1] || S.closet.includes(k + i);
 function clothesShop() {
   const O = S.outfit, Y = LOOKS.you, cur = (k) => (k === "hat" ? (O.cap === null ? 4 : O.hat || 0) : O[k] || 0);
   const sw = (list, val, act) => `<div class="swatches" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0">${list.map((c) => `<button type="button" data-a="${act}" data-v="${c}" title="color" style="width:30px;height:30px;border-radius:50%;background:${hex(c)};border:3px solid ${c === val ? "#ffd23a" : "rgba(255,255,255,0.5)"};cursor:pointer"></button>`).join("")}</div>`;
-  const tabs = [...Object.entries(CLOTHES).map(([k, c]) => [k, c.icon + " " + c.name]), ["shoes", "👟 Shoes"], ["hair", "💇 Hair"]];
+  const tabs = [["body", "🧍 Body"], ...Object.entries(CLOTHES).map(([k, c]) => [k, c.icon + " " + c.name]), ["shoes", "👟 Shoes"], ["hair", "💇 Hair"]];
   let body = "";
   if (CLOTHES[clTab]) {
     body = `<div class="list">${CLOTHES[clTab].list.map(([n, pr], i) => { const on = cur(clTab) === i, own = owns(clTab, i); return `<div class="item ${on ? "sel" : ""}"><span class="nm"><b>${esc(n)}${on ? '<span class="tag">WEARING</span>' : own && pr ? '<span class="tag">YOURS</span>' : ""}</b></span>${on ? "" : own ? `<button type="button" class="small" data-a="wear" data-v="${i}">Wear it</button>` : `<button type="button" class="mid" data-a="buyc" data-v="${i}" ${S.money >= pr ? "" : "disabled"}>${money(pr)}</button>`}</div>`; }).join("")}</div>`;
@@ -580,6 +586,8 @@ function clothesShop() {
     if (clTab === "extra" && O.extra === 2) body += `<p class="note"><b>Backpack color</b> (same as the second color):</p>${sw(CLOTH_COLORS, O.acc ?? 0xffffff, "col_acc")}`;
   }
   if (clTab === "shoes") body = `<p class="note"><b>Shoe color</b> (free!):</p>${sw(CLOTH_COLORS, O.shoes ?? Y.shoes, "col_shoes")}`;
+  if (clTab === "body") body = `<p class="note"><b>Body shape</b> (free!). Your friends see it too.</p><h3>Width</h3><div class="opts">${["Skinny", "Normal", "Wide", "Extra wide", "HUGE"].map((n, i) => `<button type="button" class="opt ${(O.bw ?? 1) === i ? "on" : ""}" data-a="bw" data-v="${i}"><span>${n}</span><em>${(O.bw ?? 1) === i ? "✓" : ""}</em></button>`).join("")}</div>
+    <h3>Round</h3><div class="opts">${["Normal", "A little round", "Round", "SUPER round"].map((n, i) => `<button type="button" class="opt ${(O.br ?? 0) === i ? "on" : ""}" data-a="br" data-v="${i}"><span>${n}</span><em>${(O.br ?? 0) === i ? "✓" : ""}</em></button>`).join("")}</div>`;
   if (clTab === "hair") body = `<p class="note"><b>Hair color</b> (free!):</p>${sw(HAIR, O.hair ?? Y.hair, "col_hair")}`;
   side(`<h2>👕 THREADS CLOTHING</h2><div class="bank">${money(S.money)}</div><p class="sub">“Hey! Let’s find your style.” Buy a style once and every color is free. You change right away, and your friends see your new look too!${S.role !== "civ" ? " <b>(" + (S.role === "cop" ? "Cops wear their uniform on the job" : "Robbers keep the striped shirt") + ": you’ll see your outfit when you’re a civilian.)</b>" : ""}</p>
     <div class="tabs">${tabs.map(([k, n]) => `<button type="button" data-a="ctab" data-v="${k}" class="${clTab === k ? "on" : ""}">${n}</button>`).join("")}</div>${body}`, "shop");
@@ -588,6 +596,7 @@ function clothesShop() {
     if (a === "buyc") { const pr = CLOTHES[clTab].list[+val][1]; if (!GM.buyCloth(clTab + val, pr)) return; a = "wear"; }
     if (a === "wear") { const i = +val; if (clTab === "hat") { if (i === 4) { if (O.cap !== null) O.capColor = O.cap ?? Y.cap; O.cap = null; } else { O.hat = i; if (O.cap === null) O.cap = O.capColor ?? Y.cap; } } else O[clTab] = i; SFX.click(); GM.wearOutfit(); return clothesShop(); }
     if (a.startsWith("col_")) { O[a.slice(4)] = +val; SFX.click(); GM.wearOutfit(); return clothesShop(); }
+    if (a === "bw" || a === "br") { O[a] = +val; SFX.click(); GM.wearOutfit(); return clothesShop(); }
   };
 }
 // ---------------------------------------------------------------- pawn shops + your backpack (npcs.js)

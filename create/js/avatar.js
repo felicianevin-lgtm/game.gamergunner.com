@@ -64,6 +64,9 @@ export function sanitizeAvatar(a) {
   if (okArt(a.art)) out.art = a.art;
   else if (out.top === "draw") out.top = "plain";
   if (okArt(a.pantsArt)) out.pantsArt = a.pantsArt;
+  // body shape (Body tab sliders): width 0.8 (skinny) .. 1.6 (super wide), round 0 (blocky) .. 1 (super round)
+  if (typeof a.width === "number" && Number.isFinite(a.width) && Math.abs(a.width - 1) > 0.004) out.width = r2(Math.min(1.6, Math.max(0.8, a.width)));
+  if (typeof a.round === "number" && Number.isFinite(a.round) && a.round > 0.004) out.round = r2(Math.min(1, Math.max(0, a.round)));
   const made = Array.isArray(a.made) ? a.made.map(sanitizeMade).filter(Boolean).slice(0, MAX_WORN) : [];
   if (made.length) out.made = made;
   return out;
@@ -189,7 +192,9 @@ export function buildAvatar(cfg) {
   body.add(legL, legR, armL, armR);
   // torso: the front shows the shirt pattern (a drawing shows on the back too)
   const torsoMats = [shirt, shirt, shirt, shirt, drawn ? front : shirt, front]; // (box faces: +x, -x, +y, -y, +z, -z; the front is -z)
-  const torso = new THREE.Mesh(B(1.4, 1.15, 0.75), torsoMats); torso.position.set(0, 1.78, 0); torso.castShadow = true; body.add(torso);
+  const wd = a.width || 1, rd = a.round || 0;
+  const torso = new THREE.Mesh(rd ? roundTorso(rd) : B(1.4, 1.15, 0.75), torsoMats); torso.position.set(0, 1.78, 0); torso.castShadow = true; body.add(torso);
+  if (rd) { armL.position.x -= 0.12 * rd; armR.position.x += 0.12 * rd; legL.position.x -= 0.05 * rd; legR.position.x += 0.05 * rd; for (const L of [legL, legR, armL, armR]) L.children.forEach((c) => c.scale.set(1 + 0.22 * rd, 1, 1 + 0.22 * rd)); }
   if (a.top === "hoodie") part(body, B(1.1, 0.5, 0.4), shirt, 0, 2.3, 0.5);
   // head
   const head = new THREE.Group(); head.position.set(0, 2.78, 0); body.add(head);
@@ -207,9 +212,24 @@ export function buildAvatar(cfg) {
   at.handL.position.set(0, -1.05, -0.15); armL.add(at.handL);
   for (const m of a.made || []) at[m.a].add(buildMade(m));
   const k ={ normal: [1, 1, 1], small: [0.85, 0.82, 0.85], tall: [0.95, 1.15, 0.95], wide: [1.18, 1.02, 1.12] }[a.build];
-  body.scale.set(k[0], k[1], k[2]);
+  body.scale.set(k[0] * wd, k[1], k[2] * (1 + (wd - 1) * 0.5));
+  if (wd !== 1) head.scale.set(1 / (1 + (wd - 1) * 0.8), 1, 1 / (1 + (wd - 1) * 0.4)); // (the head stays about the same size)
   g.userData.limbs = { legL, legR, armL, armR };
   g.userData.t = 0;
+  return g;
+}
+// a round torso: the box pulled toward an egg shape, with a belly that sticks out in front (-z is the front)
+function roundTorso(rd) {
+  const g = new THREE.BoxGeometry(1.4, 1.15, 0.75, 5, 5, 4), p = g.attributes.position, ax = 0.7, ay = 0.575, az = 0.375;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const e = Math.hypot(x / ax, y / ay, z / az) || 1, k = rd * 0.75;
+    x += (x / e - x) * k; y += (y / e - y) * k * 0.6; z += (z / e - z) * k;
+    z *= 1 + rd * 0.35; if (z < 0) z *= 1 + rd * 0.65 * (1 - (y / ay) ** 2 * 0.6); // (the belly)
+    x *= 1 + rd * 0.12;
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
   return g;
 }
 // A whole-body suit (SUITS): same limbs as a normal avatar, so it walks the same way.

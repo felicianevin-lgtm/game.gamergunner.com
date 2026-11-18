@@ -3,6 +3,7 @@
 import * as THREE from "/create/vendor/three.module.js";
 import { groundAt } from "./terrain.js";
 import { pushOut } from "./colliders.js";
+import { bedOf, BEDS } from "./vehicles.js";
 
 export const TRAILERS = [
   { id: "utility", name: "Small Utility Trailer", price: 600, cap: 2, len: 4.4, need: 1, maxSize: 1, desc: "Carries 2 small rides (ATVs or dirt bikes). Even an ATV can pull it!",
@@ -11,6 +12,9 @@ export const TRAILERS = [
     slots: [{ x: 0, z: 2.9 }, { x: 0, z: 0.55 }, { x: 0, z: -1.8 }, { x: 0, z: -4.15 }], deckY: 1.0 },
   { id: "enclosed", name: "Big Enclosed Trailer", price: 6500, cap: 2, len: 7.6, need: 2, maxSize: 2, enclosed: true, paintable: true, desc: "A giant closed-up box trailer in YOUR color. Fits one car (or 2 small rides). The back door opens into a ramp.",
     slots: [{ x: 0, z: 0.9 }, { x: 0, z: -1.5 }], deckY: 0.9 },
+  // a gooseneck: a long, heavy-duty deck that hooks onto a ball IN the truck bed (pickups with a bed only)
+  { id: "gooseneck", name: "Big Iron Gooseneck Trailer", price: 7800, cap: 5, len: 10.4, need: 2, maxSize: 2, goose: true, long: true, paintable: true, desc: "A 32-foot gooseneck flatbed. It hooks onto a ball in your truck bed (pickups only), so it pulls super steady. Carries 2 cars + a small ride, or 5 small rides!",
+    slots: [{ x: 0, z: 3.6 }, { x: 0, z: 1.4 }, { x: 0, z: -0.8 }, { x: 0, z: -3.0 }, { x: 0, z: -5.0 }], deckY: 1.0 },
   // a real travel trailer (an RV you tow): park it anywhere, walk up to the side door and press E to go inside
   { id: "camper", name: "Lazy Days RV Camper", price: 12000, cap: 0, len: 8.4, need: 2, maxSize: 0, rv: true, paintable: true, desc: "A real RV camper you can tow ANYWHERE! Park it, walk up to the side door and press E to go inside: a bed, a kitchen, a couch and a TV. The stripes come in YOUR color. Needs a truck.",
     slots: [], deckY: 0.8 },
@@ -19,7 +23,7 @@ export const TRAILERS = [
 export const RV_DOOR = { x: -1.3, z: -1.2 };
 export const ENCLOSED_COLORS = [0x1a1a1e, 0xf4f4f4, 0xe0203a, 0x2a7ad0, 0x3aa04a, 0xffd23a, 0xff7a1a, 0x6a3ad0, 0xff5ad8, 0x9aa0aa, 0x7a4a2a, 0x2ac0a0];
 // how far behind the axle the back end is, and how high the coupler sits
-export const trailerBack = (T) => (T.id === "flatbed" ? 5.6 : T.id === "enclosed" ? 6.6 : T.rv ? 3.8 : 2.4);
+export const trailerBack = (T) => (T.id === "flatbed" ? 5.6 : T.id === "enclosed" ? 6.6 : T.id === "gooseneck" ? 6.4 : T.rv ? 3.8 : 2.4);
 export const trailerById = (id) => TRAILERS.find((t) => t.id === id);
 
 const mat = {};
@@ -76,6 +80,22 @@ export function buildTrailer(type, color = 0x1a1a1e) {
     door = new THREE.Group(); door.position.set(0, y0, zb - 0.06); deck.add(door);
     bx(door, 2.5, H - 0.05, 0.08, 0, (H - 0.05) / 2, 0, body); for (let y = 0.4; y < H; y += 0.6) bx(door, 2.3, 0.05, 0.1, 0, y, -0.02, mat.grate);
     for (const z of [-0.6, 0.6]) { wheel(1.55, z, 0.42); wheel(-1.55, z, 0.42); }
+  } else if (type === "gooseneck") {
+    // a long steel deck with a beavertail + 2 ramps at the back, a raised front deck, then the neck that reaches up and
+    // over the tailgate down to a coupler that drops onto the ball in the truck bed
+    body = new THREE.MeshLambertMaterial({ color });
+    const y = 0.9, zb = -6.2, zf = 4.4, L = T.len;
+    bx(deck, 2.6, 0.2, zf - zb, 0, y, (zf + zb) / 2, body); for (let z = zb + 0.3; z < zf; z += 0.55) bx(deck, 2.5, 0.04, 0.38, 0, y + 0.11, z, mat.deck);
+    for (const s of [-1, 1]) { bx(deck, 0.14, 0.3, zf - zb, s * 1.3, y - 0.04, (zf + zb) / 2, body); for (let z = zb + 0.6; z < zf; z += 1.6) bx(deck, 0.12, 0.12, 0.12, s * 1.38, y + 0.05, z, mat.steel); bx(deck, 0.14, 0.1, 0.1, s * 1.36, y, zb + 0.1, mat.light); bx(deck, 0.14, 0.1, 0.1, s * 1.36, y, zf - 0.2, mat.yellow); }
+    for (const s of [-1, 1]) { const r = bx(deck, 0.6, 0.06, 1.8, s * 0.75, 0.5, zb - 0.85, mat.grate, -0.5); r.name = "ramp"; } // ramps (beavertail)
+    // the raised front deck (a step up), the neck + the coupler
+    bx(deck, 2.6, 0.55, 2.0, 0, y + 0.1, zf + 1.0, body); bx(deck, 2.5, 0.04, 1.9, 0, y + 0.66, zf + 1.0, mat.deck);
+    bx(deck, 0.5, 0.38, L - zf - 2.0 + 0.3, 0, y + 0.85, (zf + 2.0 + L) / 2 - 0.15, body); // the neck beam
+    for (const s of [-1, 1]) bx(deck, 0.12, 0.6, 0.12, s * 0.3, y + 0.6, zf + 2.1, body);
+    bx(deck, 0.3, 0.75, 0.3, 0, y + 0.3, L, body); bx(deck, 0.24, 0.14, 0.24, 0, y + 0.14, L, mat.steel); // the coupler post
+    bx(deck, 0.08, 0.7, 0.08, 0.55, 0.45, zf + 1.6, mat.steel); bx(deck, 0.08, 0.7, 0.08, -0.55, 0.45, zf + 1.6, mat.steel); // landing legs
+    for (const s of [-1, 1]) bx(deck, 0.6, 0.45, 3.1, s * 1.45, 0.92, -1.4, mat.steel); // fenders
+    for (const z of [-2.2, -0.6]) { wheel(1.45, z, 0.42); wheel(-1.45, z, 0.42); }
   } else if (type === "camper") {
     // a tall rounded white box with stripes in your color, windows, a side door with steps, an awning (out when it's
     // parked), an A/C on the roof, propane tanks on the tongue
@@ -145,6 +165,13 @@ export function hitchPoint(b) {
   const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw), sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);
   return { x: b.x + fx * h.z + sx * h.x, y: b.y + h.y, z: b.z + fz * h.z + sz * h.x };
 }
+// where the gooseneck ball in a truck bed is (world): the middle of the bed, a bit forward of the back axle
+export function goosePoint(b) {
+  const B = BEDS[b.car && b.car.id] && bedOf(b.car); if (!B) return null;
+  const M = b.model, y = (M.flatY ?? B.y) + (M.liftY || 0), z = B.z + 0.25;
+  return { x: b.x + Math.sin(b.yaw) * z, y: b.y + y, z: b.z + Math.cos(b.yaw) * z };
+}
+const hookPoint = (tr, b) => (tr.T && tr.T.goose ? goosePoint(b) : hitchPoint(b));
 // where the trailer's coupler (front tip) is (world)
 export function couplerPoint(tr) { const L = tr.T ? tr.T.len : tr.len; return { x: tr.x + Math.sin(tr.yaw) * L, z: tr.z + Math.cos(tr.yaw) * L }; }
 
@@ -152,18 +179,19 @@ export function couplerPoint(tr) { const L = tr.T ? tr.T.len : tr.len; return { 
 export function stepTrailer(tr, dt) {
   if (tr.model.awning) tr.model.awning.visible = !tr.hitched; // (the RV's awning rolls out when it's parked)
   if (!tr.hitched) { tr.y = groundAt(tr.x, tr.z); place(tr); return; }
-  const b = tr.hitched, H = hitchPoint(b), L = tr.T ? tr.T.len : tr.len;
+  const b = tr.hitched, H = hookPoint(tr, b) || hitchPoint(b), L = tr.T ? tr.T.len : tr.len;
   let dx = tr.x - H.x, dz = tr.z - H.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
   let ox = tr.x, oz = tr.z;
   tr.x = H.x + dx * L; tr.z = H.z + dz * L;
   // don't fold in half (jackknife)
   let yaw = Math.atan2(H.x - tr.x, H.z - tr.z), diff = Math.atan2(Math.sin(yaw - b.yaw), Math.cos(yaw - b.yaw));
-  if (Math.abs(diff) > 1.4) { yaw = b.yaw + Math.sign(diff) * 1.4; tr.x = H.x - Math.sin(yaw) * L; tr.z = H.z - Math.cos(yaw) * L; }
+  const fold = tr.T && tr.T.goose ? 1.25 : 1.4; // (a gooseneck turns tighter but its neck can't swing as far)
+  if (Math.abs(diff) > fold) { yaw = b.yaw + Math.sign(diff) * fold; tr.x = H.x - Math.sin(yaw) * L; tr.z = H.z - Math.cos(yaw) * L; }
   const p = pushOut(tr.x, tr.z, 1.1, tr.y + 0.5); if (p.hit) { tr.x = p.x; tr.z = p.z; yaw = Math.atan2(H.x - tr.x, H.z - tr.z); tr.x = H.x - Math.sin(yaw) * L; tr.z = H.z - Math.cos(yaw) * L; }
   tr.yaw = yaw;
   tr.y = groundAt(tr.x, tr.z);
-  const hy = b.y + (b.model.hitch ? b.model.hitch.y : 0.6);
-  const coupY = tr.y + (tr.T ? (tr.T.id === "utility" ? 0.55 : 0.82) : tr.hitchY || 0.6);
+  const hy = tr.T && tr.T.goose ? H.y : b.y + (b.model.hitch ? b.model.hitch.y : 0.6);
+  const coupY = tr.y + (tr.T ? (tr.T.id === "utility" ? 0.55 : tr.T.goose ? 0.9 : 0.82) : tr.hitchY || 0.6);
   tr.pitch = Math.atan2(hy - coupY, L);
   tr.spin += Math.hypot(tr.x - ox, tr.z - oz) / 0.4 * (((tr.x - ox) * Math.sin(yaw) + (tr.z - oz) * Math.cos(yaw)) > 0 ? 1 : -1);
   place(tr);
@@ -199,7 +227,7 @@ export function loadOnto(tr, entry, model, slots) {
 export function cargoBoxes(tr, kind) {
   if (tr.cargo) { tr.model.deck.remove(tr.cargo); tr.cargo = null; }
   if (!kind) return;
-  const g = new THREE.Group(), long = tr.T.id === "flatbed";
+  const g = new THREE.Group(), long = tr.T.id === "flatbed" || !!tr.T.long;
   if (kind === "logs") for (let r = 0; r < 3; r++) for (let i = 0; i < 4 - r; i++) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, long ? 8 : 3.2, 8), new THREE.MeshLambertMaterial({ color: [0x9a6a3a, 0x8a5a30, 0xa87a48][(i + r) % 3] })); l.rotation.x = Math.PI / 2; l.position.set(-0.96 + i * 0.64 + r * 0.32, tr.T.deckY + 0.36 + r * 0.56, long ? 0 : 0.2); l.castShadow = true; g.add(l); }
   else if (kind === "hay") for (let i = 0; i < (long ? 6 : 2); i++) { const h = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.2, 10), new THREE.MeshLambertMaterial({ color: 0xe6c35a })); h.rotation.z = Math.PI / 2; h.position.set(long ? 0 : (i ? 0.66 : -0.66), tr.T.deckY + 0.72, long ? 3.4 - i * 1.5 : 0.2); h.castShadow = true; g.add(h); }
   else for (let i = 0; i < (long ? 8 : 4); i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.0, 1.1), new THREE.MeshLambertMaterial({ color: [0xb08a5a, 0x9a7448][i % 2] })); c.position.set(((i % 2) - 0.5) * 1.2, tr.T.deckY + 0.5 + (long ? 0 : Math.floor(i / 2) * 1.02), long ? 3.4 - Math.floor(i / 2) * 2.2 : 0.2); c.castShadow = true; g.add(c); }

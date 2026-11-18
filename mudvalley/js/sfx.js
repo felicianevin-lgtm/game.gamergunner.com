@@ -48,6 +48,8 @@ export const SFX = {
   horn() { tone(370, 0.45, "sawtooth", 0, 0.28); tone(466, 0.45, "sawtooth", 0, 0.22); },
   hornBig() { tone(185, 0.8, "sawtooth", 0, 0.3); tone(233, 0.8, "sawtooth", 0, 0.25); tone(277, 0.8, "sawtooth", 0, 0.2); },
   door() { noise(0.08, 500, 0.5); tone(120, 0.08, "square", 80, 0.3); },
+  kick() { noise(0.09, 500, 0.55, "lowpass"); tone(75, 0.12, "square", 40, 0.3); },
+  sputter() { for (let i = 0; i < 4; i++) tone(55 + Math.random() * 20, 0.05, "sawtooth", 40, 0.18, i * 0.07); noise(0.25, 400, 0.25, "lowpass"); },
   start() { noise(0.4, 300, 0.4, "lowpass", 0, 900); tone(60, 0.5, "sawtooth", 120, 0.25); },
   land(k = 1) { noise(0.18, 300, Math.min(0.9, 0.3 + k * 0.05)); tone(90, 0.15, "sine", 50, Math.min(0.7, k * 0.06)); },
   crash(k = 1) { noise(0.35, 1400, Math.min(1, 0.4 + k * 0.04), "lowpass", 0, 200); tone(140, 0.3, "square", 60, Math.min(0.6, k * 0.04)); },

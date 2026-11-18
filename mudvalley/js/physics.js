@@ -1,6 +1,6 @@
 // MUD VALLEY RP: how things move. Arcade driving (gas, brakes, steering, drifting, hills, jumps, mud, water)
 // and walking around on foot. Not a real simulator, just fun!
-import { groundAt as terrainAt, surfaceAt, SURF, normalAt } from "./terrain.js";
+import { groundAt as terrainAt, surfaceAt, SURF, normalAt, mudDepthAt, hAt } from "./terrain.js";
 // extra things you can drive on top of (trailer ramps + decks): main.js sets this
 let PLAT = null;
 export function setPlatforms(fn) { PLAT = fn; }
@@ -21,6 +21,7 @@ export function makeBody(car, model) {
     yawRate: 0, steer: 0, air: false, airT: 0, pitch: 0, roll: 0, bodyPitch: 0, bodyRoll: 0, susp: 0, suspV: 0,
     vf: 0, surf: 0, depth: 0, flipped: false, slip: 0, thr: 0, boost: 0, wheelDrop: [0, 0, 0, 0, 0, 0], land: 0, hit: 0, splash: 0,
     wheelie: false, wa: 0, wheelieT: 0, wheelieDone: 0, offGas: 0, burn: false,
+    mudD: 0, mudT: 0, sink: 0, spin: 0, stuckT: 0, lastThr: 0, rockT: 0, flood: 0, floodT: 0, rutD: 0,
   };
 }
 export const retune = (b) => { b.t = tune(b.car); };
@@ -39,8 +40,10 @@ function surfaceK(t, s) {
 // one step of driving. inp = { thr: -1..1 (gas / brake+reverse), steer: -1..1 (right is +), hand: handbrake }
 export function stepCar(b, inp, dt) {
   const t = b.t, M = b.model;
+  if (t.boat) return stepBoat(b, inp, dt);
   b.hit = 0; b.land = 0;
-  const thr = b.flipped ? 0 : inp.thr, steerIn = b.flipped ? 0 : inp.steer;
+  // flooded engine (the air intake went under water or mud): it dies until you get out of there (a snorkel helps!)
+  const thr = b.flipped || b.flood > 0.5 ? 0 : inp.thr, steerIn = b.flipped ? 0 : inp.steer;
   b.thr = thr;
   // dirt bikes + quads: burnouts (hold W and S together) and wheelies (T, then keep holding W)
   const tricks = t.wheelie && !b.flipped;
@@ -56,9 +59,19 @@ export function stepCar(b, inp, dt) {
   if (b.wa > 0.35 && !b.air) b.wheelieT += dt;
   else if (!b.wheelie && b.wa < 0.15) { if (b.wheelieT > 0) { b.wheelieDone = b.wheelieT; if (b.wheelieT > 0.4) b.suspV -= 2.5; } b.wheelieT = 0; }
   const gy = groundAt(b.x, b.z);
-  b.surf = surfaceAt(b.x, b.z); b.depth = Math.max(0, WATER_Y - gy);
+  b.surf = surfaceAt(b.x, b.z); b.depth = b.surf === SURF.MUD ? 0 : Math.max(0, WATER_Y - gy);
   if (b.depth > 0.12) b.surf = SURF.WATER;
-  const [kSpd, kAcc, kGrip] = surfaceK(t, b.surf);
+  let [kSpd, kAcc, kGrip] = surfaceK(t, b.surf);
+  // MUD: the deeper it is, the more it grabs you. Good mud tires + lift + big wheels plow through, street cars bog down.
+  b.mudD = b.surf === SURF.MUD && !b.air ? mudDepthAt(b.x, b.z) : 0;
+  const md = b.mudD, bad = Math.max(0.35, 1.12 - t.off.mud); // (bad = how much this ride hates mud)
+  if (md > 0) { const k = 1 / (1 + md * 1.5 * bad); kSpd *= k; kAcc *= 0.55 + 0.45 * k; kGrip *= 1 - 0.3 * Math.min(1, md); }
+  // muddy tires slip a little on the road until the mud flies off
+  const tm = (b.car && b.car.tmud) || 0; if (tm > 0.05 && (b.surf === SURF.ROAD || b.surf === SURF.TOWN)) kGrip *= 1 - 0.18 * tm;
+  // flooding: water or mud up over the air intake (snorkels raise it way up)
+  const sub = Math.max(b.surf === SURF.WATER ? b.depth : 0, md);
+  b.flood = sub > (t.intake || 1) && !b.air ? Math.min(1, b.flood + dt * 1.5) : Math.max(0, b.flood - dt * 0.6);
+  b.floodT = b.flood > 0.5 ? b.floodT + dt : 0;
   b.steer += (steerIn - b.steer) * Math.min(1, dt * 7);
   if (!b.air) {
     // steering: turns faster at medium speed, slower at very high speed
@@ -76,15 +89,33 @@ export function stepCar(b, inp, dt) {
       if (vf < -0.5) vf += 24 * thr * dt;
       else vf += t.acc * kAcc * thr * Math.max(0.06, 1 - (vf / Math.max(1, top)) ** 2) * dt;
     } else if (thr < -0.05) {
-      if (vf > 0.5) vf -= 22 * -thr * dt;
+      if (vf > 0.5) vf -= 22 * (t.brake || 1) * -thr * dt;
       else vf = Math.max(vf - t.acc * 0.55 * kAcc * -thr * dt, -Math.max(5, top * 0.32));
     } else vf -= Math.sign(vf) * Math.min(Math.abs(vf), (1.4 + (1 - kSpd) * 7) * dt);
     if (vf > top) vf -= (vf - top) * Math.min(1, 2.2 * dt);
     if (inp.hand) vf -= Math.sign(vf) * Math.min(Math.abs(vf), 7 * dt);
     if (b.depth > 0.2) vf -= vf * Math.min(1, b.depth * 1.6 * dt);
+    b.spin = 0;
+    if (md > 0) {
+      b.mudT += dt;
+      vf -= vf * Math.min(1, (0.25 + md * 0.9) * bad * dt); // the mud sucks at the tires
+      // gas in the mud: the wheels spin + throw mud (roost), the back end wiggles (fishtail)
+      if (thr > 0.25) {
+        b.spin = thr * Math.max(0, 1 - Math.abs(vf) / Math.max(4, top * 0.6)) * Math.min(1, 0.4 + md);
+        const wig = (Math.sin(b.mudT * 3.3) + 0.6 * Math.sin(b.mudT * 7.9 + 1.3)) * thr * Math.min(1, sp / 8) * bad;
+        b.yawRate += wig * (t.bike ? 1.2 : 2.2) * dt;
+      }
+      // stuck in deep mud? rock it: go forward, then back, then forward (W, S, W) to bounce out
+      const s0 = Math.sign(b.lastThr), s1 = thr > 0.3 ? 1 : thr < -0.3 ? -1 : 0;
+      if (s1 && s0 && s1 !== s0 && b.rockT < 0.9 && sp < 3) { vf += s1 * (1.6 + 2.2 * t.off.mud); b.suspV += 1.2; b.rocked = 0.5; }
+      if (s1) { if (s1 !== s0) b.rockT = 0; b.lastThr = s1; }
+      b.rockT += dt;
+      b.stuckT = md > 0.35 && sp < 1.2 && Math.abs(thr) > 0.3 ? b.stuckT + dt : Math.max(0, b.stuckT - dt * 2);
+    } else { b.stuckT = 0; b.lastThr = 0; }
+    b.rocked = Math.max(0, (b.rocked || 0) - dt);
     const grip = t.grip * kGrip * (inp.hand ? 0.13 : 1);
     vs *= Math.exp(-grip * dt);
-    b.slip = b.burn ? 9 : Math.abs(vs);
+    b.slip = b.burn ? 9 : Math.max(Math.abs(vs), b.spin * 8);
     b.vf = vf;
     b.vx = fx * vf + sx * vs; b.vz = fz * vf + sz * vs;
     // hills pull you back (or help you roll down). Off-road rides (good "crawl") grip and crawl up steep hills;
@@ -157,6 +188,8 @@ export function stepCar(b, inp, dt) {
     if (!t.bike && Math.abs(tr) > 0.88 && Math.hypot(b.vx, b.vz) > 4) b.flipped = true;
     b.y = Math.max(b.y, (hF + hB) / 2 - 0.15);
   } else if (t.bike) b.roll *= 1 - dt * 2;
+  // sinking: sit still in deep mud and you slowly settle down into it
+  { const sp2 = Math.hypot(b.vx, b.vz), want = md > 0.15 ? Math.min(0.2, md * 0.15) * (sp2 < 1.5 ? 1 : 0.35) : 0; b.sink += (want - b.sink) * Math.min(1, dt * (want > b.sink ? 0.5 : 3)); }
   // body lean (the body sways a bit on its springs)
   const tbp = b.air || !(t.bike || t.quad) ? 0 : clamp(-thr * 0.03 * (b.vf > 0 ? 1 : -1) + (inp.hand ? 0.04 : 0), -0.06, 0.06); // (trucks + cars stay level)
   const tbr = b.air || t.bike ? 0 : clamp(b.yawRate * b.vf * 0.008, -0.09, 0.09);
@@ -172,6 +205,49 @@ export function stepCar(b, inp, dt) {
   });
   return b;
 }
+// ---------------------------------------------------------------- boats: float on the lake, plane at speed, crawl on land
+export function stepBoat(b, inp, dt) {
+  const t = b.t;
+  b.hit = 0; b.land = 0; b.air = false; b.wa = 0; b.wheelie = false; b.burn = false; b.mudD = 0; b.flood = 0; b.floodT = 0;
+  const bottom = hAt(b.x, b.z), depth = WATER_Y - bottom, afloat = depth > 0.45;
+  b.depth = Math.max(0, depth); b.surf = afloat ? SURF.WATER : surfaceAt(b.x, b.z); b.beached = !afloat;
+  const thr = b.flipped ? 0 : inp.thr, fx = Math.sin(b.yaw), fz = Math.cos(b.yaw), sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);
+  let vf = b.vx * fx + b.vz * fz, vs = b.vx * sx + b.vz * sz;
+  const sp = Math.hypot(b.vx, b.vz), top = afloat ? t.top : 2.2;
+  b.steer += (inp.steer - b.steer) * Math.min(1, dt * 5);
+  // the outboard turns the boat (even slow), more at speed; it slides a bit in turns
+  const target = -b.steer * t.turn * (afloat ? Math.min(1, 0.35 + sp / 7) : 0.4) * (vf < -0.3 ? -1 : 1);
+  b.yawRate += (target - b.yawRate) * Math.min(1, dt * (afloat ? 3.5 : 6)); b.yaw += b.yawRate * dt;
+  if (thr > 0.05) vf += t.acc * (afloat ? 1 : 0.25) * thr * Math.max(0.05, 1 - (vf / Math.max(1, top)) ** 2) * dt;
+  else if (thr < -0.05) vf = vf > 0.5 ? vf - 9 * -thr * dt : Math.max(vf - t.acc * 0.4 * -thr * dt, -Math.min(5, top * 0.3));
+  vf -= vf * Math.min(1, (afloat ? 0.22 : 2.5) * dt); // water drag (and land = dragging the hull)
+  if (vf > top) vf -= (vf - top) * Math.min(1, 3 * dt);
+  vs *= Math.exp(-(afloat ? 1.7 : 6) * dt);
+  b.vf = vf; b.slip = Math.abs(vs); b.vx = fx * vf + sx * vs; b.vz = fz * vf + sz * vs;
+  b.boost = thr > 0.5 ? Math.min(1, b.boost + dt * 2) : Math.max(0, b.boost - dt * 3);
+  const nx0 = b.x + b.vx * dt, nz0 = b.z + b.vz * dt;
+  b.x = clamp(nx0, -EDGE, EDGE); b.z = clamp(nz0, -EDGE, EDGE);
+  // bump into docks, rocks, trees...
+  const M = b.model, len = M ? M.len : 6, wid = M ? M.wid : 2.3;
+  for (const off of [len * 0.28, -len * 0.28]) {
+    const cx = b.x + fx * off, cz = b.z + fz * off, p = pushOut(cx, cz, wid * 0.5, (afloat ? WATER_Y : bottom) + 0.4);
+    if (!p.hit) continue;
+    b.x += p.x - cx; b.z += p.z - cz;
+    const vn = b.vx * p.nx + b.vz * p.nz; if (vn < 0) { b.vx -= p.nx * vn * 1.3; b.vz -= p.nz * vn * 1.3; b.hit = Math.max(b.hit, -vn); b.yawRate *= 0.5; }
+  }
+  // float (with little waves), the bow rises when it gets up on plane, and it leans into turns
+  const bob = afloat ? Math.sin(performance.now() / 700 + b.x * 0.3) * 0.04 * (1 - Math.min(1, sp / 12)) : 0;
+  const wantY = afloat ? WATER_Y - 0.32 + bob : bottom;
+  b.y += (Math.max(wantY, bottom) - b.y) * Math.min(1, dt * (afloat ? 4 : 12)); b.vy = 0;
+  const k = Math.min(1, Math.max(0, vf) / Math.max(1, t.top));
+  const pt = afloat ? 0.13 * Math.sin(Math.min(1, k * 2.2) * Math.PI * 0.5) * (1 - 0.6 * Math.max(0, k - 0.45) / 0.55) + Math.sin(performance.now() / 900) * 0.01 : 0;
+  b.pitch += (pt - b.pitch) * Math.min(1, dt * 2.5);
+  const rl = afloat ? clamp(-b.yawRate * sp * 0.018, -0.2, 0.2) + Math.sin(performance.now() / 1100 + 1) * 0.012 : 0;
+  b.roll += (rl - b.roll) * Math.min(1, dt * 3);
+  b.bodyPitch = 0; b.bodyRoll = 0; b.susp = 0; b.suspV = 0; b.sink = 0;
+  return b;
+}
+
 // put the 3D model where the body is
 export function placeModel(b) {
   const M = b.model; if (!M) return;
@@ -179,7 +255,8 @@ export function placeModel(b) {
   const wa = b.wa || 0, rz = M.rearZ || 0;
   M.root.position.set(b.x + Math.sin(b.yaw) * rz * (1 - Math.cos(wa)), b.y + 0.06 - rz * Math.sin(wa), b.z + Math.cos(b.yaw) * rz * (1 - Math.cos(wa)));
   M.root.rotation.set(-b.pitch - wa - (b.tPitch || 0), b.yaw + (b.tYaw || 0), b.roll + (b.tRoll || 0), "YXZ"); // (t* = air tricks: flips + whips)
-  M.lift.position.y = (M.liftY || 0) + b.susp;
+  M.lift.position.y = (M.liftY || 0) + b.susp - (b.sink || 0) * 0.6;
+  M.root.position.y -= (b.sink || 0) * 0.4;
   M.lift.rotation.set(-b.bodyPitch, 0, b.bodyRoll);
 }
 // flip back onto your wheels

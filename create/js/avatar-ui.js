@@ -160,12 +160,15 @@ export function mountAvatarEditor(box, opts) {
       if (key === "suit") html += '<p class="av-hint">Suits change your whole avatar. Win them in games: escape <a href="backrooms/">The Backrooms</a> to unlock the hazmat suit and the monster.</p>';
       if (key === "top") html += '<p class="av-hint">Want your own design? Paint one in <button type="button" class="linkish" data-go="draw">🎨 Draw</button>.</p>';
     }
+    if (tab === "body") html += '<div class="av-colors"><b>Width</b><div><input type="range" min="0.8" max="1.6" step="0.05" data-shape="width" value="' + (av.width || 1) + '" style="width:100%"></div></div>' +
+      '<div class="av-colors"><b>Round</b><div><input type="range" min="0" max="1" step="0.05" data-shape="round" value="' + (av.round || 0) + '" style="width:100%"></div></div>';
     if (tab === "pants" && av.pantsArt) html += '<p class="av-hint">Your pants drawing is on. Change it in <button type="button" class="linkish" data-go="draw">🎨 Draw</button>.</p>';
     if (tab === "hat") html += '<p class="av-hint">Build your own hat in <button type="button" class="linkish" data-go="make">🛠️ Build</button>.</p>';
     html += colorRows(T.colors);
     const box2 = items();
     box2.innerHTML = html;
     box2.querySelectorAll("[data-set]").forEach((b) => (b.onclick = () => { av[b.dataset.set] = b.dataset.v; changed(); drawItems(); }));
+    box2.querySelectorAll("[data-shape]").forEach((r) => { r.oninput = () => { av[r.dataset.shape] = Number(r.value); rebuild(); }; r.onchange = () => { av[r.dataset.shape] = Number(r.value); changed(); }; });
     wireColors(box2);
   }
   const items = () => box.querySelector("#avItems");

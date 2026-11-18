@@ -12,6 +12,7 @@ import { makePerson, CLOTH_COLORS } from "./character.js";
 import { buildingById } from "./interiors.js";
 import { buildCar, animateCar, vehicleById, carFromCode } from "./vehicles.js";
 import { groundAt } from "./terrain.js";
+import { WATER_Y } from "./layout.js";
 import { S, save } from "./save.js";
 import { buildTrailer, trailerById, trailerBack } from "./trailer.js";
 import { campModel, campItem } from "./camp.js";
@@ -33,6 +34,7 @@ function parkModel(it) {
   if (it.k === "p") return campItem(it.id) ? campModel(it.id, it.c) : null;
   return null;
 }
+const ZERO4 = [0, 0, 0, 0];
 const tagText = (p) => (p.role === "cop" ? "👮 " : p.role === "robber" ? "🦹 " : "") + p.n + (p.role === "robber" && p.wanted ? " " + "★".repeat(p.wanted) : "");
 
 // a floating name tag
@@ -110,7 +112,7 @@ export class MP {
       case "leave": { const p = this.players.get(m.id); if (p) { this.say("", p.n + " left.", "sys"); this.removePlayer(m.id); } break; }
       case "away": { const p = this.players.get(m.id); if (p) p.away = true; break; }
       case "back": { const p = this.players.get(m.id); if (p) p.away = false; this.roleT = 0.5; this.parkSent = ""; this.parkT = 0.6; this.roomSent = null; this.rideSent = null; break; } // (they reconnected: send them your trailers, rides + camp again)
-      case "s": { const p = this.players.get(m.id); if (p) { p.tx = m.p[0]; p.ty = m.p[1]; p.tz = m.p[2]; p.tr = m.r; p.walk = !!m.w; if (p.x === undefined) { p.x = p.tx; p.y = p.ty; p.z = p.tz; p.r = p.tr; } } break; }
+      case "s": { const p = this.players.get(m.id); if (p) { p.tx = m.p[0]; p.ty = m.p[1]; p.tz = m.p[2]; p.tr = m.r; p.walk = !!m.w; p.ta = Array.isArray(m.a) && m.a.length === 4 ? m.a.map((v) => +v || 0) : null; if (p.x === undefined) { p.x = p.tx; p.y = p.ty; p.z = p.tz; p.r = p.tr; } } break; }
       case "look": { const p = this.players.get(m.id); if (p) { p.k = m.k; this.rebuild(p); } break; }
       case "car": { const p = this.players.get(m.id); if (p) { p.v = m.v; this.rebuild(p); } break; }
       case "qc": { const t = QUICK[m.q]; if (!t) break; this.say(this.nameOf(m.id), t, "qc"); if (m.id !== this.id) A.toast("💬 " + this.nameOf(m.id), t, "", 3000); break; }
@@ -142,7 +144,7 @@ export class MP {
       if (!it) continue;
       if (!p.parkM[i]) { const root = parkModel(it); if (!root) continue; this.api.scene.add(root); p.parkM[i] = { key: it.key, root, it }; }
       const E = p.parkM[i]; E.it = it;
-      if (!it.h) { E.root.position.set(it.x, Number.isFinite(it.y) && it.y !== null ? it.y : groundAt(it.x, it.z) + (it.k === "p" ? 0 : 0.05), it.z); E.root.rotation.set(0, it.yaw, 0); }
+      if (!it.h) { const fl = it.k === "c" && vehicleById(it.id).boat ? WATER_Y - 0.26 : -1e9; E.root.position.set(it.x, Number.isFinite(it.y) && it.y !== null ? it.y : Math.max(fl, groundAt(it.x, it.z) + (it.k === "p" ? 0 : 0.05)), it.z); E.root.rotation.set(0, it.yaw, 0); }
     }
     p.parkM.length = items.length;
   }
@@ -152,7 +154,8 @@ export class MP {
     const k = Array.isArray(p.k) ? p.k : [];
     const g = String(k[3] || "000000"), d = (i) => parseInt(g[i], 16) || 0;
     const look = { shirt: unhex(k[0] || "2f8ae0"), pants: unhex(k[1] || "2a3550"), skin: unhex(k[2] || "ffc999"), hair: unhex(k[4] || "5a3a1a"), cap: k[5] && k[5] !== "000000" ? unhex(k[5]) : null, shoes: unhex(k[6] || "ffffff"),
-      top: Math.min(5, d(0)), legs: Math.min(2, d(1)), hat: Math.min(3, d(2)), glasses: Math.min(2, d(4) >> 2), extra: d(4) & 3, acc: CLOTH_COLORS[d(5)] ?? 0xffffff };
+      top: Math.min(5, d(0)), legs: Math.min(2, d(1)), hat: Math.min(3, d(2)), glasses: Math.min(2, d(4) >> 2), extra: d(4) & 3, acc: CLOTH_COLORS[d(5)] ?? 0xffffff,
+      bw: k[7] ? Math.min(4, parseInt(String(k[7])[0], 16) || 0) : 1, br: k[7] ? Math.min(3, parseInt(String(k[7])[1], 16) || 0) : 0 };
     p.model = makePerson(look); this.api.scene.add(p.model.root);
     const parts = (p.v || "").split("|"), [vid, code] = (parts[1] || "").split(":");
     if (parts.length === 3 && vehicleById(vid).id === vid) {
@@ -183,7 +186,7 @@ export class MP {
   sendLook() {
     const L = this.api.look();
     const ai = Math.max(0, CLOTH_COLORS.indexOf(L.acc ?? 0xffffff)), st = [L.top || 0, L.legs || 0, L.hat || 0, 0, ((L.glasses || 0) << 2) | (L.extra || 0), ai].map((v) => v.toString(16)).join("");
-    this.send({ t: "look", k: [hex(L.shirt), hex(L.pants), hex(L.skin), st, hex(L.hair), L.cap ? hex(L.cap) : "000000", hex(L.shoes)] });
+    this.send({ t: "look", k: [hex(L.shirt), hex(L.pants), hex(L.skin), st, hex(L.hair), L.cap ? hex(L.cap) : "000000", hex(L.shoes), (Math.min(4, L.bw ?? 1)).toString(16) + (Math.min(3, L.br ?? 0)).toString(16) + "0000"] });
   }
   // texts
   quick(i) { if (!this.on) return; this.send({ t: "qc", q: i }); }
@@ -197,7 +200,7 @@ export class MP {
     if (!this.on) return;
     this.sendT -= dt;
     const me = this.api.me();
-    if (this.sendT <= 0) { this.sendT = 0.1; this.send({ t: "s", p: [me.x, me.y, me.z], r: me.yaw, w: me.moving ? 1 : 0, c: 0 }); }
+    if (this.sendT <= 0) { this.sendT = 0.1; const o = { t: "s", p: [me.x, me.y, me.z], r: me.yaw, w: me.moving ? 1 : 0, c: 0 }; if (me.tilt) o.a = me.tilt; this.send(o); }
     const v = me.car ? "w|" + me.car.id + (me.car.code ? ":" + me.car.code : "") + "|" + hex(me.car.paint) : "";
     if (v !== this.lastCar) { this.lastCar = v; this.carAgain = 0.8; this.send({ t: "car", v }); }
     else if (this.carAgain > 0 && (this.carAgain -= dt) <= 0) this.send({ t: "car", v }); // (once more, in case a fast change got skipped by the server)
@@ -242,7 +245,15 @@ export class MP {
       const k = Math.min(1, dt * 10);
       p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.z += (p.tz - p.z) * k;
       let dr = p.tr - p.r; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); p.r += dr * k;
-      if (p.car) { p.car.root.position.set(p.x, p.y + 0.06, p.z); p.car.root.rotation.set(0, p.r, 0); animateCar(p.car, { speed: p.walk ? 8 : 0, steer: 0 }, dt); p.tag.position.set(p.x, p.y + 3.4, p.z); }
+      if (p.car) {
+        // how their ride is tipped: wheelies (around the back wheel), nose up / down, leaning, flips + spins
+        const ta = p.ta || ZERO4, A = p.a || (p.a = [0, 0, 0, 0]);
+        for (let i = 0; i < 4; i++) A[i] += (ta[i] - A[i]) * k;
+        const rz = p.car.rearZ || 0, wa = A[2];
+        p.car.root.position.set(p.x + Math.sin(p.r) * rz * (1 - Math.cos(wa)), p.y + 0.06 - rz * Math.sin(wa), p.z + Math.cos(p.r) * rz * (1 - Math.cos(wa)));
+        p.car.root.rotation.set(A[0], p.r + A[3], A[1], "YXZ");
+        animateCar(p.car, { speed: p.walk ? 8 : 0, steer: 0 }, dt); p.tag.position.set(p.x, p.y + 3.4, p.z);
+      }
       else { const g = myRoom ? p.y : Math.max(p.y, groundAt(p.x, p.z) - 0.2); p.model.root.position.set(p.x, g, p.z); p.model.root.rotation.y = p.r; p.model.pose(p.walk ? "walk" : "stand", time); p.tag.position.set(p.x, g + 2.5, p.z); }
       p.tag.material.opacity = p.away ? 0.4 : 1;
       for (const e of p.parkM || []) if (e && e.it.h) { // (their trailer, the bike in their truck bed...: placed relative to their ride)

@@ -6,12 +6,12 @@
 // save.js, hud.js (on-screen info + maps), menus.js (shop screens), input.js (controls), sfx.js (sounds), fx.js (mud + dust),
 // crime.js (robber + cop careers, blasters, wanted stars, jail), fishing.js (rods, casting, reeling, fish).
 import * as THREE from "/create/vendor/three.module.js";
-import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker } from "./world.js";
-import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt } from "./terrain.js";
+import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker, MARINA } from "./world.js";
+import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt, mudDepthAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
-import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf, modCode } from "./vehicles.js";
+import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf, modCode, canSnorkel } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
-import { buildTrailer, trailerById, makeTrailer, stepTrailer, hitchPoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor, RV_DOOR } from "./trailer.js";
+import { buildTrailer, trailerById, makeTrailer, stepTrailer, hitchPoint, goosePoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor, RV_DOOR } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser, setOutfit } from "./character.js";
 import { Crime, ROB_SPOTS, blasterById, STUN_BLASTER, rankOf } from "./crime.js";
 import { Fishing, rodById } from "./fishing.js";
@@ -94,6 +94,7 @@ function spawnCar(s) {
   return c;
 }
 function settle(b) { // let a parked vehicle sit nicely on the ground
+  if (b.t.boat) { for (let i = 0; i < 3; i++) stepCar(b, { thr: 0, steer: 0, hand: true }, 0.5); b.vx = b.vz = b.vy = 0; b.yawRate = 0; placeModel(b); return; } // (boats float)
   b.y = groundAt(b.x, b.z); b.air = false;
   for (let i = 0; i < 8; i++) { stepCar(b, { thr: 0, steer: 0, hand: true }, DT); b.vx = b.vz = b.vy = 0; }
   b.susp = 0; b.suspV = 0; placeModel(b);
@@ -123,6 +124,23 @@ function freeSpot(x, z, yaw, len = 5) {
   return { x, z };
 }
 
+// a free spot on the water at the marina (for a new boat, or R = "take my boat back to the marina")
+function boatSpot() {
+  const M = MARINA.boat;
+  for (let k = 0; k < 8; k++) { const x = M.x - (k % 4) * 7, z = M.z + Math.floor(k / 4) * 8; if (![...G.CARS.values()].some((c) => c !== mine() && Math.hypot(c.b.x - x, c.b.z - z) < 6)) return { x, z }; }
+  return { x: M.x, z: M.z };
+}
+const isBoat = (c) => !!(c && c.b.t.boat);
+// standing on a parked boat's deck (for fishing from your boat): the deck height there, or -Infinity
+function boatDeckAt(x, z) {
+  let best = -Infinity;
+  for (const c of G.CARS.values()) {
+    if (!c.b.t.boat || c === mine() || c.on || Math.abs(x - c.b.x) > 5 || Math.abs(z - c.b.z) > 5) continue;
+    const dx = x - c.b.x, dz = z - c.b.z, cs = Math.cos(c.b.yaw), sn = Math.sin(c.b.yaw), lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+    if (Math.abs(lx) < 1.0 && Math.abs(lz) < 2.9) best = Math.max(best, c.b.y + 0.06 + 0.8);
+  }
+  return best;
+}
 // ---------------------------------------------------------------- you
 function makeMe() {
   setOutfit(S.outfit);
@@ -242,7 +260,10 @@ function enterCar(c) {
   if (c.on) return;
   if (fishing && fishing.busy) fishing.cancel();
   G.me.car = c; G.me.p.root.visible = false; c.m.rider && (c.m.rider.root.visible = true);
-  cam.yaw = c.b.yaw; SFX.door(); setTimeout(() => SFX.start(), 120);
+  const v = vehicleById(c.s.id);
+  // gas dirt bikes: kickstart it! (stand up on the pegs and stomp the kick lever, the 2nd or 3rd kick fires it up)
+  if (v.bike && !v.electric && !["sport300", "super1000"].includes(v.id) && !G.race) { G.kick = { c, t: 0, n: Math.random() < 0.35 ? 3 : 2, done: 0 }; cam.yaw = c.b.yaw; SFX.door(); }
+  else { G.kick = null; cam.yaw = c.b.yaw; SFX.door(); if (!v.electric) setTimeout(() => SFX.start(), 120); }
   S.driving = c.s.uid;
 }
 function exitCar() {
@@ -250,7 +271,9 @@ function exitCar() {
   const b = c.b, sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw), d = c.m.wid / 2 + 0.9;
   let px = b.x + sx * d, pz = b.z + sz * d;
   if (pushOut(px, pz, 0.5, b.y + 0.5).hit > 0.1) { px = b.x - sx * d; pz = b.z - sz * d; }
-  const w = G.me.w; w.x = px; w.z = pz; w.y = groundAt(px, pz); w.vx = w.vz = 0; w.yaw = b.yaw;
+  if (isBoat(c) && !b.beached) { px = b.x + Math.sin(b.yaw) * 1.7; pz = b.z + Math.cos(b.yaw) * 1.7; b.vx = b.vz = 0; b.yawRate = 0; } // (stand up on the front casting deck)
+  const w = G.me.w; w.x = px; w.z = pz; w.vx = w.vz = 0; w.yaw = b.yaw;
+  G.me.car = null; w.y = groundAt(px, pz); w.air = false; G.me.car = c;
   G.me.car = null; G.me.p.root.visible = true; if (c.m.rider) c.m.rider.root.visible = false;
   b.vx *= 0.3; b.vz *= 0.3; if (c.police) G.siren = false;
   SFX.door(); engine(false);
@@ -265,6 +288,17 @@ function teleportMe(x, z, yaw) {
   cam.yaw = yaw; cam.snap = true;
 }
 
+// ---------------------------------------------------------------- the kickstart (gas dirt bikes)
+const KICK = 0.62; // (seconds per kick)
+function kickTick(c, dt) {
+  const K = G.kick; K.t += dt;
+  const i = Math.floor(K.t / KICK), ph = (K.t % KICK) / KICK;
+  if (ph > 0.55 && K.done <= i && i < K.n) { // the stomp
+    K.done = i + 1; c.b.suspV -= 1.6; SFX.kick();
+    if (i < K.n - 1) setTimeout(() => SFX.sputter(), 60); else setTimeout(() => SFX.start(), 40);
+  }
+  if (K.t > K.n * KICK + 0.15) { G.kick = null; H.toast("🏍️ Brap brap!", "", "", 900); }
+}
 // ---------------------------------------------------------------- job props: beacons, passengers, broken-down cars
 function beacon(color) {
   const g = new THREE.Group();
@@ -370,19 +404,21 @@ function actions() {
     else if (mp && mp.on && !inside()) { const fr = mp.rideNear(me.x, me.z); if (fr) out.F = { text: "Hop in with " + fr.n + " 🚗", fn: () => startRide(fr) }; }
   }
   // T: hitch / unhitch trailers (and tow-job cars)
-  if (c && c.m.hitch) {
+  if (c && (c.m.hitch || BEDS[c.s.id])) {
     const t = myTrailer();
     if (t) out.T = { text: "Unhitch trailer", fn: () => { t.hitched = null; t.s.hitched = null; SFX.hitch(); save(); } };
     else if (G.tow && G.tow.hitched === c.b) out.T = { text: "Unhook the car", fn: () => { G.tow.hitched = null; SFX.hitch(); } };
     else {
-      const hp = hitchPoint(c.b);
+      const hp = hitchPoint(c.b), gp = goosePoint(c.b);
       for (const tr of G.TRS.values()) {
-        if (tr.hitched || !near(couplerPoint(tr), hp, 4.2)) continue;
+        const hk = tr.T.goose ? gp : hp;
+        if (tr.hitched || !hk || !near(couplerPoint(tr), hk, tr.T.goose ? 3.2 : 4.2)) continue;
+        if (tr.T.goose && c.bedHost && c.bedHost.loaded.length) { out.T = { text: "Take the ride out of your truck bed first (the gooseneck ball is in there)", warn: true, fn: () => SFX.nope() }; break; }
         if (towOf(c) < tr.T.need) { out.T = { text: vehicleById(c.s.id).name + " can't pull the " + tr.T.name, warn: true, fn: () => SFX.nope() }; break; }
         out.T = { text: "Hitch the " + tr.T.name, fn: () => { tr.hitched = c.b; tr.s.hitched = c.s.uid; SFX.hitch(); H.toast("Trailer hitched!", "Drive slow around corners. Press T to unhitch.", "good"); save(); } };
         break;
       }
-      if (!out.T && G.tow && !G.tow.hitched && near(couplerPoint(G.tow), hp, 5.5)) {
+      if (!out.T && hp && G.tow && !G.tow.hitched && near(couplerPoint(G.tow), hp, 5.5)) {
         out.T = towOf(c) >= 2 ? { text: "Hook up the broken car", fn: () => { G.tow.hitched = c.b; SFX.hitch(); } } : { text: "You need a truck to tow cars", warn: true, fn: () => SFX.nope() };
       }
     }
@@ -496,9 +532,9 @@ function campAction(e) {
 function rvDoorAt(t, out = 0) { const c = Math.cos(t.yaw), s = Math.sin(t.yaw), lx = RV_DOOR.x - out, lz = RV_DOOR.z; return { x: t.x + lx * c + lz * s, z: t.z - lx * s + lz * c }; }
 function rvNear(me) { for (const t of G.TRS.values()) if (t.T.rv) { const p = rvDoorAt(t, 0.6); if (Math.hypot(p.x - me.x, p.z - me.z) < 2.2) return t; } return null; }
 function rvDoorBd(t) { const p = rvDoorAt(t, 0.4); return rvBuilding(p.x, p.z, Math.atan2(-Math.cos(t.yaw), Math.sin(t.yaw))); }
-const deckBack = (t) => ({ utility: -1.7, flatbed: -4.8, enclosed: -3.6 })[t.T.id] ?? -2;
-const deckFront = (t) => ({ utility: 2.0, flatbed: 4.6, enclosed: 3.0 })[t.T.id] ?? 2;
-const rampLen = (t) => ({ utility: 1.3, flatbed: 1.8, enclosed: 2.9 })[t.T.id] ?? 1.5;
+const deckBack = (t) => ({ utility: -1.7, flatbed: -4.8, enclosed: -3.6, gooseneck: -6.1 })[t.T.id] ?? -2;
+const deckFront = (t) => ({ utility: 2.0, flatbed: 4.6, enclosed: 3.0, gooseneck: 4.3 })[t.T.id] ?? 2;
+const rampLen = (t) => ({ utility: 1.3, flatbed: 1.8, enclosed: 2.9, gooseneck: 1.8 })[t.T.id] ?? 1.5;
 // how high the trailer's deck / ramp is at a spot (or -Infinity if you're not on it). Cars + people drive up it.
 function deckAt(x, z) {
   let best = -Infinity;
@@ -509,7 +545,7 @@ function deckAt(x, z) {
     if (p.lz >= back && p.lz <= deckFront(t)) best = Math.max(best, top);
     else if (p.lz < back && p.lz > back - rampLen(t) && (!t.T.enclosed || t.doorA > 1.2)) best = Math.max(best, top - t.T.deckY * ((back - p.lz) / rampLen(t)));
   }
-  return best;
+  return Math.max(best, boatDeckAt(x, z));
 }
 setPlatforms(deckAt);
 // is this ride sitting on a trailer's deck?
@@ -615,7 +651,7 @@ function openDrop(bx) {
   H.toast("📦 You got:", Object.entries(n).map(([id, k]) => (k > 1 ? k + "× " : "") + partById(id).name).join(", "), "good", 4500);
 }
 function washCar() {
-  const c = mine(); c.s.dirt = 0; applyLook(c.m, c.s); SFX.wash();
+  const c = mine(); c.s.dirt = 0; c.s.tmud = 0; applyLook(c.m, c.s); SFX.wash();
   for (let i = 0; i < 6; i++) setTimeout(() => fx.splash(c.b.x + (Math.random() - 0.5) * 3, c.b.y + 2.5, c.b.z + (Math.random() - 0.5) * 3, 8), i * 200);
   H.toast("Squeaky clean!", "Your " + vehicleById(c.s.id).name + " is shiny again.", "good"); save();
 }
@@ -629,11 +665,12 @@ export const GAME = {
     if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Buy a bigger house to own more rides (or sell one).", "warn"); SFX.nope(); return false; }
     if (!spend(v.price)) { SFX.nope(); H.toast("Not enough money", "Do some jobs to earn " + money(v.price - S.money) + " more.", "warn"); return false; }
     const s = newCar(id, uid()); s.yaw = Math.PI; if (color != null) s.paint = color;
-    const f = freeSpot(-36, 12, Math.PI, 5); s.x = f.x; s.z = f.z;
+    const f = v.boat ? boatSpot() : freeSpot(-36, 12, Math.PI, 5); s.x = f.x; s.z = f.z; if (v.boat) s.yaw = MARINA.boat.yaw;
     S.cars.push(s); const c = spawnCar(s);
     if (mine()) exitCar();
     if (inside()) { interiors.leaveRoom(); applyItem(); H.flash("#fff"); } // (walk out of the showroom and straight into your new ride)
     enterCar(c); SFX.buy(); H.bumpMoney(); fx.confetti(s.x, groundAt(s.x, s.z) + 2, s.z, 60);
+    if (v.boat) { cam.yaw = s.yaw; cam.snap = true; H.toast("🚤 Your boat is at the Big Bass Lake Marina!", "Drive it on the lake. Stop, press F to stand on the deck, then Q to fish for muskie!", "good", 6000); }
     H.banner("NEW RIDE!", v.name); save(); return true;
   },
   buyTrailer(type, color, at) {
@@ -912,6 +949,7 @@ function tick(dt) {
   if (c) {
     const inp = blocked || raceLock ? { thr: 0, steer: 0, hand: true } : IN.drive();
     inp.wheelie = G.wheelieTap; G.wheelieTap = false;
+    if (G.kick && G.kick.c === c) { inp.thr = 0; inp.wheelie = false; kickTick(c, dt); } else if (G.kick) G.kick = null;
     if (G.mode === "side" && G.panel === "customs") { c.b.vx = c.b.vz = 0; c.b.x += (36 - c.b.x) * 0.2; c.b.z += (-40 - c.b.z) * 0.2; c.b.yaw += dt * 0.35; } // (spinning on the turntable)
     const b = stepCar(c.b, inp, dt);
     carEffects(c, b, inp, dt);
@@ -936,7 +974,7 @@ function tick(dt) {
   // bumping into other vehicles / trailers
   const me = c ? c.b : G.me.w;
   if (c) carVsStuff(c.b);
-  else if (!G.ride) { for (const o of G.CARS.values()) if (!o.on) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true); if (mp && mp.on) for (const k of mp.carCircles()) bumpPair(G.me.w, 0.4, k, k.r, true); }
+  else if (!G.ride) { for (const o of G.CARS.values()) if (!o.on && !(o.b.t.boat && G.me.w.y > o.b.y + 0.3)) for (const k of carCircles(o.b)) bumpPair(G.me.w, 0.4, k, k.r, true); if (mp && mp.on) for (const k of mp.carCircles()) bumpPair(G.me.w, 0.4, k, k.r, true); }
   for (const t of G.TRS.values()) { stepTrailer(t, dt); stepDoor(t, dt); }
   stepGarageDoors(dt);
   driveInTrailers();
@@ -963,14 +1001,14 @@ const lost = (o, y) => !Number.isFinite(o.x) || !Number.isFinite(o.z) || !Number
 function rescue() {
   const c = mine(), me = c ? c.b : G.me.w;
   // stuck in deep water (the pond, the deep part of the river)
-  const deep = c ? waterDepth(me.x, me.z) > (c.m.liftY || 0) + 1.3 && !me.air : false;
-  G.deepT = deep ? G.deepT + 0.5 : 0;
-  if (lost(me, me.y) || G.deepT > 3) {
+  const deep = c && !isBoat(c) ? c.b.floodT > 3.4 : false, mudDeep = deep && c.b.mudD > 0.2;
+  if (lost(me, me.y) || deep) {
     const p = nearestRoad(Number.isFinite(me.x) ? me.x : 0, Number.isFinite(me.z) ? me.z : 0);
-    G.deepT = 0; teleportMe(p.x, p.z, p.yaw);
-    H.toast(deep ? "Glub glub! Towed out of the water" : "Whoa! Back on solid ground", "We put you back on the nearest road.", "warn", 3200);
+    teleportMe(p.x, p.z, p.yaw); if (c) { c.b.flood = 0; c.b.floodT = 0; }
+    const tip = c && canSnorkel(vehicleById(c.s.id)) && !c.s.snork ? "Get a snorkel kit at Mud & Chrome to go deeper!" : "We put you back on the nearest road.";
+    H.toast(mudDeep ? "Blub! Your engine sucked up mud" : deep ? "Glub glub! Your engine flooded" : "Whoa! Back on solid ground", deep ? "Towed out. " + tip : "We put you back on the nearest road.", "warn", 4200);
   }
-  for (const o of G.CARS.values()) if (o !== c && !o.on && (lost(o.b, o.b.y) || waterDepth(o.b.x, o.b.z) > 2.2)) { const p = nearestRoad(Number.isFinite(o.b.x) ? o.b.x : 0, Number.isFinite(o.b.z) ? o.b.z : 0); const f = freeSpot(p.x, p.z, p.yaw, o.m.len); Object.assign(o.b, { x: f.x, z: f.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, flipped: false }); settle(o.b); }
+  for (const o of G.CARS.values()) if (o !== c && !o.on && (lost(o.b, o.b.y) || !o.b.t.boat && waterDepth(o.b.x, o.b.z) > 2.2)) { const p = nearestRoad(Number.isFinite(o.b.x) ? o.b.x : 0, Number.isFinite(o.b.z) ? o.b.z : 0); const f = freeSpot(p.x, p.z, p.yaw, o.m.len); Object.assign(o.b, { x: f.x, z: f.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, flipped: false }); settle(o.b); }
   for (const t of G.TRS.values()) if (!t.hitched && lost(t, t.y)) { const p = nearestRoad(Number.isFinite(t.x) ? t.x : 0, Number.isFinite(t.z) ? t.z : 0); t.x = p.x; t.z = p.z; t.yaw = p.yaw; stepTrailer(t, DT); }
   for (const k of crime.cops) if (lost(k.b, k.b.y)) { const p = nearestRoad(k.b.x || 0, k.b.z || 0); Object.assign(k.b, { x: p.x, z: p.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, y: groundAt(p.x, p.z) }); }
   const rc = crime.call && crime.call.robber.car.b; if (rc && lost(rc, rc.y)) { const p = nearestRoad(rc.x || 0, rc.z || 0); Object.assign(rc, { x: p.x, z: p.z, yaw: p.yaw, vx: 0, vz: 0, vy: 0, y: groundAt(p.x, p.z) }); }
@@ -1007,7 +1045,7 @@ function carVsStuff(b) {
   for (const t of G.TRS.values()) {
     if (t.hitched === b) continue;
     if (me && me.b === b && (canDriveIn(t, me) || onDeckZone(t, me))) continue; // (lined up behind it / up on it: let the ride drive up the ramp)
-    const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : t.T.enclosed ? 3.2 : t.T.rv ? 3.4 : 1.8;
+    const fx = Math.sin(t.yaw), fz = Math.cos(t.yaw), half = t.T.id === "flatbed" ? 4.5 : t.T.id === "gooseneck" ? 5.2 : t.T.enclosed ? 3.2 : t.T.rv ? 3.4 : 1.8;
     for (const a of carCircles(b)) for (const s of t.T.rv ? [-3.4, -1.7, 0, 1.7, 3.4] : [-half, 0, half]) {
       const kx = t.x + fx * s, kz = t.z + fz * s, dx = a.x - kx, dz = a.z - kz, d = Math.hypot(dx, dz), m = a.r + 1.3;
       if (d >= m || d < 1e-4) continue;
@@ -1029,10 +1067,14 @@ function carEffects(c, b, inp, dt) {
   }
   wasAir = b.air;
   if (b.flipped) { G.hint = "Oops, you flipped! Press R to flip back"; G.hintT = 0.3; }
+  if (b.flood > 0.5) { G.hint = "💦 ENGINE FLOODED! " + (b.mudD > 0.2 ? "The mud is too deep" : "The water is too deep") + (canSnorkel(vehicleById(c.s.id)) && !c.s.snork ? " (a snorkel kit lets you go deeper)" : ""); G.hintT = 0.3; }
+  if (isBoat(c) && b.beached && sp < 1) { G.hint = "🚤 Boats don't drive on land! R = back to the marina"; G.hintT = 0.3; }
+  mudFx(c, b, sp, fx2, fz2, dt);
   // the ground flies up behind your wheels
   if (!b.air && sp > 3) {
     const rx = b.x - fx2 * c.m.len * 0.4, rz = b.z - fz2 * c.m.len * 0.4;
-    if (b.surf === SURF.MUD) { if (Math.random() < 0.7) fx.mud(rx, b.y, rz, fx2, fz2, 2, Math.min(1.4, sp / 12)); c.s.dirt = Math.min(1, (c.s.dirt || 0) + dt * 0.1); if (Math.random() < 0.03) SFX.squish(); }
+    if (b.surf === SURF.MUD) { if (Math.random() < 0.7) fx.mud(rx, b.y + (b.mudD || 0) * 0.8, rz, fx2, fz2, 2, Math.min(1.6, (sp / 12) * (1 + (b.mudD || 0)))); c.s.dirt = Math.min(1, (c.s.dirt || 0) + dt * 0.1); if (Math.random() < 0.03) SFX.squish(); }
+    else if (isBoat(c) && !b.beached) { if (Math.random() < Math.min(0.8, sp / 14)) fx.spray(rx - fx2 * 0.8, WATER_Y + 0.1, rz - fz2 * 0.8, fx2, fz2, 3, Math.min(1.5, sp / 12)); if (sp > 7 && Math.random() < 0.45) for (const sd of [-1, 1]) fx.spray(b.x + fx2 * 1.6 + fz2 * sd * 1.15, WATER_Y + 0.05, b.z + fz2 * 1.6 - fx2 * sd * 1.15, -fz2 * sd, fx2 * sd, 1, 0.7); }
     else if (b.surf === SURF.WATER) { if (Math.random() < 0.6) fx.splash(rx, WATER_Y + 0.1, rz, 3, Math.min(1.2, sp / 14)); c.s.dirt = Math.max(0, (c.s.dirt || 0) - dt * 0.15); if (Math.random() < 0.04) SFX.splash(); }
     else if ([SURF.DIRT, SURF.TRACK, SURF.SAND, SURF.ROCK].includes(b.surf)) { if (Math.random() < Math.min(0.5, sp / 40)) fx.dust(rx, b.y, rz, 1, 0xc8a878, 0.3 + sp / 90); c.s.dirt = Math.min(1, (c.s.dirt || 0) + dt * 0.01); }
     else if (b.slip > 5 && Math.random() < 0.5) fx.dust(rx, b.y, rz, 1, b.surf === SURF.GRASS ? 0x9ad07a : 0xdddddd, 0.45);
@@ -1050,15 +1092,37 @@ function carEffects(c, b, inp, dt) {
     if (t > 2 && !G.race) { const cash = Math.round(t * 10); pay(cash); H.bumpMoney(); H.toast(t > 6 ? "MEGA WHEELIE!" : "WHEELIE!", t.toFixed(1) + " seconds on the back wheel! +" + money(cash), "cash", 2200); SFX.air(); }
   }
   lookT += dt; if (lookT > 0.5) { lookT = 0; applyLook(c.m, c.s); }
+  if (G.kick && G.kick.c === c) { engine(false); return; }
+  if (b.flood > 0.5) { engine(false); return; }
   // engine sound: rpm climbs through 5 gears
   const top = Math.max(10, b.t.top), k = clamp(sp / top, 0, 1) * 5, gear = Math.min(4, Math.floor(k));
   const rpm = clamp((k - gear) * 0.75 + 0.25 + Math.abs(inp.thr) * 0.1, 0, 1);
   if (b.burn) { engine(true, 0.86 + Math.random() * 0.1, 1, b.t.engine, b.surf === SURF.ROAD || b.surf === SURF.TOWN ? 9 : 0, b.surf !== SURF.ROAD && b.surf !== SURF.TOWN ? 0.3 : 0); return; } // (revving like crazy)
   engine(true, sp < 0.5 ? 0.1 + Math.abs(inp.thr) * 0.3 : rpm, Math.abs(inp.thr), b.t.engine, b.surf === SURF.ROAD || b.surf === SURF.TOWN ? b.slip : 0, !b.air && b.surf !== SURF.ROAD && b.surf !== SURF.TOWN ? Math.min(0.35, sp / 60) : 0);
 }
+// mud on the tires (it builds up in mud, flies off on dry ground, washes off in water), tire ruts, roost from a
+// spinning wheel, a bow wave when you plow through deep mud, and the hints for stuck + flooded
+function mudFx(c, b, sp, fx2, fz2, dt) {
+  const md = b.mudD || 0, s = c.s, inMud = b.surf === SURF.MUD && !b.air, sx = fz2, sz = -fx2;
+  if (inMud) s.tmud = Math.min(1, (s.tmud || 0) + dt * (0.3 + md * 0.5) * (sp > 0.5 || b.spin > 0.05 ? 1 : 0.15));
+  else if (b.surf === SURF.WATER && !isBoat(c)) s.tmud = Math.max(0, (s.tmud || 0) - dt * 0.22);
+  else if (sp > 4 && !b.air) s.tmud = Math.max(0, (s.tmud || 0) - dt * 0.006 * sp * (b.surf === SURF.ROAD || b.surf === SURF.TOWN ? 1.6 : 0.6));
+  // chunks of mud fly off muddy tires on dry ground
+  if (!inMud && !b.air && (s.tmud || 0) > 0.15 && sp > 6 && Math.random() < s.tmud * 0.35) { const w = c.m.wheels[Math.floor(Math.random() * c.m.wheels.length)]; if (w && w.pivot.visible !== false) fx.mud(b.x + fx2 * w.z + sx * w.x, b.y + w.r * 1.6, b.z + fz2 * w.z + sz * w.x, fx2, fz2, 1, 0.5); }
+  if (!inMud) { b.rutD = 0; return; }
+  // roost: a spinning back wheel sprays mud way up behind you
+  if (b.spin > 0.08 && Math.random() < 0.4 + b.spin) { const rw = c.m.rearZ || -1; fx.mud(b.x + fx2 * rw, b.y + md * 0.9, b.z + fz2 * rw, fx2 * 1.4, fz2 * 1.4, 3, 1.1 + b.spin * 1.2); if (Math.random() < 0.05) SFX.squish(); }
+  // plowing: deep mud piles up and splashes out to both sides at the front
+  if (md > 0.3 && sp > 2.2 && Math.random() < 0.7) for (const sd of [-1, 1]) fx.mud(b.x + fx2 * c.m.len * 0.45 + sx * sd * c.m.wid * 0.5, b.y + md * 0.85, b.z + fz2 * c.m.len * 0.45 + sz * sd * c.m.wid * 0.5, -sx * sd, -sz * sd, 1, 0.6 + Math.min(0.9, sp / 14));
+  // ruts: dark tire tracks pressed into the mud
+  b.rutD += sp * dt;
+  if (b.rutD > 0.42) { b.rutD = 0; for (const w of c.m.wheels) if (w.pivot.visible !== false && (!w.front || w.bike)) fx.rut(b.x + fx2 * w.z + sx * w.x, b.y + md + 0.035, b.z + fz2 * w.z + sz * w.x, b.yaw, Math.max(0.16, (w.w || 0.3) * 0.9)); }
+  if (b.stuckT > 1.0) { G.hint = "🟫 STUCK in the mud! Rock it: tap W, then S, then W" + (s.winch ? " (or J to winch out)" : ""); G.hintT = 0.3; }
+}
 function resetVehicle() {
   const c = mine();
   if (G.race && c && G.race.state === "go") { const p = G.race.resetPos(); teleportMe(p.x, p.z, p.yaw); SFX.flip(); return; }
+  if (c && isBoat(c) && c.b.beached) { const f = boatSpot(); teleportMe(f.x, f.z, MARINA.boat.yaw); c.b.y = WATER_Y - 0.3; H.toast("🚤 Back to the marina", "", "", 1800); SFX.flip(); return; }
   if (c) { unflip(c.b); SFX.flip(); }
 }
 function raceTick(dt) {
@@ -1124,6 +1188,7 @@ function updateCamera(dt) {
   let tx = t.x, ty = t.y + (c ? 1.2 + (c.m.liftY || 0) : 1.4), tz = t.z;
   let px = tx - Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist, pz = tz - Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist, py = ty + Math.sin(cam.pitch) * dist + (inside() ? 0.5 : 1.2);
   if (inside() && G.mode !== "side") { [px, py, pz] = interiors.clampCam(px, py, pz); }
+  else if (!inside()) { const md = mudDepthAt(px, pz); if (md > 0) py = Math.max(py, groundAt(px, pz) + md + 0.5); } // (never under the mud)
   // shop screens get their own camera
   if (G.mode === "side" && G.panel === "dealer") {
     const P = G.previewAt || { x: -36, y: 1.45, z: 18 }, ins = !!P.inside && inside();
@@ -1167,7 +1232,12 @@ function draw(dt) {
     else p.pose(w.air ? "jump" : w.moving > 7 ? "run" : w.moving > 0.5 ? "walk" : "stand", w.t, Math.min(1, w.moving / 4));
   }
   if (G.placing) { const sp = placeSpot(), gh = G.placing.ghost; gh.position.set(sp.x, groundAt(sp.x, sp.z), sp.z); gh.rotation.y = sp.yaw; }
-  { const fp = fpOn(); if (!c) G.me.p.root.visible = !fp; else if (c.m.rider) c.m.rider.root.visible = !fp; for (const v of G.CARS.values()) if (v.m.cockpit) v.m.cockpit.visible = fp && v === c; } // (first person: the inside of your cab shows) // (first person: you don't see your own head)
+  if (c && G.kick && G.kick.c === c) {
+    const p = G.me.p, K = G.kick, seat = c.m.seat.clone(); c.m.body.updateMatrixWorld(true); c.m.body.localToWorld(seat);
+    p.root.visible = !fpOn(); p.root.position.copy(seat); p.root.rotation.set(0, c.b.yaw, 0); p.root.scale.setScalar(0.85);
+    p.pose("kick", G.time, Math.min(K.n - 0.001, K.t / KICK) % 1);
+  } else if (c && G.me.p.root.visible && !G.kick) { G.me.p.root.visible = false; G.me.p.root.scale.setScalar(1); }
+  { const fp = fpOn(); if (!c) { G.me.p.root.visible = !fp; G.me.p.root.scale.setScalar(G.ride ? 0.85 : 1); } else if (c.m.rider) c.m.rider.root.visible = !fp && !(G.kick && G.kick.c === c); for (const v of G.CARS.values()) if (v.m.cockpit) v.m.cockpit.visible = fp && v === c; } // (first person: the inside of your cab shows) // (first person: you don't see your own head)
   crime.draw(dt, G.time); traffic.draw(dt, G.time); fishing.draw(dt, G.time); mp.draw(dt, G.time); camp.draw(G.time); if (inside()) { interiors.draw(G.time, G.me.w); heist.draw(G.time); } npcs.draw(G.time);
   if (G.robMarks) { const show = S.role === "robber" && !G.race; for (const m of G.robMarks) { m.g.visible = show; if (show) { m.icon.position.y = 2.6 + Math.sin(G.time * 2 + m.x) * 0.2; m.ring.material.opacity = crime.t < m.spot.readyAt ? 0.15 : 0.6 + Math.sin(G.time * 4) * 0.25; } } }
   if (passenger) passenger.pose("wave", G.time);
@@ -1275,7 +1345,7 @@ async function boot() {
     racing: () => !!G.race, copsOff: () => !!(mp && mp.copsOff), onRoad: () => !!mine() && (mine().b.surf === SURF.ROAD || mine().b.surf === SURF.TOWN),
     friends: () => (mp && mp.on ? mp.list() : []), zap: (id, k) => mp.zap(id, k), shared: (x, y, z, tx, ty, tz, w) => mp.shot([x, y, z], [tx, ty, tz], w),
   });
-  fishing = new Fishing({ scene, fx, toast: H.toast, banner: H.banner, me: () => G.me.w, person: () => G.me.p, rodModel: () => (S.equip === "rod" ? G.me.p.item && G.me.p.item.userData.bend ? G.me.p.item : itemModels["r" + S.rod] : null) });
+  fishing = new Fishing({ scene, fx, toast: H.toast, banner: H.banner, me: () => G.me.w, person: () => G.me.p, onBoat: () => boatDeckAt(G.me.w.x, G.me.w.z) > -1e9, rodModel: () => (S.equip === "rod" ? G.me.p.item && G.me.p.item.userData.bend ? G.me.p.item : itemModels["r" + S.rod] : null) });
   interiors = new Interiors({ scene, onEnter: (c) => heist.enter(c), onLeave: () => heist.leave() });
   drops = new Drops({ scene, me: () => { const b = mapPos(); return { x: b.x, z: b.z, yaw: b.yaw || 0 }; }, indoors: () => inside(),
     dropped: () => { SFX.door(); H.toast("📦 Special delivery!", "Your SkyDrop box just dropped. Walk up to it and press E to open it.", "good", 3500); },
@@ -1292,7 +1362,12 @@ async function boot() {
     room: () => (inside() ? (interiors.cur.bd.id === "rv" ? "rv_" + mp.id : interiors.cur.bd.id) : ""),
     riding: () => G.ride || 0, mapPos: () => mapPos(),
     myRide() { const c = mine(); return c ? { x: c.m.root.position.x, y: c.m.root.position.y, z: c.m.root.position.z, yaw: c.b.yaw, C: c.m } : null; },
-    me() { const c = mine(), p = inside() ? G.me.w : mapPos(); return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, car: c ? { id: c.s.id, paint: c.s.paint, code: modCode(c.s) } : null }; },
+    me() {
+      const c = mine(), p = inside() ? G.me.w : mapPos(), b = c && c.b;
+      // tilt = how the ride is tipped (nose up/down incl. wheelies + flips, lean, wheelie, trick spin) so friends see it
+      const tilt = b && !inside() ? [-(b.pitch || 0) - (b.wa || 0) - (b.tPitch || 0), (b.roll || 0) + (b.tRoll || 0), b.wa || 0, b.tYaw || 0].map((v) => Math.round(v * 100) / 100) : null;
+      return { x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: c ? speedOf(c.b) > 1 : G.me.w.moving > 0.5, speed: c ? speedOf(c.b) : 0, tilt, car: c ? { id: c.s.id, paint: c.s.paint, code: modCode(c.s) } : null };
+    },
     // what you have out near you, so friends see it too: parked rides, trailers, your camp (closest first)
     // (things riding along with the ride you're driving, like a bike in your truck bed or your hitched trailer and the
     //  rides on it, are sent relative to your ride: x/z/yaw/y in its own space, towing = 1, so friends see them move with you)

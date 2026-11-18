@@ -2,7 +2,7 @@
 // and answers "how high is the ground here?" and "is this road, dirt or mud?" for the driving physics.
 import * as THREE from "/create/vendor/three.module.js";
 import { bakeGroup } from "./vehicles.js";
-import { HALF, EDGE, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, POND, LAKE, FROST, RING_R, SPOKES, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY, DRIFT_TRACK } from "./layout.js";
+import { HALF, EDGE, WATER_Y, riverX, RIVER_W, FORD_Z, MOUNTAIN, MANSION_HILL, POND, LAKE, FROST, RING_R, SPOKES, FLATS, ROADS, TRAILS, MUDS, RAMPS, MOTO_TRACK, SPEEDWAY, DRIFT_TRACK, MX2_TRACK, WHOOPS } from "./layout.js";
 
 export const CELL = 5, N = (HALF * 2) / CELL; // the height grid: N x N squares of 5 m
 const V = N + 1;
@@ -195,26 +195,32 @@ export function buildGround() {
   TRACKS.summit = PATHS.find((p) => p.name === "mountain");
   TRACKS.single = PATHS.find((p) => p.name === "single");
   TRACKS.drift = add({ pts: DRIFT_TRACK, w: 15 }, "speedway");
+  TRACKS.mx2 = add({ pts: MX2_TRACK, w: 12 }, "track");
   flattenPaths();
   for (const m of MUD_LIST) dig(m);
   // the road's height = the ground under it (bridges keep their deck height), so what you see is what you drive on
   for (const p of PATHS) for (let i = 0; i < p.n; i++) p.e[i] = p.bridge[i] ? Math.max(p.e[i], hAt(p.x[i], p.z[i])) : hAt(p.x[i], p.z[i]);
-  // jumps on the motocross track
-  const mt = TRACKS.moto;
+  // jumps on the motocross tracks
   // (dirt "tabletop" jumps: up, a flat top, then a smooth landing slope). They only go on straight parts of the track,
   // so you always land back on the track (never off into the hay bales or out of the park).
-  {
+  const trackJumps = (mt, start, hs, opts = {}) => {
     const head = (i) => { const a = ((i % mt.n) + mt.n) % mt.n, b = (a + 1) % mt.n; return Math.atan2(mt.x[b] - mt.x[a], mt.z[b] - mt.z[a]); };
     const turn = (i) => { let m = 0; const h0 = head(i); for (let k = -2; k <= 16; k++) { const d = head(i + k); m = Math.max(m, Math.abs(Math.atan2(Math.sin(d - h0), Math.cos(d - h0)))); } return m; };
-    const picks = [], hs = [2.0, 2.4, 2.2, 2.0, 2.3];
-    for (let i = 0; i < mt.n && picks.length < 5; i++) {
-      const ds = Math.min(Math.abs(i - mt.start0), mt.n - Math.abs(i - mt.start0));
-      if (turn(i) > 0.3 || ds < 8) continue;
-      if (picks.some((q) => Math.min(Math.abs(q - i), mt.n - Math.abs(q - i)) < mt.n / 7)) continue;
+    const picks = [], gap = opts.gap || mt.n / 7;
+    for (let i = 0; i < mt.n && picks.length < hs.length; i++) {
+      const ds = Math.min(Math.abs(i - start), mt.n - Math.abs(i - start));
+      if (turn(i) > 0.3 || ds < 8 || (opts.skip && opts.skip(mt.x[i], mt.z[i]))) continue;
+      if (picks.some((q) => Math.min(Math.abs(q - i), mt.n - Math.abs(q - i)) < gap)) continue;
       picks.push(i);
     }
-    picks.forEach((i, k) => { const j = (i + 2) % mt.n; RAMP_LIST.push({ x: mt.x[i], z: mt.z[i], yaw: Math.atan2(mt.x[j] - mt.x[i], mt.z[j] - mt.z[i]), len: 7, top: 4, down: 9, w: 11.5, h: hs[k], track: true }); });
-  }
+    picks.forEach((i, k) => { const j = (i + 2) % mt.n; RAMP_LIST.push({ x: mt.x[i], z: mt.z[i], yaw: Math.atan2(mt.x[j] - mt.x[i], mt.z[j] - mt.z[i]), len: opts.len || 7, top: opts.top || 4, down: opts.down || 9, w: 11.5, h: hs[k], track: true }); });
+  };
+  const mt = TRACKS.moto;
+  trackJumps(mt, mt.start0, [2.0, 2.4, 2.2, 2.0, 2.3]);
+  // Ridgeline MX Park: bigger jumps, more of them (not on the whoops straight), and a row of whoops
+  { const m2 = TRACKS.mx2; let bi = 0, bd = 1e9; for (let i = 0; i < m2.n; i++) { const d = (m2.x[i] - 640) ** 2 + (m2.z[i] - 76) ** 2; if (d < bd) { bd = d; bi = i; } } m2.start0 = bi;
+    trackJumps(m2, bi, [2.6, 3.2, 2.8, 3.6, 2.4, 3.0, 3.4], { gap: m2.n / 11, len: 8, top: 6, down: 11, skip: (x, z) => z > 215 && x > WHOOPS.x1 - 12 && x < WHOOPS.x0 + 12 }); }
+  for (let x = WHOOPS.x0; x > WHOOPS.x1; x -= 4.6) { const k = (x - WHOOPS.x1) / (WHOOPS.x0 - WHOOPS.x1); RAMP_LIST.push({ x, z: WHOOPS.z1 + (WHOOPS.z0 - WHOOPS.z1) * k, yaw: -Math.PI / 2, len: 1.7, top: 0.2, down: 1.7, w: 11, h: 0.55, track: true, whoop: true }); }
   { const i = Math.floor(0.66 * mt.n); const m = { x: mt.x[i], z: mt.z[i], r: 7 }; m.y = hAt(m.x, m.z); dig(m); MUD_LIST.push(m); }
   for (const r of RAMPS) RAMP_LIST.push({ ...r });
   for (const r of RAMP_LIST) { r.top = r.top || 0; r.down = r.down || 0; r.total = r.len + r.top + r.down; r.c = Math.cos(r.yaw); r.s = Math.sin(r.yaw); r.cx = r.x + r.s * r.total / 2; r.cz = r.z + r.c * r.total / 2; r.br = Math.hypot(r.total / 2, r.w / 2) + 1; }
@@ -332,7 +338,7 @@ function paintSurfaces() {
   for (const m of MUD_LIST) stamp(m.x, m.z, m.r * 0.92, SURF.MUD, (c) => c === SURF.ROAD);
   for (let j = 0; j < SN; j++) for (let i = 0; i < SN; i++) {
     const x = -HALF + (i + 0.5) * SC, z = -HALF + (j + 0.5) * SC;
-    if (hAt(x, z) < WATER_Y - 0.05 && S[j * SN + i] !== SURF.ROAD) S[j * SN + i] = SURF.WATER;
+    if (hAt(x, z) < WATER_Y - 0.05 && S[j * SN + i] !== SURF.ROAD && S[j * SN + i] !== SURF.MUD) S[j * SN + i] = SURF.WATER; // (super deep mud pits stay mud)
   }
 }
 
@@ -404,6 +410,16 @@ export function normalAt(x, z, out = new THREE.Vector3()) {
   return out.set(groundAt(x - e, z) - groundAt(x + e, z), 2 * e, groundAt(x, z - e) - groundAt(x, z + e)).normalize();
 }
 export const mudPits = () => MUD_LIST;
+// how deep the mud is here (meters from the shiny mud on top down to the ground under it; 0 = no mud)
+// (matches the mud surface in world.js mudSurfaces)
+export function mudDepthAt(x, z) {
+  let best = 0;
+  for (const m of MUD_LIST) {
+    const dx = x - m.x, dz = z - m.z; if (Math.abs(dx) > m.r || Math.abs(dz) > m.r || dx * dx + dz * dz > m.r * m.r * 0.86) continue;
+    best = Math.max(best, m.y - 0.22 * (m.deep || 1) - hAt(x, z));
+  }
+  return best;
+}
 
 // ---------------------------------------------------------------- textures made in code
 function canvasTex(w, h, draw, rep = true) {

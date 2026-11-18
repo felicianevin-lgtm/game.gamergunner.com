@@ -1,10 +1,10 @@
 // MUD VALLEY RP: puts the whole valley together. Sky, sun, the land, town, houses, forests, rocks, racetrack stuff
 // and the glowing circles you drive into to do things.
 import * as THREE from "/create/vendor/three.module.js";
-import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, LAKE, ATMS, PAWNS } from "./layout.js";
+import { HALF, EDGE, FLATS, PLACES, HOUSES, riverX, RIVER_W, MOUNTAIN, POND, LAKE, ATMS, PAWNS, WATER_Y, MUDS } from "./layout.js";
 import { buildGround, buildGroundMeshes, hAt, surfaceAt, SURF, TRACKS, PATHS, fbm, samplePath, addPlatform, roadNet, groundAt, LIMIT_TOWN, LIMIT_HWY, biome, desertAt, merge, mudPits } from "./terrain.js";
 import * as B from "./build.js";
-import { addCircle } from "./colliders.js";
+import { addCircle, pushOut } from "./colliders.js";
 import { bakeGroup, buildCar, vehicleById } from "./vehicles.js";
 import { mergeGeometries } from "/create/vendor/BufferGeometryUtils.js";
 
@@ -186,15 +186,21 @@ function outskirts(scene) {
   const bales = [], tires = [];
   edgeObjects(sm, 6.0 + 1.6, 7, bales, 0.9);
   edgeObjects(sw, 8 + 1.4 + 3, 9, tires, 1.0, true);
+  { const m2 = TRACKS.mx2; if (m2) edgeObjects(m2, 6.0 + 1.6, 8, bales, 0.9); }
   const baleMesh = inst(new THREE.CylinderGeometry(0.75, 0.75, 1.5, 10).rotateZ(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xe6c35a }), bales, 0.75);
   const tireMesh = inst(new THREE.CylinderGeometry(0.7, 0.7, 1.4, 10), new THREE.MeshLambertMaterial({ color: 0x2a2a2e }), tires, 0.7);
   scene.add(baleMesh, tireMesh); scene.userData.bales = { mesh: baleMesh, list: bales };
+  ridgeline(scene);
+  abyss(scene);
+  marina(scene);
+  parkingLots(scene);
   // direction signs on the highways
   const dir = (text, x, z, yaw) => { const y = hAt(x, z); const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.6, 0.25), new THREE.MeshLambertMaterial({ color: 0x888888 })); p.position.set(x, y + 1.8, z); scene.add(p); B.sign(scene, text, 5, 1.3, x, y + 3.6, z, yaw, { bg: "#1f7a3a", fg: "#ffffff", back: true }); addCircle(x, z, 0.3, y + 4); };
   dir("MOTOCROSS →", 124, -9, 0); dir("↑ SPEEDWAY", 8, -112, Math.PI / 2); dir("FARM ↓", 8, 112, -Math.PI / 2); dir("← MANSION HILL", -124, -9, 0); dir("MOUNTAIN TRAIL", -118, 92, Math.PI / 4);
   dir("MUD BOWL →", 232, 182, -0.6); dir("← CAMPGROUND", 288, 140, 0);
   dir("↑ COPPER CREEK", 222, -14, -Math.PI / 2); dir("THUNDER PEAK ⛰", -138, 128, Math.PI / 4); dir("GOAT TRAIL (4x4)", -328, 36, 0.8);
   dir("LILY POND 🎣", 392, 100, Math.PI / 2); dir("CANYON RUN", 372, 344, 0.4); dir("TIMBER RIDGE", -356, -360, 0.6);
+  dir("RIDGELINE MX →", 488, 14, 0.4); dir("THE ABYSS", 92, 566, -Math.PI / 2); dir("MARINA 🚤", -300, 872, 0);
 }
 // ---------------------------------------------------------------- Copper Creek: bank, jewelry store, police station, shops
 function copperCreek(scene) {
@@ -214,6 +220,91 @@ function copperCreek(scene) {
   for (let x = 304; x <= 492; x += 22) for (const z of [-311, -325]) { if (Math.abs(x - 400) < 8 || (Math.abs(x - 304) < 8 && z > -318)) continue; b.at(x, hAt(x, z), z, z < -318 ? 0 : Math.PI); B.tree(b, 0, 0, 0.7, 1); }
   b.finish(scene);
   B.sign(scene, "WELCOME TO COPPER CREEK", 9, 1.6, 300, hAt(300, -330) + 4, -330, Math.PI / 2, { bg: "#c0602a", fg: "#ffffff", back: true });
+}
+// ---------------------------------------------------------------- Ridgeline MX Park (a start arch + a big sign)
+function ridgeline(scene) {
+  const m = TRACKS.mx2; if (!m) return;
+  const i = m.start0 || 0, j = (i + 2) % m.n, yaw = Math.atan2(m.x[j] - m.x[i], m.z[j] - m.z[i]);
+  placeAt(scene, (s, b) => B.startArch(s, b, 13, "RIDGELINE MX", { pole: 0xe0702a }), m.x[i], m.z[i], yaw);
+  const sy = hAt(600, 66);
+  B.sign(scene, "RIDGELINE MX PARK\nBIG JUMPS + WHOOPS", 7, 2.2, 600, sy + 4.2, 66, Math.PI / 2 + 0.4, { bg: "#e0702a", fg: "#ffffff", back: true });
+  const p = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4.2, 0.3), new THREE.MeshLambertMaterial({ color: 0x555555 })); p.position.set(600, sy + 2.1, 66); scene.add(p); addCircle(600, 66, 0.4, sy + 5);
+}
+// ---------------------------------------------------------------- The Abyss: warning signs + a ring of old tires around the deepest mud pit
+function abyss(scene) {
+  const A = MUDS.find((m) => m.abyss); if (!A) return;
+  const sx = A.x - A.r - 6, sz = A.z - 7, y = hAt(sx, sz);
+  B.sign(scene, "THE ABYSS\nSUPER DEEP MUD!\nSNORKEL NEEDED", 5.6, 2.6, sx, y + 3.6, sz, -Math.PI / 2, { bg: "#ffd23a", fg: "#1a1a1a", back: true });
+  const p = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.6, 0.25), new THREE.MeshLambertMaterial({ color: 0x777777 })); p.position.set(sx, y + 1.8, sz); scene.add(p); addCircle(sx, sz, 0.3, y + 4);
+  const b = new B.Batch(); b.at(0, 0, 0);
+  for (let k = 0; k < 28; k++) { const a = (k / 28) * Math.PI * 2; if (Math.abs(Math.atan2(Math.sin(a - Math.PI), Math.cos(a - Math.PI))) < 0.4) continue; const x = A.x + Math.cos(a) * (A.r + 4), z = A.z + Math.sin(a) * (A.r + 4); b.cyl(0.7, 0.55, x, hAt(x, z), z, 0x222226, 10); }
+  b.finish(scene);
+}
+// ---------------------------------------------------------------- Big Bass Lake Marina: a long dock, a boat ramp, the marina shop
+export const MARINA = { x: LAKE.x + LAKE.r + 1, z: 880, boat: { x: LAKE.x + LAKE.r - 22, z: 898, yaw: -Math.PI / 2 } };
+function marina(scene) {
+  const x = MARINA.x, z = MARINA.z, bt = placeAt(scene, (s, b) => B.longDock(s, b, 26), x, z, -Math.PI / 2);
+  addPlatform(x - 13, z, 1.5, 13.2, Math.PI / 2, bt.fy + 0.7);
+  // a T at the end of the dock to tie boats up
+  { const b = new B.Batch(); b.at(x - 26, bt.fy, z, 0); for (let i = 0; i < 7; i++) b.box(1.3, 0.2, 1.1, 0, 0.5, -3.6 + i * 1.2, 0xa07848); for (const zz of [-3.6, 3.6]) b.cyl(0.15, 3.5, 0, -2.8, zz, 0x7a5a30, 6); b.finish(scene); addPlatform(x - 26, z, 0.65, 4.2, 0, bt.fy + 0.7); }
+  // the boat ramp: a concrete strip down into the water, next to the dock
+  { const b = new B.Batch(); b.at(0, 0, 0); for (let k = 0; k < 10; k++) { const rx = x + 8 - k * 2.6, rz = z + 12; b.box(2.8, 0.12, 5, rx, Math.max(WATER_Y - 0.7, hAt(rx, rz)) - 0.06, rz, 0xb8b4aa); } b.finish(scene); }
+  placeAt(scene, (s, b) => B.smallShop(s, b, "BIG BASS MARINA", 0xe8f4ff, 0x2a7ab0), x + 18, z - 14, -Math.PI / 2);
+}
+// ---------------------------------------------------------------- parking lots next to every business
+// For each business: try spots around the building (sides, front, back) and use the first one that's flat, not on a
+// road / water / mud, and doesn't hit anything solid. A lot is asphalt + paint (you drive right onto it).
+const LOTS = [];
+const BIZ = [
+  [-36, 41, Math.PI], [36, -41, 0], [-36, -41, 0], [22, 40, Math.PI], [51, 40, Math.PI], [91, -30, 0], [91, 38, Math.PI], [18, -82, 0], [90, -82, 0], // town
+  [-304, -10, 0], [100, -180, 0], [-300, 289, 0], [283, 140, Math.PI / 2], [404, 132, Math.PI / 2], // lumber, construction, ranger, camp store, bait
+  [330, -345, 0], [366, -343, 0], [428, -349, 0], [484, -344, 0], [330, -300, Math.PI], [366, -300, Math.PI], [418, -301, Math.PI], [436, -301, Math.PI], [304, -301, Math.PI], // Copper Creek
+];
+export const lotCount = () => LOTS.length;
+export const LOT_MISS = []; // (businesses with no room for a lot: for testing)
+function parkingLots(scene) {
+  const list = [...BIZ, ...PAWNS.map((p) => [p.x, p.z, p.yaw]), [MARINA.x + 18, MARINA.z - 14, -Math.PI / 2]];
+  const b = new B.Batch(), town = (x, z) => Math.abs(x) < 116 && Math.abs(z) < 106;
+  for (const [bx, bz, yaw] of list) {
+    if (LOTS.some((L) => Math.hypot(L.x - bx, L.z - bz) < 26)) continue; // (a shop right next door already has one: share it)
+    const inTown = town(bx, bz), sizes = inTown ? [[14, 10], [11, 8]] : [[19, 12], [13, 9]], tries = [];
+    // spots all around the building (closest first), turned 2 ways, big lot first then a smaller one
+    for (let d = 11; d <= 35; d += 3) for (let k = 0; k < 8; k++) for (const turn of [0, Math.PI / 2]) for (const [W, D] of sizes) tries.push([d, (k * Math.PI) / 4, turn, W, D]);
+    tries.sort((a, b2) => a[0] + (a[3] < 14 ? 6 : 0) - (b2[0] + (b2[3] < 14 ? 6 : 0)));
+    const n0 = LOTS.length;
+    for (const [d, a, turn, W, D] of tries) {
+      const ang = yaw + a, x = bx + Math.sin(ang) * d, z = bz + Math.cos(ang) * d, ly = yaw + turn;
+      if (!lotOk(x, z, ly, W, D, inTown)) continue;
+      const lo = inTown ? TOWN_Y + LAWN : lotLow(x, z, ly, W, D), y = inTown ? TOWN_Y + LAWN + 0.012 : lotTop(x, z, ly, W, D) + 0.03;
+      b.at(x, y, z, ly);
+      if (y - lo > 0.12) b.box(W + 0.6, y - lo + 0.25, D + 0.6, 0, lo - y - 0.25, 0, 0xa8a49a); // a leveled concrete pad on sloped ground
+      b.box(W, 0.05, D, 0, 0, 0, 0x34363c);
+      const n = Math.floor(W / 2.8), sp = (W - 1.6) / n;
+      for (let k = 0; k <= n; k++) b.box(0.14, 0.06, D * 0.42, -W / 2 + 0.8 + k * sp, 0.003, D / 2 - D * 0.23, 0xf2f2f2); // stall lines
+      for (let k = 0; k < n; k++) b.box(1.4, 0.14, 0.25, -W / 2 + 0.8 + (k + 0.5) * sp, 0, D / 2 - 0.6, 0xc8c4bc); // wheel stops
+      b.box(1.0, 0.06, 1.0, -W / 2 + 1.6, 0.004, -D / 2 + 1.6, 0x2a6fd6); // a little blue square for the "P"
+      if (y - lo > 0.12) addPlatform(x, z, W / 2 + 0.3, D / 2 + 0.3, ly, y + 0.05); // (you drive on the pad, not the slope under it)
+      LOTS.push({ x, z, r: Math.hypot(W, D) / 2 });
+      break;
+    }
+    if (n0 === LOTS.length) LOT_MISS.push([bx, bz]);
+  }
+  b.finish(scene);
+}
+function lotCorners(x, z, yaw, W, D) { const c = Math.cos(yaw), s = Math.sin(yaw), out = []; for (let i = -1; i <= 1; i += 0.5) for (let j = -1; j <= 1; j += 0.5) { const lx = (i * W) / 2, lz = (j * D) / 2; out.push([x + lx * c + lz * s, z - lx * s + lz * c]); } return out; }
+function lotTop(x, z, yaw, W, D) { let m = -1e9; for (const [px, pz] of lotCorners(x, z, yaw, W, D)) m = Math.max(m, hAt(px, pz)); return m; }
+function lotLow(x, z, yaw, W, D) { let m = 1e9; for (const [px, pz] of lotCorners(x, z, yaw, W, D)) m = Math.min(m, hAt(px, pz)); return m; }
+const lotOk = (x, z, yaw, W, D, inTown) => !lotWhy(x, z, yaw, W, D, inTown);
+export function lotWhy(x, z, yaw, W, D, inTown) {
+  for (const L of LOTS) if (Math.hypot(x - L.x, z - L.z) < L.r + Math.hypot(W, D) / 2) return "lot";
+  let lo = 1e9, hi = -1e9;
+  for (const [px, pz] of lotCorners(x, z, yaw, W, D)) {
+    const s = surfaceAt(px, pz); if (s === SURF.ROAD || s === SURF.WATER || s === SURF.MUD || s === SURF.TRACK || s === SURF.DIRT || (s === SURF.SAND && hAt(px, pz) < WATER_Y + 1)) return "surf" + s;
+    if (inTown) { let blk = false; for (const [x0, x1] of BLOCK_X) for (const [z0, z1] of BLOCK_Z) if (px > x0 + 0.6 && px < x1 - 0.6 && pz > z0 + 0.6 && pz < z1 - 0.6) blk = true; if (!blk) return "block"; }
+    const h = hAt(px, pz); lo = Math.min(lo, h); hi = Math.max(hi, h);
+    if (pushOut(px, pz, 1.3, h + 0.5).hit > 0) return "solid";
+  }
+  return hi - lo < (inTown ? 0.45 : 1.6) ? "" : "slope" + (hi - lo).toFixed(1);
 }
 function startIndex(p, x, z) { let bi = 0, bd = 1e9; for (let i = 0; i < p.n; i++) { const d = (p.x[i] - x) ** 2 + (p.z[i] - z) ** 2; if (d < bd) { bd = d; bi = i; } } return bi; }
 function edgeObjects(p, off, every, out, r, outsideOnly) {
@@ -238,7 +329,7 @@ function inst(geo, mat, list, lift) {
 }
 
 // ---------------------------------------------------------------- forests and rocks (instanced: one draw for all of them)
-function inFlat(x, z) { for (const f of FLATS) if (Math.abs(x - f.x) < f.hx + 6 && Math.abs(z - f.z) < f.hz + 6) return true; return false; }
+function inFlat(x, z) { for (const f of FLATS) if (Math.abs(x - f.x) < f.hx + 6 && Math.abs(z - f.z) < f.hz + 6) return true; for (const L of LOTS) if (Math.hypot(x - L.x, z - L.z) < L.r + 3) return true; return false; }
 function nearPath(x, z, d) { for (const [dx, dz] of [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d]]) { const s = surfaceAt(x + dx, z + dz); if (s !== SURF.GRASS && s !== SURF.ROCK && s !== SURF.SAND) return true; } return false; }
 function forestDensity(x, z) {
   const h = hAt(x, z);
