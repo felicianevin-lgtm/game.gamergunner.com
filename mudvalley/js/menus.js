@@ -21,7 +21,7 @@ export const CUTS = [{ name: "High (4 in)", desc: "Just a trim. Tall and fluffy.
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { ptcruise: "🚙", blackout: "🏍️", ultrab: "🏍️", move10: "🏍️", dirtkart: "🏎️", bassboat: "🚤", gooseneck: "🚛", drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { vargmx: "🏍️", ptcruise: "🚙", blackout: "🏍️", ultrab: "🏍️", move10: "🏍️", dirtkart: "🏎️", bassboat: "🚤", gooseneck: "🚛", drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵"; Object.assign(ICON, { squarebody: "🛻", muscle: "🏎️", suv: "🚙", rally: "🏎️", skidsteer: "🚜", excavator: "🏗️", ztmower: "🚜", lawntractor: "🚜" }); Object.assign(ICON, { bike125f: "🏍️", dual250: "🏍️", ebike: "🚲", efat: "🚲", mudmower: "🚜", racemower: "🚜", camper: "🚐" });
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);

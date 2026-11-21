@@ -51,6 +51,7 @@ export const VEHICLES = [
   { id: "excavator", name: "Mini Digger Excavator", price: 24000, top: 5.5, acc: 5, grip: 9, turn: 1.4, off: { dirt: 1, grass: 1, mud: 1 }, size: 2, tow: 0, color: 0xffc21a, engine: 52, open: true, heavy: true, pivot: true, crawl: 1, desc: "A mini excavator on rubber tracks. Hold T to dig, and the cab swings around on top!" },
   { id: "ztmower", name: "Zero-Turn Pro Mower", price: 3800, top: 11, acc: 9, grip: 8.5, turn: 3.4, off: { dirt: 0.9, grass: 1, mud: 0.6 }, size: 1, tow: 1, color: 0xe0203a, engine: 120, open: true, mower: true, pivot: true, crawl: 0.75, desc: "A real lawn mower that actually CUTS THE GRASS. Spins in place. B = blades on/off. Get paid to mow!" },
   // electric dirt bikes (motos): light, crazy torque, silent. Battery + brake upgrades at Mud & Chrome (⚡ E-Moto tab)
+  { id: "vargmx", name: "Volt EX-1 Electric MX", price: 12500, top: 36, acc: 21, grip: 7.6, turn: 2.65, off: { dirt: 1, grass: 0.96, mud: 0.8 }, size: 1, tow: 0, color: 0xc81e24, engine: 440, open: true, bike: true, electric: true, emoto: true, crawl: 0.94, desc: "A full-size electric motocross race bike: real MX plastics, no headlight, a race number plate, and a silent motor that pulls like a 450. The fastest dirt bike in Mud Valley." },
   { id: "blackout", name: "Blackout E-Moto", price: 4200, top: 26, acc: 17, grip: 7.3, turn: 2.8, off: { dirt: 1, grass: 0.95, mud: 0.74 }, size: 1, tow: 0, color: 0x1a1a22, engine: 520, open: true, bike: true, electric: true, emoto: true, crawl: 0.9, desc: "A light, all-black electric dirt bike. Silent, sneaky and SO quick off the line. Great wheelies!" },
   { id: "ultrab", name: "Hornet Ultra-B E-Moto", price: 6800, top: 31, acc: 19, grip: 7.5, turn: 2.7, off: { dirt: 1, grass: 0.96, mud: 0.78 }, size: 1, tow: 0, color: 0xffd23a, engine: 480, open: true, bike: true, electric: true, emoto: true, crawl: 0.93, desc: "The big electric moto: a full-size frame, a huge battery, long suspension and a torque punch that pulls wheelies all day." },
   { id: "move10", name: "Movement 10 Pro E-Moto", price: 8900, top: 34, acc: 20, grip: 7.6, turn: 2.7, off: { dirt: 1, grass: 0.96, mud: 0.8 }, size: 1, tow: 0, color: 0x2ac0a0, engine: 460, open: true, bike: true, electric: true, emoto: true, crawl: 0.94, desc: "A pro race electric moto. Fastest e-moto in the valley. Bolt on the Ceron 72V battery and Ultra-B brakes to make it a monster." },
@@ -258,7 +259,7 @@ let BIKE = null;
 const XBIKE = {};
 export async function loadBikeModel() {
   if (BIKE) return BIKE;
-  await Promise.all([["b125", "bike125.bin"], ["b250", "bike250.bin"]].map(([k, f]) => loadPacked(f).then((b) => { XBIKE[k] = b; }).catch((e) => console.warn("bike model " + f + " didn't load", e))));
+  await Promise.all([["b125", "bike125.bin"], ["b250", "bike250.bin"], ["varg", "varg.bin"]].map(([k, f]) => loadPacked(f).then((b) => { XBIKE[k] = b; }).catch((e) => console.warn("bike model " + f + " didn't load", e))));
   try { BIKE = await loadPacked("dirtbike.bin"); } catch (e) { console.warn("dirt bike model didn't load, using the simple bike", e); }
   return BIKE;
 }
@@ -1277,6 +1278,7 @@ function emoto(C, k, style) {
   if (style === "move") { for (const s of [-1, 1]) bx(b, 0.012, K(0.05), K(0.4), s * K(0.175), K(0.86), K(0.2), M.white, 0.08); } // race stripes on the shrouds
   wheel(C, 0, fz, r, tw, 1, { bike: true }); wheel(C, 0, rz, r, tw * 1.15, 0, { bike: true });
 }
+BUILD.vargmx = (C) => { if (XBIKE.varg) realBike(C, 1.0, XBIKE.varg); else emoto(C, 1.13, "move"); };
 BUILD.blackout = (C) => emoto(C, 0.94, "black");
 BUILD.ultrab = (C) => emoto(C, 1.1, "ultra");
 BUILD.move10 = (C) => emoto(C, 1.13, "move");
