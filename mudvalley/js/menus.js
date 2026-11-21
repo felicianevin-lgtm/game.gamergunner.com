@@ -21,7 +21,7 @@ export const CUTS = [{ name: "High (4 in)", desc: "Just a trim. Tall and fluffy.
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { vargmx: "🏍️", ptcruise: "🚙", blackout: "🏍️", ultrab: "🏍️", move10: "🏍️", dirtkart: "🏎️", bassboat: "🚤", gooseneck: "🚛", drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { hellcat: "🏎️", ram1500: "🛻", vargmx: "🏍️", ptcruise: "🚙", blackout: "🏍️", ultrab: "🏍️", move10: "🏍️", dirtkart: "🏎️", bassboat: "🚤", gooseneck: "🚛", drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵"; Object.assign(ICON, { squarebody: "🛻", muscle: "🏎️", suv: "🚙", rally: "🏎️", skidsteer: "🚜", excavator: "🏗️", ztmower: "🚜", lawntractor: "🚜" }); Object.assign(ICON, { bike125f: "🏍️", dual250: "🏍️", ebike: "🚲", efat: "🚲", mudmower: "🚜", racemower: "🚜", camper: "🚐" });
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -344,7 +344,7 @@ function phone(view = "home") {
   const back = `<button type="button" class="small" data-a="view" data-v="home">← Back</button>`;
   let html = "";
   if (view === "home") html = `<h2>📱 PHONE</h2><div class="bank">${money(S.money)}</div>
-    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["camp", "⛺", "Camp Bag"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
+    <div class="apps">${[["jobs", "💼", "Jobs"], ["career", S.role === "cop" ? "👮" : S.role === "robber" ? "🦹" : "🧑", "Career"], ["friends", "👥", "Lobby"], ["messages", "💬", "Messages" + (GM.mp.unread ? " (" + GM.mp.unread + ")" : "")], ["map", "🗺️", "Map"], ["rides", "🚗", "My Rides"], ["races", "🏁", "Races"], ["fishlog", "🐟", "Fish Log"], ["backpack", "🎒", "Backpack"], ["ideas", "💡", "Ideas"], ["houses", "🏠", "Houses"], ["gps", "📍", "Places"], ["home", "🏡", "Go Home"], ["stats", "📊", "Stats"], ["settings", "⚙️", "Settings"], ["help", "❓", "Help"], ["skydrop", "📦", "SkyDrop"], ["market", "🛒", "Marketplace" + (GM.market.list.reduce((a, l) => a + l.offers.length, 0) ? " (" + GM.market.list.reduce((a, l) => a + l.offers.length, 0) + ")" : "")], ["camp", "⛺", "Camp Bag"], ["dev", "🛠", "Dev"]].map(([v, i, n]) => `<button type="button" class="app" data-a="view" data-v="${v}"><i>${i}</i>${n}</button>`).join("")}</div>
     ${GM.G.race ? `<div class="btns"><button type="button" class="small" data-a="quitRace">🏳️ Quit the race</button></div>` : ""}`;
   if (view === "rides") html = `<h2>🚗 MY RIDES</h2>${back}<div class="list" style="margin-top:10px">${S.cars.map((c) => { const C = GM.G.CARS.get(c.uid); return `<div class="item"><span class="ico">${ICON[c.id]}</span><span class="nm"><b>${esc(vehicleById(c.id).name)}</b><small>${C.on ? "On a trailer" : C === GM.mine() ? "You're driving it" : "Parked"}</small></span>${C !== GM.mine() ? `<button type="button" class="small" data-a="gpsCar" data-v="${c.uid}">📍 GPS</button>` : ""}</div>`; }).join("")}</div><p class="note">To bring a ride to you, go to one of your houses (or Town Parking) and open the garage.</p>`;
   if (view === "races") html = `<h2>🏁 RACES</h2>${back}<div class="list" style="margin-top:10px">${RACES.map((r) => `<div class="item"><span class="ico">🏁</span><span class="nm"><b>${esc(r.name)}</b><small>1st: ${money(r.prize[0])} · Best: ${S.best[r.id] ? (r.drift ? S.best[r.id].toLocaleString() + " pts" : H.fmtTime(S.best[r.id])) : "—"} · Wins: ${S.wins[r.id] || 0}</small></span><button type="button" class="small" data-a="gpsPlace" data-v="${r.place}">📍 GPS</button></div>`).join("")}</div>`;
@@ -371,6 +371,7 @@ function phone(view = "home") {
   if (view === "fishlog") html = fishLogHtml(back);
   if (view === "camp") html = campHtml(back);
   if (view === "backpack") html = `<h2>🎒 BACKPACK</h2>${back}<p class="sub">${S.backpack.length} / ${packCap()} things · worth about ${money(packValue())} at a Pawn Shop${S.gear.duffel ? "" : " (a Big Duffel Bag from the Tool Barn makes it bigger)"}</p>${packList(false)}<div class="btns"><button type="button" class="small" data-a="gpsPawn">📍 Nearest Pawn Shop</button></div>`;
+  if (view === "market") html = marketHtml(back);
   if (view === "ideas") html = `<h2>💡 IDEAS</h2>${back}<p class="sub">What should we add to Mud Valley? New cars, places, jobs, anything! Your idea goes straight to the game maker.</p>
     <textarea id="ideaTxt" maxlength="480" rows="5" placeholder="I think you should add..." style="width:100%;box-sizing:border-box;font:inherit;padding:8px;border-radius:8px"></textarea>
     <div class="btns"><button type="button" class="big" data-a="sendIdea">SEND IDEA 💡</button></div><p class="note" id="ideaNote">Please don't put your real name, address or phone number in it.</p>`;
@@ -432,6 +433,15 @@ function phone(view = "home") {
         .catch(() => { note.textContent = "Couldn't send it. Check the internet and try again."; });
       return;
     }
+    if (a === "mkTab") { mkTab = val; mkSel = null; mkPrice = 0; SFX.click(); return phone("market"); }
+    if (a === "mkBuy") { if (GM.marketBuy(+val)) phone("market"); return; }
+    if (a === "mkSell") { mkSel = +val; mkPrice = 0; SFX.click(); return phone("market"); }
+    if (a === "mkCancel") { mkSel = null; SFX.click(); return phone("market"); }
+    if (a === "mkPrice") { mkPrice = +val; const l = document.getElementById("mkLbl"); if (l) l.textContent = money(mkPrice); return; }
+    if (a === "mkList") { if (GM.marketList(+val, mkPrice)) { mkSel = null; mkPrice = 0; } return phone("market"); }
+    if (a === "mkUnlist") { GM.marketUnlist(+val); return phone("market"); }
+    if (a === "mkAccept") { const [u, i] = val.split(":").map(Number); const C = GM.G.CARS.get(u); if (C && confirm("Sell your " + vehicleById(C.s.id).name + "?")) GM.marketAccept(u, i); return phone("market"); }
+    if (a === "mkDecline") { const [u, i] = val.split(":").map(Number); GM.marketDecline(u, i); return phone("market"); }
     if (a === "view") { if (val === "jobs") return jobsPanel(true); if (val === "map") { close(); return map(); } if (val === "home") { goHome(); return; } phone(val); }
     if (a === "gpsPawn") { const me = GM.mePos(); let best = null; for (const [id, p] of Object.entries(PLACES)) if (id.startsWith("pawn") && (!best || Math.hypot(p.x - me.x, p.z - me.z) < Math.hypot(best.x - me.x, best.z - me.z))) best = p; GM.setWaypoint({ x: best.x, z: best.z, name: best.name }); close(); }
     if (a === "gpsCar") { const C = GM.G.CARS.get(+val); const p = C.on ? C.on : C.b; GM.setWaypoint({ x: p.x, z: p.z, name: "your " + vehicleById(C.s.id).name }); close(); }
@@ -600,6 +610,28 @@ function clothesShop() {
     if (a.startsWith("col_")) { O[a.slice(4)] = +val; SFX.click(); GM.wearOutfit(); return clothesShop(); }
     if (a === "bw" || a === "br") { O[a] = +val; SFX.click(); GM.wearOutfit(); return clothesShop(); }
   };
+}
+// ---------------------------------------------------------------- 🛒 Valley Marketplace (phone): buy + sell used rides
+let mkTab = "buy", mkSel = null, mkPrice = 0;
+const swatch = (c) => `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${hex(c)};vertical-align:middle;margin-right:4px;border:1px solid #0004"></i>`;
+function marketHtml(back) {
+  const M = GM.market, offers = M.list.reduce((a, l) => a + l.offers.length, 0);
+  const head = `<div style="background:#1877f2;color:#fff;margin:-4px -4px 10px;padding:10px 12px;border-radius:10px;display:flex;align-items:center;gap:8px"><b style="font-size:20px">🛒 Marketplace</b><span style="opacity:.85;font-size:13px">Mud Valley · used rides</span></div>
+    ${back}<div class="bank" style="margin-top:6px">${money(S.money)}</div>
+    <div class="tabs"><button type="button" data-a="mkTab" data-v="buy" class="${mkTab === "buy" ? "on" : ""}">🔎 Browse</button><button type="button" data-a="mkTab" data-v="sell" class="${mkTab === "sell" ? "on" : ""}">🏷️ Sell</button><button type="button" data-a="mkTab" data-v="inbox" class="${mkTab === "inbox" ? "on" : ""}">💬 Inbox${offers ? " (" + offers + ")" : ""}</button></div>`;
+  let body = "";
+  if (mkTab === "buy") body = `<p class="note">Used rides from folks around the valley. The seller drops it off right next to you.</p><div class="list">${M.used.map((it, i) => { const v = vehicleById(it.car.id), nw = v.price; return `<div class="item"><span class="ico">${ICON[v.id] || "🚗"}</span><span class="nm"><b>${money(it.price)} · ${esc(v.name)}</b><small>${swatch(it.car.paint)}${esc(it.seller)}: “${esc(it.note)}”${it.car.rust > 0.3 ? " · 🟤 rusty" : ""}${it.car.engine ? " · ⚙️ Stage " + it.car.engine : ""}${it.car.lift ? " · ⬆️ lifted" : ""}${it.car.tires === "mud" ? " · mud tires" : ""}${nw ? " · new: " + money(nw) : ""}</small></span><button type="button" class="mid" data-a="mkBuy" data-v="${i}" ${S.money >= it.price ? "" : "disabled"}>Buy</button></div>`; }).join("") || '<p class="note">Nothing for sale right now. Check back soon!</p>'}</div>`;
+  if (mkTab === "sell") {
+    const listed = (u) => M.list.find((l) => l.uid === u);
+    if (mkSel != null && GM.G.CARS.get(mkSel)) {
+      const c = GM.G.CARS.get(mkSel), val = GM.marketValue(c.s), v = vehicleById(c.s.id); if (!mkPrice) mkPrice = val;
+      body = `<h3>${ICON[v.id] || "🚗"} Sell your ${esc(v.name)}</h3><p class="note">Folks around here would pay about <b>${money(val)}</b> for it${rustOf(c.s) > 0.2 ? " (rust lowers the price: scrub it at Mud & Chrome!)" : ""}. Ask for more and fewer people will message you. Ask for less and it sells fast.</p>
+        <h3>Your price: <span id="mkLbl">${money(mkPrice)}</span></h3><input type="range" min="${Math.round(val * 0.3 / 10) * 10}" max="${Math.round(val * 1.8 / 10) * 10}" step="10" value="${mkPrice}" data-a="mkPrice">
+        <div class="btns"><button type="button" class="big" data-a="mkList" data-v="${mkSel}">📢 LIST IT</button><button type="button" class="small" data-a="mkCancel">Cancel</button></div>`;
+    } else body = `<p class="note">Pick a ride to sell. Buyers send you offers while you play (watch for 💬). You need to keep at least one ride.</p><div class="list">${S.cars.map((s) => { const v = vehicleById(s.id), L = listed(s.uid); return `<div class="item"><span class="ico">${ICON[v.id] || "🚗"}</span><span class="nm"><b>${esc(v.name)}${L ? `<span class="tag">LISTED ${money(L.price)}</span>` : ""}</b><small>${swatch(s.paint)}worth about ${money(GM.marketValue(s))}${L ? " · " + L.offers.length + " offer" + (L.offers.length === 1 ? "" : "s") : ""}</small></span>${L ? `<button type="button" class="small" data-a="mkUnlist" data-v="${s.uid}">Take down</button>` : `<button type="button" class="small" data-a="mkSell" data-v="${s.uid}" ${S.cars.length > 1 ? "" : "disabled"}>Sell</button>`}</div>`; }).join("")}</div>`;
+  }
+  if (mkTab === "inbox") body = M.list.some((l) => l.offers.length) ? M.list.filter((l) => l.offers.length).map((L) => { const c = GM.G.CARS.get(L.uid); if (!c) return ""; const v = vehicleById(c.s.id); return `<h3>${ICON[v.id] || "🚗"} ${esc(v.name)} · asking ${money(L.price)}</h3><div class="list">${L.offers.map((o, i) => `<div class="item"><span class="ico">🧑</span><span class="nm"><b>${esc(o.name)}: ${money(o.amount)}</b><small>“${esc(o.line)} ${money(o.amount)}”</small></span><button type="button" class="mid" data-a="mkAccept" data-v="${L.uid}:${i}">✓ Sell</button><button type="button" class="small" data-a="mkDecline" data-v="${L.uid}:${i}">✕</button></div>`).join("")}</div>`; }).join("") : `<p class="note">No messages yet. List a ride in 🏷️ Sell and buyers will text you!</p>`;
+  return head + body;
 }
 // ---------------------------------------------------------------- pawn shops + your backpack (npcs.js)
 const packList = (sell) => S.backpack.length ? `<div class="list">${S.backpack.map((it, i) => { const I = itemById(it.id); return `<div class="item"><span class="ico">${I.icon}</span><span class="nm"><b>${esc(I.name)}</b></span><span class="pr">${money(it.v)}</span>${sell ? `<button type="button" class="small" data-a="sell" data-v="${i}">Sell</button>` : ""}</div>`; }).join("")}</div>` : `<p class="note">Your backpack is empty. Knock people out (they drop their stuff) and pick up their backpacks with E.</p>`;

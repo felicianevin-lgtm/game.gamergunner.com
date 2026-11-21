@@ -60,6 +60,9 @@ export const VEHICLES = [
   // a boat! (lives at the Big Bass Lake Marina)
   { id: "bassboat", name: "Metal-Flake Bass Boat", price: 14000, top: 27, acc: 8.5, grip: 7, turn: 1.5, off: { dirt: 0.1, grass: 0.1, mud: 0.1 }, size: 2, tow: 0, color: 0x2a5ad0, engine: 90, open: true, boat: true, crawl: 0.1, desc: "A sparkly 20-foot bass boat with a big outboard, casting decks and a trolling motor. It waits for you at the Big Bass Lake Marina. Stop on the lake, press F to stand up on the deck and fish for MUSKIE!" },
   // a tall retro hatchback wagon: round fenders, an upright grille, a big roof
+  // real 3D models (models/hellcat.bin + ram1500.bin): the body is the model, the wheels are the game's own (so every tire mod works)
+  { id: "hellcat", name: "Inferno Cat 717 Super Sedan", price: 42000, top: 58, acc: 19.5, grip: 8.6, turn: 2.1, off: { dirt: 0.42, grass: 0.35, mud: 0.2 }, size: 2, tow: 0, color: 0x1a1a22, engine: 92, crawl: 0.25, desc: "A 4-door American muscle sedan with a supercharged V8 that whines like a jet. Huge burnouts, insane speed, and room for the whole family." },
+  { id: "ram1500", name: "Thunderhorn 1500 Pickup", price: 24000, top: 40, acc: 11.5, grip: 8, turn: 1.9, off: { dirt: 0.88, grass: 0.8, mud: 0.62 }, size: 2, tow: 2, color: 0x9a1a1a, engine: 76, crawl: 0.66, desc: "A modern full-size crew cab pickup with a big chrome grille. Tows anything, hauls bikes in the bed, and rolls coal if you tune it." },
   { id: "ptcruise", name: "Retro Cruiser Wagon", price: 6500, top: 40, acc: 11, grip: 8, turn: 2.2, off: { dirt: 0.5, grass: 0.45, mud: 0.28 }, size: 2, tow: 1, color: 0x5a2a6a, engine: 100, crawl: 0.35, desc: "A tall retro hatchback with big round fenders, an upright chrome grille and a TON of room inside. Cruising in style!" },
   { id: "lawntractor", name: "Lawn Tractor 42 inch", price: 1500, top: 8, acc: 7, grip: 8, turn: 2.5, off: { dirt: 0.85, grass: 1, mud: 0.5 }, size: 1, tow: 1, color: 0x3a9a3a, engine: 110, open: true, mower: true, crawl: 0.65, desc: "A classic riding mower that cuts real grass (B = blades on/off). Pulls the small trailer too." },
   // police cars (you get these when you join the police; they never show up at the dealership)
@@ -148,7 +151,7 @@ export const PRICES = { paint: 150, rims: 200, neon: 500 };
 // tire size (Mud & Chrome → 🛞 Wheels): dirt bikes, quads, side-by-sides, buggies + the dirt kart
 export const TIRE_DIA = [{ name: "Small (-2 in)", k: 0.88, price: 250 }, { name: "Stock size", k: 1, price: 0 }, { name: "Tall (+2 in)", k: 1.08, price: 300 }, { name: "Taller (+4 in)", k: 1.16, price: 450 }, { name: "GIANT (+6 in)", k: 1.26, price: 650 }];
 export const TIRE_WID = [{ name: "Skinny", k: 0.8, price: 200 }, { name: "Stock width", k: 1, price: 0 }, { name: "Wide", k: 1.2, price: 300 }, { name: "Extra wide", k: 1.4, price: 450 }, { name: "FAT", k: 1.65, price: 650 }];
-export const canTireSize = (v) => !!(v.bike || v.quad || ["sxs", "sxs4", "buggy", "dirtkart"].includes(v.id));
+export const canTireSize = (v) => !v.boat && v.id !== "excavator"; // (every ride with wheels you can see)
 // a snorkel kit: the air intake goes way up high, so you can go through deep water + mud without flooding the engine
 export const SNORKEL_PRICE = 450;
 // a radiator relocation kit (4-wheelers): the radiator moves up onto the front rack, out of the mud, so the engine doesn't overheat
@@ -259,7 +262,7 @@ let BIKE = null;
 const XBIKE = {};
 export async function loadBikeModel() {
   if (BIKE) return BIKE;
-  await Promise.all([["b125", "bike125.bin"], ["b250", "bike250.bin"], ["varg", "varg.bin"]].map(([k, f]) => loadPacked(f).then((b) => { XBIKE[k] = b; }).catch((e) => console.warn("bike model " + f + " didn't load", e))));
+  await Promise.all([["b125", "bike125.bin"], ["b250", "bike250.bin"], ["varg", "varg.bin"], ["hellcat", "hellcat.bin"], ["ram1500", "ram1500.bin"]].map(([k, f]) => loadPacked(f).then((b) => { XBIKE[k] = b; }).catch((e) => console.warn("bike model " + f + " didn't load", e))));
   try { BIKE = await loadPacked("dirtbike.bin"); } catch (e) { console.warn("dirt bike model didn't load, using the simple bike", e); }
   return BIKE;
 }
@@ -279,7 +282,7 @@ async function loadPacked(file) {
   {
     const buf = await (await fetch(new URL("../models/" + file, import.meta.url))).arrayBuffer();
     const n = new DataView(buf).getUint32(0, true), hdr = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, n))), base = 4 + n;
-    const out = { wheels: hdr.wheels, body: [], front: [], back: [], steerParts: [], axis: hdr.steer || null, colors: hdr.colors, paint: hdr.paint || [], tire: hdr.tire || [] };
+    const out = { wheels: hdr.wheels, body: [], front: [], back: [], steerParts: [], axis: hdr.steer || null, colors: hdr.colors, paint: hdr.paint || [], tire: hdr.tire || [], hdr };
     // (the "steer" part: forks + handlebars, relative to the top of the steering axis. Tip it upright so it can turn
     //  around its own up line: bikeModel tips it back again by the rake angle.)
     const unrake = hdr.steer ? new THREE.Matrix4().makeRotationX(-hdr.steer.a) : null;
@@ -293,6 +296,17 @@ async function loadPacked(file) {
     }
     return out;
   }
+}
+// a real car / truck body from a packed model (models/*.bin with car: true): the body pieces by kind (paint takes your
+// color), smooth shading with sharp creases, then the game's own wheels where the model's wheels were
+function realCar(C, P, o) {
+  const H = P.hdr, mat = { paint: C.paint, glass: M.glass, light: M.light, tail: M.tail, chrome: M.chrome, plate: M.white, dark: M.dark, under: M.dark };
+  for (const p of P.body) { let g = p.geo; g = toCreasedNormals(g, 0.55); const m = new THREE.Mesh(g, mat[H.kinds[p.mat]] || M.dark); C.body.add(m); }
+  C.len = H.len; C.wid = H.wid; C.hood = o.hood || null; C.hitch = o.hitch || null; C.seat.copy(o.seat);
+  for (const pp of o.pipes || []) C.pipes.push(pp);
+  for (const w of H.wheels) wheel(C, w.x, w.z, w.r, w.w, w.front ? 1 : 0);
+  for (const w of C.wheels) w.knobs.visible = false;
+  C.realCar = true;
 }
 // the material for one color of a bike model (the plastics take your paint color)
 const XMAT = new Map();
@@ -1347,6 +1361,9 @@ BUILD.bassboat = (C) => {
   // hidden wheels (so the rest of the game can treat it like any ride)
   for (const [x, z, f] of [[0.7, 1.8, 1], [-0.7, 1.8, 1], [0.7, -1.8, 0], [-0.7, -1.8, 0]]) { const w = wheel(C, x, z, 0.2, 0.2, f); w.pivot.visible = false; }
 };
+BUILD.hellcat = (C) => { if (XBIKE.hellcat) realCar(C, XBIKE.hellcat, { seat: V3(0.4, 0.32, -0.3), hood: V3(0, 1.02, 1.55), pipes: [V3(0.55, 0.28, -2.52), V3(-0.55, 0.28, -2.52)] }); else BUILD.muscle(C); };
+BUILD.ram1500 = (C) => { if (XBIKE.ram1500) realCar(C, XBIKE.ram1500, { seat: V3(0.42, 0.95, 0.15), hood: V3(0, 1.36, 1.85), hitch: V3(0, 0.6, -2.78), pipes: [V3(0.62, 0.42, -2.66)] }); else BUILD.crew(C); };
+BEDS.ram1500 = { y: 0.8, z: -1.82, front: -0.98, back: -2.66 };
 BUILD.ptcruise = (C) => {
   // a tall retro hatchback: round swoopy front fenders, an upright chrome grille, round headlights, a tall roof
   const b = C.body, P = C.paint;

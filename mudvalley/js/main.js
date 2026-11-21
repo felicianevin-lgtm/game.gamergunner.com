@@ -9,7 +9,7 @@ import * as THREE from "/create/vendor/three.module.js";
 import { buildWorld, makeSky, animateWorld, recolorMarker, makeMarker, MARINA } from "./world.js";
 import { groundAt, mapCanvas, PATHS, SURF, nearestRoad, waterDepth, speedLimitAt, mudDepthAt } from "./terrain.js";
 import { PLACES, HOUSES, WATER_Y, EDGE } from "./layout.js";
-import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf, modCode, canSnorkel } from "./vehicles.js";
+import { vehicleById, buildCar, applyLook, animateCar, newCar, brokenCar, PAINTS, loadBikeModel, BEDS, FLATBED_PRICE, SUSP, BED_LENS, bedOf, modCode, canSnorkel, VEHICLES, rustOf } from "./vehicles.js";
 import { makeBody, stepCar, placeModel, unflip, retune, makeWalker, stepWalker, bumpPair, speedOf, setPlatforms } from "./physics.js";
 import { buildTrailer, trailerById, makeTrailer, stepTrailer, hitchPoint, goosePoint, couplerPoint, freeSlots, loadOnto, cargoBoxes, makeTowable, trailerBack, stepDoor, RV_DOOR } from "./trailer.js";
 import { makePerson, LOOKS, lookFor, makeRod, makeBlaster, makeTaser, setOutfit } from "./character.js";
@@ -288,6 +288,42 @@ function teleportMe(x, z, yaw) {
   cam.yaw = yaw; cam.snap = true;
 }
 
+// ---------------------------------------------------------------- Valley Marketplace
+const BUYERS = ["Dale", "Tammy", "Bubba", "Crystal", "Junior", "Earl", "Brandy", "Cody", "Darlene", "Skeeter", "Wanda", "Hank", "Trish", "Boone", "Lacey", "Ricky", "Mama June", "Tater", "Wayne", "Jolene"];
+const LINES = ["Is this still available?", "Would you take", "Cash in hand today:", "I can pick it up tonight for", "Lowball I know, but", "My kid would love this. How about", "Will trade... no wait, cash:", "Final offer:"];
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+function market() { if (!S.market) S.market = { list: [], used: [], usedT: 0 }; return S.market; }
+// what a ride is worth used: about 60% of new (the free Rusty Pickup is worth a little scrap money), less for rust + dirt,
+// more for the parts you bolted on
+function rideValue(s) {
+  const v = vehicleById(s.id); let val = v.price ? v.price * 0.6 : 700;
+  val *= 1 - 0.35 * rustOf(s) - 0.08 * (s.dirt || 0);
+  val += (s.engine || 0) * 450 + (s.lift || 0) * 250 + (s.winch ? 600 : 0) + (s.lbar ? 250 : 0) + (s.snork ? 250 : 0) + (s.coal || 0) * 400 + (s.batt ? 800 : 0) + (s.flatbed ? 400 : 0);
+  return Math.max(150, Math.round(val / 10) * 10);
+}
+// every second: buyers message your listings, and the used rides for sale change every few minutes
+function marketTick(dt) {
+  const M = market();
+  for (const L of M.list) {
+    const c = G.CARS.get(L.uid); if (!c) continue;
+    if ((L.next -= dt) > 0 || L.offers.length >= 4) continue;
+    const val = rideValue(c.s), greedy = L.price / val; // (asking way too much = fewer, lower offers)
+    L.next = (25 + Math.random() * 35) * Math.max(1, greedy * greedy);
+    if (Math.random() < Math.min(0.85, 1.4 - greedy * 0.6)) {
+      const amount = Math.round(Math.min(L.price, val * (0.62 + Math.random() * 0.48) * (greedy < 0.95 ? 1.12 : 1)) / 10) * 10;
+      const o = { name: pick(BUYERS), amount: Math.max(50, amount), line: pick(LINES) }; L.offers.push(o);
+      SFX.phone(); H.toast("💬 Marketplace: " + o.name, "Offered " + money(o.amount) + " for your " + vehicleById(c.s.id).name + " (📱 → Marketplace)", "", 4200);
+    }
+  }
+  if ((M.usedT -= dt) <= 0 || M.used.length < 3) {
+    M.usedT = 240; const pool = VEHICLES.filter((v) => !v.police && v.price > 0);
+    while (M.used.length < 8) {
+      const v = pick(pool), car = { id: v.id, paint: pick(PAINTS), rust: Math.random() < 0.35 ? Math.round(Math.random() * 80) / 100 : 0, dirt: Math.random() * 0.6, engine: Math.random() < 0.3 ? 1 + Math.floor(Math.random() * 3) : 0, lift: !v.bike && !v.boat && Math.random() < 0.3 ? 1 + Math.floor(Math.random() * 2) : 0, tires: (v.quad || v.bike || v.off.mud > 0.7) && Math.random() < 0.7 ? "mud" : Math.random() < 0.3 ? "allterrain" : newCar(v.id, 0).tires };
+      const price = Math.round(rideValue(car) * (0.8 + Math.random() * 0.35) / 10) * 10;
+      M.used.push({ car, price, seller: pick(BUYERS), note: car.rust > 0.4 ? "Runs great, little rust, no lowballers" : car.engine ? "Tuned motor, FAST, must go" : pick(["Clean, garage kept", "Moving, need it gone", "Upgrading, priced to sell", "Mud ready!", "First come first served"]) });
+    }
+  }
+}
 // ---------------------------------------------------------------- the kickstart (gas dirt bikes)
 const KICK = 0.62; // (seconds per kick)
 function kickTick(c, dt) {
@@ -683,14 +719,40 @@ export const GAME = {
     S.trailers.push(s); spawnTrailer(s); SFX.buy(); H.bumpMoney();
     H.toast(T.name + " bought!", "It's parked " + (at ? at.name || "outside" : "by the dealership") + ". Back your truck up to it and press T." + (T.rv ? " Walk up to its side door and press E to go inside!" : ""), "good", 5500); save(); return true;
   },
-  sellCar(u) {
+  sellCar(u, amount) {
     const c = G.CARS.get(u); if (!c || S.cars.length <= 1) return false;
     if (c === mine()) exitCar();
     if (c.on) { const tr = c.on; const i = tr.loaded.findIndex((e) => e.uid === u); tr.loaded.splice(i, 1); tr.model.deck.remove(c.m.root); }
     if (c.bedHost && c.bedHost.loaded.length) unloadBed(c.bedHost); // (selling a truck: the bike in the back stays yours)
     for (const t of G.TRS.values()) if (t.hitched === c.b) { t.hitched = null; t.s.hitched = null; }
     scene.remove(c.m.root); G.CARS.delete(u); S.cars = S.cars.filter((s) => s.uid !== u);
-    pay(Math.round(vehicleById(c.s.id).price * 0.5)); SFX.cash(); save(); return true;
+    pay(amount ?? Math.round(vehicleById(c.s.id).price * 0.5)); SFX.cash(); if (S.market) S.market.list = S.market.list.filter((l) => l.uid !== u); save(); return true;
+  },
+  // ---- Valley Marketplace (📱 phone): list your rides, buyers send offers; buy used rides from other sellers
+  get market() { return market(); },
+  marketValue(s) { return rideValue(s); },
+  marketList(u, price) {
+    const M = market(), c = G.CARS.get(u); if (!c || S.cars.length <= 1) { SFX.nope(); H.toast("You need at least one other ride", "You can't sell your only ride!", "warn"); return false; }
+    M.list = M.list.filter((l) => l.uid !== u); M.list.push({ uid: u, price: Math.max(50, Math.round(price)), t: G.time, next: 8 + Math.random() * 12, offers: [] });
+    SFX.cash(); H.toast("📢 Listed on Marketplace!", "Buyers will message you with offers. Keep playing!", "good", 3000); save(); return true;
+  },
+  marketUnlist(u) { const M = market(); M.list = M.list.filter((l) => l.uid !== u); SFX.click(); save(); },
+  marketAccept(u, i) {
+    const M = market(), L = M.list.find((l) => l.uid === u), o = L && L.offers[i], c = G.CARS.get(u); if (!o || !c) return false;
+    const name = vehicleById(c.s.id).name;
+    if (!GAME.sellCar(u, o.amount)) { SFX.nope(); H.toast("Can't sell it", "You need at least one other ride.", "warn"); return false; }
+    M.list = M.list.filter((l) => l.uid !== u); S.stats.marketSold = (S.stats.marketSold || 0) + 1;
+    H.bumpMoney(); H.toast("🤝 SOLD to " + o.name + "!", name + " for " + money(o.amount), "cash", 3500); save(); return true;
+  },
+  marketDecline(u, i) { const L = market().list.find((l) => l.uid === u); if (L) L.offers.splice(i, 1); SFX.click(); save(); },
+  marketBuy(i) {
+    const M = market(), it = M.used[i]; if (!it) return false;
+    if (S.cars.length >= slots()) { H.toast("Your garage is full!", "Buy a bigger house (or sell a ride).", "warn"); SFX.nope(); return false; }
+    if (!spend(it.price)) { SFX.nope(); H.toast("Not enough money", "", "warn"); return false; }
+    const me = mapPos(), s = { ...newCar(it.car.id, uid()), ...it.car, uid: uid() }, f = freeSpot(me.x + 6, me.z + 6, me.yaw || 0, 5);
+    s.x = f.x; s.z = f.z; s.yaw = me.yaw || 0; if (vehicleById(s.id).boat) { const b = boatSpot(); s.x = b.x; s.z = b.z; }
+    S.cars.push(s); spawnCar(s); M.used.splice(i, 1);
+    SFX.buy(); H.bumpMoney(); H.toast("🤝 You bought " + it.seller + "'s " + vehicleById(s.id).name + "!", vehicleById(s.id).boat ? "It's waiting at the Big Bass Lake Marina." : "They dropped it off right next to you.", "good", 4000); save(); return true;
   },
   bringCar(u, h, drive) {
     const c = G.CARS.get(u); if (!c || crime.noTeleport()) return;
@@ -987,6 +1049,7 @@ function tick(dt) {
   npcs.update(dt, inside() || !!G.race);
   drops.update(dt);
   fishing.update(dt, !blocked && IN.isHeld("KeyQ"));
+  G.mktT = (G.mktT || 0) + dt; if (G.mktT >= 1) { marketTick(G.mktT); G.mktT = 0; }
   mp.update(dt);
   if (G.aimT > 0) G.aimT -= dt;
   G.rescueT -= dt; if (G.rescueT <= 0 && !inside()) { G.rescueT = 0.5; rescue(); }
