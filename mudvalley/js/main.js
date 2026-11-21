@@ -1067,6 +1067,13 @@ function carEffects(c, b, inp, dt) {
   }
   wasAir = b.air;
   if (b.flipped) { G.hint = "Oops, you flipped! Press R to flip back"; G.hintT = 0.3; }
+  if (b.heat > 1) { G.hint = "🌡️ OVERHEATING! The radiator is full of mud. Get out of the mud to cool off (a radiator relocation kit fixes it)"; G.hintT = 0.3; if (Math.random() < 0.4) fx.smoke(b.x + Math.sin(b.yaw) * c.m.len * 0.4, b.y + 1.0, b.z + Math.cos(b.yaw) * c.m.len * 0.4, 1); }
+  else if (b.heat > 0.7) { G.hint = "🌡️ Engine getting hot in the mud..."; G.hintT = 0.3; }
+  // roll coal: stomp the gas and black smoke pours out of the stacks (more at higher levels, a huge cloud when you floor it from slow)
+  if (c.m.coalAt && !b.flood && inp.thr > 0.4) {
+    const lv = c.m.coalLv || 1, punch = Math.max(0, 1 - speedOf(b) / 14), k = Math.min(0.85, (0.2 + punch * 0.8) * [0, 0.35, 0.6, 0.85][lv]);
+    if (Math.random() < k) { c.m.body.updateMatrixWorld(true); for (const p of c.m.coalAt) { const w = c.m.body.localToWorld(p.clone()); fx.coal(w.x, w.y, w.z, -Math.sin(b.yaw) * speedOf(b) * 0.3, lv, punch); } }
+  }
   if (b.flood > 0.5) { G.hint = "💦 ENGINE FLOODED! " + (b.mudD > 0.2 ? "The mud is too deep" : "The water is too deep") + (canSnorkel(vehicleById(c.s.id)) && !c.s.snork ? " (a snorkel kit lets you go deeper)" : ""); G.hintT = 0.3; }
   if (isBoat(c) && b.beached && sp < 1) { G.hint = "🚤 Boats don't drive on land! R = back to the marina"; G.hintT = 0.3; }
   mudFx(c, b, sp, fx2, fz2, dt);

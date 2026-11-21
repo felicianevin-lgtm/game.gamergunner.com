@@ -84,15 +84,43 @@ export function addMods(C, car, v) {
   if (car.lbar || car.boards || car.antenna || car.winch) truckMods(C, car, v, g);
   if (v.bike) bikeMods(C, car);
   if (car.snork && !v.bike && !v.boat && !v.mower) snorkel(C, v, g);
+  if (car.rad && v.quad) radiator(C, g);
+  if (car.coal) coalStacks(C, car, v, g);
   if (C.rider && hasHelmet(v)) helmet(C, helmetOf(car, v));
 }
 
+// ---------------------------------------------------------------- the radiator relocation kit (4-wheelers)
+// the radiator moves from down low (in the mud) up onto the front rack: a black core with fins, a fan, a frame + hoses
+function radiator(C, g) {
+  const s = C.len / 2.2, y = C.seat.y + 0.24 * s, z = 0.9 * s, blk = lam(0x1a1a1e), core = lam(0x3a3d44);
+  const r = new THREE.Group(); r.position.set(0, y, z); r.rotation.x = -0.35; g.add(r);
+  bx(r, 0.62 * s, 0.42 * s, 0.08, 0, 0.21 * s, 0, blk); bx(r, 0.56 * s, 0.36 * s, 0.09, 0, 0.21 * s, 0, core);
+  for (let i = 0; i < 9; i++) bx(r, 0.012, 0.36 * s, 0.1, -0.25 * s + i * 0.0625 * s, 0.21 * s, 0, blk); // fins
+  const fan = new THREE.Mesh(new THREE.CylinderGeometry(0.14 * s, 0.14 * s, 0.05, 14), lam(0x222226)); fan.rotation.x = Math.PI / 2; fan.position.set(0, 0.21 * s, -0.08); r.add(fan);
+  bx(r, 0.04, 0.24 * s, 0.03, 0, 0.21 * s, -0.11, lam(0x55585e)); bx(r, 0.24 * s, 0.04, 0.03, 0, 0.21 * s, -0.11, lam(0x55585e));
+  for (const sd of [-1, 1]) { bx(r, 0.035, 0.5 * s, 0.035, sd * 0.33 * s, 0.18 * s, 0.02, lam(0xd0302a)); rod(g, V3(sd * 0.25 * s, y + 0.05, z - 0.05), V3(sd * 0.18 * s, C.seat.y - 0.18, 0.3 * s), 0.03, blk, 0.03, 6); } // frame + hoses
+}
+// ---------------------------------------------------------------- roll coal: chrome smoke stacks in the bed (level 2 + 3)
+// C.coalAt = where the black smoke comes out (body space): the stack tops, or the tailpipe for level 1
+function coalStacks(C, car, v, g) {
+  const lvl = car.coal | 0; C.coalLv = lvl;
+  const pipe = C.pipes[0] ? C.pipes[0].clone() : V3(C.wid * 0.3, 0.4, -C.len / 2);
+  if (lvl < 2) { C.coalAt = [pipe.clone().setZ(pipe.z - 0.25)]; return; }
+  const P = probe(C), roofY = P.roof ? P.roof.y : C.seat.y + 1.1, z = (P.roof ? P.roof.z : C.seat.z) - 0.95, x = Math.max(0.35, C.wid / 2 - 0.28), top = roofY + (lvl === 3 ? 1.1 : 0.6), r = lvl === 3 ? 0.11 : 0.08;
+  C.coalAt = [];
+  for (const sd of [-1, 1]) {
+    rod(g, V3(sd * x, roofY - 0.9, z), V3(sd * x, top, z), r, shiny(0xd8dde3), r, 12);
+    const cut = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.08, r * 1.08, 0.22, 12, 1, true), shiny(0xd8dde3)); cut.position.set(sd * x, top + 0.08, z - 0.03); cut.rotation.x = 0.45; g.add(cut); // the slash-cut tip
+    for (const t of [0.35, 0.7]) bx(g, r * 2.6, 0.05, r * 2.6, sd * x, roofY - 0.9 + (top - roofY + 0.9) * t, z, lam(0x1a1a1e)); // clamps
+    C.coalAt.push(V3(sd * x, top + 0.2, z - 0.05));
+  }
+}
 // ---------------------------------------------------------------- the snorkel kit: a tall black air intake pipe
 // (quads: up beside the handlebars, higher than your head; trucks + side-by-sides: up the windshield post to the roof)
 function snorkel(C, v, g) {
   const blk = lam(0x1a1a1e);
   let x, z, y0, y1;
-  if (v.quad) { x = C.wid * 0.32; z = C.seat.z + 0.62; y0 = C.seat.y - 0.08; y1 = C.seat.y + 1.25; }
+  if (v.quad) { const s = C.len / 2.2; x = 0; z = 0.74 * s; y0 = C.seat.y - 0.02; y1 = C.seat.y + 1.25; } // (right in the middle, just in front of the handlebars)
   else {
     const P = probe(C);
     x = (P.side ? Math.abs(P.side.x) : C.wid / 2) + 0.04; z = P.roof ? P.roof.z + 0.75 : C.seat.z + 1.0;

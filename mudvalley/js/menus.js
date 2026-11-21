@@ -1,5 +1,5 @@
 // MUD VALLEY RP: the shop screens and menus. Dealership, customize shop, houses + garage, job board, races, phone, map.
-import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP, BED_LENS, OFFSETS, CAMBERS, LOWER_COST, LOWER_NAMES, canLower, TIRE_DIA, TIRE_WID, canTireSize, SNORKEL_PRICE, canSnorkel, BATTS, BRAKES } from "./vehicles.js";
+import { VEHICLES, vehicleById, statBars, tune, PAINTS, RIMS, TIRES, ENGINE_COST, LIFT_COST, NEONS, PRICES, rustOf, BEDS, FLATBED_PRICE, SUSP, BED_LENS, OFFSETS, CAMBERS, LOWER_COST, LOWER_NAMES, canLower, TIRE_DIA, TIRE_WID, canTireSize, SNORKEL_PRICE, canSnorkel, BATTS, BRAKES, RAD_PRICE, canRadiator, COAL, canCoal } from "./vehicles.js";
 import { TRAILERS, trailerById, ENCLOSED_COLORS } from "./trailer.js";
 import { HOUSES, PLACES } from "./layout.js";
 import { JOB_TYPES } from "./jobs.js";
@@ -21,7 +21,7 @@ export const CUTS = [{ name: "High (4 in)", desc: "Just a trim. Tall and fluffy.
 
 const $ = (id) => document.getElementById(id);
 let GM = null;
-const ICON = { blackout: "🏍️", ultrab: "🏍️", move10: "🏍️", dirtkart: "🏎️", bassboat: "🚤", gooseneck: "🚛", drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
+const ICON = { ptcruise: "🚙", blackout: "🏍️", ultrab: "🏍️", move10: "🏍️", dirtkart: "🏎️", bassboat: "🚤", gooseneck: "🚛", drift: "🏎️", sxs: "🏎️", sxs4: "🏎️", crew: "🛻", foxhatch: "🏎️", bike125: "🏍️", pitbike: "🏍️", sport300: "🏍️", super1000: "🏍️", pickup: "🛻", atv: "🏍️", bike: "🏍️", jeep: "🚙", buggy: "🏎️", sports: "🏎️", hauler: "🚚", monster: "🚜", hyper: "🏎️", utility: "🛒", flatbed: "🚛", enclosed: "📦" };
 ICON.atv = "🛵"; Object.assign(ICON, { squarebody: "🛻", muscle: "🏎️", suv: "🚙", rally: "🏎️", skidsteer: "🚜", excavator: "🏗️", ztmower: "🚜", lawntractor: "🚜" }); Object.assign(ICON, { bike125f: "🏍️", dual250: "🏍️", ebike: "🚲", efat: "🚲", mudmower: "🚜", racemower: "🚜", camper: "🚐" });
 const hex = (c) => "#" + c.toString(16).padStart(6, "0");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -144,6 +144,8 @@ function customs() {
     <h3>💡 Light bar</h3>${optList(LIGHTBARS, s.lbar || 0, "lbar", "mod:lbar", (q) => q.price)}
     ${canWinch(v) ? `<h3>🪝 Front bumper winch</h3>${optList([{ name: "No winch" }, { name: "12,000 lb winch", desc: "Steel cable + a hook. J = winch yourself out of the mud!" }], s.winch || 0, "winch", "mod:winch", (q, i) => (i ? WINCH_PRICE : 0))}` : ""}
     ${canSnorkel(v) ? `<h3>🤿 Snorkel kit</h3>${optList([{ name: "No snorkel", desc: "The engine breathes from down low" }, { name: "Snorkel kit", desc: "A tall air intake: drive through DEEP water + mud (like The Abyss) without flooding the engine" }], s.snork ? 1 : 0, "snork", "mod:snork", (q, i) => (i ? SNORKEL_PRICE : 0))}` : ""}
+    ${canRadiator(v) ? `<h3>🌡️ Radiator relocation kit</h3>${optList([{ name: "Stock radiator", desc: "Down low in front: it clogs with mud + the engine overheats" }, { name: "Radiator relocation kit", desc: "Moves the radiator up onto the front rack, out of the mud: no more overheating!" }], s.rad ? 1 : 0, "rad", "mod:rad", (q, i) => (i ? RAD_PRICE : 0))}` : ""}
+    ${canCoal(v) ? `<h3>💨 Roll coal (diesel tune)</h3><p class="note">Stomp the gas and black smoke pours out!</p>${optList(COAL, s.coal || 0, "coal", "mod:coal", (q) => q.price)}` : ""}
     ${isTruckish(v) && !v.open ? `<h3>🪜 Running boards</h3>${optList(BOARDS, s.boards || 0, "boards", "mod:boards", (q) => q.price)}` : ""}
     <h3>📡 Antenna</h3>${optList(ANTENNAS, s.antenna || 0, "antenna", "mod:antenna", (q) => q.price)}`;
   if (cTab === "bikemods") body = `<p class="note">Make your dirt bike YOURS.${c.m.steerG ? "" : " (Bars, pads and grips only show on the full-size dirt bikes.)"}</p>
@@ -167,8 +169,8 @@ function customs() {
   onAct = (a, val, el, live) => {
     if (a === "tab") { cTab = val; SFX.click(); customs(); return; }
     if (a.startsWith("mod:")) {
-      const k = a.slice(4), i = +val, d = { pad: 0, bars: 0, grips: 0, helmet: 1, cut: 1, tdia: 1, twid: 1 }[k] ?? 0, cur = k === "helmet" ? helmetOf(s, v) : k === "snork" ? (s.snork ? 1 : 0) : s[k] ?? d, own = s["own_" + k] || [d];
-      const price = { lbar: () => LIGHTBARS[i].price, boards: () => BOARDS[i].price, antenna: () => ANTENNAS[i].price, winch: () => (i ? WINCH_PRICE : 0), bars: () => BAR_PRICE, pad: () => (i < 0 ? 0 : PAD_PRICE), grips: () => GRIP_PRICE, moto: () => (i ? MOTO_PRICE : 0), helmet: () => (i ? HELMET_PRICE : 0), cut: () => 0, tdia: () => TIRE_DIA[i].price, twid: () => TIRE_WID[i].price, snork: () => (i ? SNORKEL_PRICE : 0), batt: () => BATTS[i].price, brk: () => BRAKES[i].price }[k];
+      const k = a.slice(4), i = +val, d = { pad: 0, bars: 0, grips: 0, helmet: 1, cut: 1, tdia: 1, twid: 1 }[k] ?? 0, cur = k === "helmet" ? helmetOf(s, v) : k === "snork" || k === "rad" ? (s[k] ? 1 : 0) : s[k] ?? d, own = s["own_" + k] || [d];
+      const price = { lbar: () => LIGHTBARS[i].price, boards: () => BOARDS[i].price, antenna: () => ANTENNAS[i].price, winch: () => (i ? WINCH_PRICE : 0), bars: () => BAR_PRICE, pad: () => (i < 0 ? 0 : PAD_PRICE), grips: () => GRIP_PRICE, moto: () => (i ? MOTO_PRICE : 0), helmet: () => (i ? HELMET_PRICE : 0), cut: () => 0, tdia: () => TIRE_DIA[i].price, twid: () => TIRE_WID[i].price, snork: () => (i ? SNORKEL_PRICE : 0), batt: () => BATTS[i].price, brk: () => BRAKES[i].price, rad: () => (i ? RAD_PRICE : 0), coal: () => COAL[i].price }[k];
       if (i !== cur && price) GM.setMod(k, i, own.includes(i) ? 0 : price());
       customs(); return;
     }

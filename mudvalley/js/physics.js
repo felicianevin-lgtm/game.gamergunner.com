@@ -72,6 +72,11 @@ export function stepCar(b, inp, dt) {
   const sub = Math.max(b.surf === SURF.WATER ? b.depth : 0, md);
   b.flood = sub > (t.intake || 1) && !b.air ? Math.min(1, b.flood + dt * 1.5) : Math.max(0, b.flood - dt * 0.6);
   b.floodT = b.flood > 0.5 ? b.floodT + dt : 0;
+  // overheating (4-wheelers): the radiator sits down low and clogs with mud. Hot = half power until it cools off.
+  if (t.quad) {
+    const hot = md > 0.25 && !t.rad ? (0.05 + md * 0.12 + (thr > 0.5 ? 0.06 : 0)) : -0.07;
+    b.heat = Math.max(0, Math.min(1.25, (b.heat || 0) + hot * dt)); if (b.heat > 1) { kAcc *= 0.5; kSpd *= 0.75; }
+  } else b.heat = 0;
   b.steer += (steerIn - b.steer) * Math.min(1, dt * 7);
   if (!b.air) {
     // steering: turns faster at medium speed, slower at very high speed

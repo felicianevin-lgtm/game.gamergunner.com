@@ -45,6 +45,8 @@ export class FX {
   // a red spray when somebody gets shot (drops that fall to the ground)
   blood(x, y, z, n = 14) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 1 + Math.random() * 3.5; this.chunk(x, y, z, Math.cos(a) * s, 1 + Math.random() * 3.5, Math.sin(a) * s, 0.05 + Math.random() * 0.07, [0xb0101a, 0x8a0a12, 0xd02028][i % 3], 0.5 + Math.random() * 0.4); } }
   sparks(x, y, z, n = 10) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 3 + Math.random() * 6; this.chunk(x, y, z, Math.cos(a) * s, 2 + Math.random() * 5, Math.sin(a) * s, 0.06, [0xffe14a, 0xffa020, 0xffffff][i % 3], 0.35 + Math.random() * 0.3); } }
+  // rolling coal: thick black smoke (level 1-3, punch = flooring it from slow makes a bigger cloud)
+  coal(x, y, z, drift = 0, lv = 1, punch = 0) { const n = lv === 3 ? 2 : 1; for (let i = 0; i < n; i++) this.puff(x + (Math.random() - 0.5) * 0.3, y, z + (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 1.2 + drift, 2.2 + Math.random() * 2 + lv * 0.6, (Math.random() - 0.5) * 1.2, (0.22 + lv * 0.12) * (1 + punch * 0.6), [0x1a1a1c, 0x262628, 0x333336][i % 3], 1.1 + lv * 0.35, 1.6 + lv * 0.45); }
   smoke(x, y, z, n = 1) { for (let i = 0; i < n; i++) this.puff(x, y, z, (Math.random() - 0.5) * 0.6, 1.2 + Math.random(), (Math.random() - 0.5) * 0.6, 0.5, 0x8a8a8a, 1.6, 2.2); }
   update(dt) {
     const { M, q, v, s, c, e } = this;

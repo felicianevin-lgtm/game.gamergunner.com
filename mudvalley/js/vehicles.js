@@ -58,6 +58,8 @@ export const VEHICLES = [
   { id: "dirtkart", name: "Mud Rat Dirt Kart", price: 2600, top: 23, acc: 13.5, grip: 7.8, turn: 2.9, off: { dirt: 1, grass: 0.96, mud: 0.82 }, size: 1, tow: 0, color: 0xff7a1a, engine: 215, open: true, crawl: 0.84, air: 0.9, desc: "A tube-frame dirt kart with a roll cage, knobby tires and a loud little engine. Low, slidey, and SO much fun." },
   // a boat! (lives at the Big Bass Lake Marina)
   { id: "bassboat", name: "Metal-Flake Bass Boat", price: 14000, top: 27, acc: 8.5, grip: 7, turn: 1.5, off: { dirt: 0.1, grass: 0.1, mud: 0.1 }, size: 2, tow: 0, color: 0x2a5ad0, engine: 90, open: true, boat: true, crawl: 0.1, desc: "A sparkly 20-foot bass boat with a big outboard, casting decks and a trolling motor. It waits for you at the Big Bass Lake Marina. Stop on the lake, press F to stand up on the deck and fish for MUSKIE!" },
+  // a tall retro hatchback wagon: round fenders, an upright grille, a big roof
+  { id: "ptcruise", name: "Retro Cruiser Wagon", price: 6500, top: 40, acc: 11, grip: 8, turn: 2.2, off: { dirt: 0.5, grass: 0.45, mud: 0.28 }, size: 2, tow: 1, color: 0x5a2a6a, engine: 100, crawl: 0.35, desc: "A tall retro hatchback with big round fenders, an upright chrome grille and a TON of room inside. Cruising in style!" },
   { id: "lawntractor", name: "Lawn Tractor 42 inch", price: 1500, top: 8, acc: 7, grip: 8, turn: 2.5, off: { dirt: 0.85, grass: 1, mud: 0.5 }, size: 1, tow: 1, color: 0x3a9a3a, engine: 110, open: true, mower: true, crawl: 0.65, desc: "A classic riding mower that cuts real grass (B = blades on/off). Pulls the small trailer too." },
   // police cars (you get these when you join the police; they never show up at the dealership)
   { id: "cruiser", name: "Police Cruiser", price: 0, police: true, top: 40, acc: 13, grip: 8.5, turn: 2.1, off: { dirt: 0.7, grass: 0.62, mud: 0.45 }, size: 2, tow: 0, color: 0xf4f4f4, engine: 95, crawl: 0.45, desc: "A sturdy police car with a light bar and a siren (G)." },
@@ -148,6 +150,12 @@ export const TIRE_WID = [{ name: "Skinny", k: 0.8, price: 200 }, { name: "Stock 
 export const canTireSize = (v) => !!(v.bike || v.quad || ["sxs", "sxs4", "buggy", "dirtkart"].includes(v.id));
 // a snorkel kit: the air intake goes way up high, so you can go through deep water + mud without flooding the engine
 export const SNORKEL_PRICE = 450;
+// a radiator relocation kit (4-wheelers): the radiator moves up onto the front rack, out of the mud, so the engine doesn't overheat
+export const RAD_PRICE = 380;
+export const canRadiator = (v) => !!v.quad;
+// roll coal (diesel trucks): black smoke when you hit the gas. 3 levels
+export const COAL = [{ name: "No coal", price: 0, desc: "Clean exhaust" }, { name: "Coal Tune 1: Puffer", price: 600, desc: "A black puff when you stomp the gas" }, { name: "Coal Tune 2: Smoke Stacks", price: 1200, desc: "Twin chrome stacks in the bed + big black clouds" }, { name: "Coal Tune 3: ROLLING THUNDER", price: 2200, desc: "Giant stacks + a huge wall of black smoke. Not for the faint of heart!" }];
+export const canCoal = (v) => !!(BEDS[v.id] || ["dumper", "hauler", "swamp", "monster", "prerunner", "trailboss"].includes(v.id));
 export const canSnorkel = (v) => !v.bike && !v.boat && !v.mower && !v.police && !["sports", "drift", "foxhatch", "muscle", "hyper", "jeep", "monster", "swamp"].includes(v.id);
 // electric moto upgrades
 export const BATTS = [{ name: "Stock 60V battery", price: 0, desc: "The battery it came with" }, { name: "Ceron 72V Power Battery", price: 1400, desc: "+15% top speed, +20% punch off the line" }];
@@ -166,7 +174,7 @@ const CODE = [
   num("engine"), num("lift"), num("neon"), num("camber"), num("offset", 1), num("bedLen", 1), yes("flatbed"),
   [(c) => Math.round(rustOf(c) * 35), (c, n) => { c.rust = n / 35; }],
   num("lbar"), num("boards"), num("antenna"), yes("winch"), num("bars"), num("pad", 0, 1), num("grips"), yes("moto"), num("kit"), num("kitCol"), num("helmet", 1), num("lower"),
-  num("tdia", 1), num("twid", 1), yes("snork"), num("batt"), num("brk"),
+  num("tdia", 1), num("twid", 1), yes("snork"), num("batt"), num("brk"), yes("rad"), num("coal"),
 ];
 const stockCode = new Map();
 export function modCode(car) {
@@ -204,7 +212,7 @@ export function tune(car) {
   // how high the engine breathes from (water or mud over it = the engine floods). Snorkels raise it way up.
   let intake = INTAKE[v.id] ?? (v.bike ? (v.electric ? 0.62 : 0.75) : v.quad ? 0.8 : v.mower ? 0.6 : v.boat ? 99 : v.open ? 0.95 : ["sports", "drift", "foxhatch", "muscle", "hyper", "cruiser", "interceptor", "rally"].includes(v.id) ? 0.62 : 1.1);
   intake += 0.17 * car.lift - (LOWER_M[lw] || 0) + (dk - 1) * 0.6 + (car.snork && canSnorkel(v) ? (v.quad ? 1.65 : 1.5) : 0);
-  return modTune(car, { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, quad: !!v.quad, wheelie: !!(v.bike || v.quad), pivot: !!v.pivot, engine: v.engine * (1 + 0.04 * car.engine), intake, brake: v.emoto && car.brk ? 1.7 : 1, boat: !!v.boat });
+  return modTune(car, { top: top * car.limit, acc, grip, turn: v.turn, off, crawl, air: v.air ?? 1, bike: !!v.bike, quad: !!v.quad, wheelie: !!(v.bike || v.quad), pivot: !!v.pivot, engine: v.engine * (1 + 0.04 * car.engine), intake, brake: v.emoto && car.brk ? 1.7 : 1, boat: !!v.boat, rad: !!(v.quad && car.rad) });
 }
 // 0..1 bars for the dealership
 export function statBars(id, car) {
@@ -1336,6 +1344,23 @@ BUILD.bassboat = (C) => {
   for (const [x, z, w, d] of [[0.42, 1.0, 0.5, 1.3], [-0.42, 1.0, 0.5, 1.3], [0, -2.95, 1.2, 0.25]]) bx(b, w, 0.02, d, x, top(z) + 0.01, z, M.trim);
   // hidden wheels (so the rest of the game can treat it like any ride)
   for (const [x, z, f] of [[0.7, 1.8, 1], [-0.7, 1.8, 1], [0.7, -1.8, 0], [-0.7, -1.8, 0]]) { const w = wheel(C, x, z, 0.2, 0.2, f); w.pivot.visible = false; }
+};
+BUILD.ptcruise = (C) => {
+  // a tall retro hatchback: round swoopy front fenders, an upright chrome grille, round headlights, a tall roof
+  const b = C.body, P = C.paint;
+  C.len = 4.4; C.wid = 1.9; C.seat.set(0.4, 0.42, -0.1); C.hitch.set(0, 0.55, -2.25); C.hood = V3(0, 1.08, 1.35);
+  const S = shell(C, { zf: 2.15, zb: -2.12, w: 0.9, b: 0.4, s: 0.98, hood: 0.98, cowl: 1.08, roof: 1.72, ws: 0.9, wt: 0.15, rb: -2.02, wheels: [[1.35, 0.4], [-1.32, 0.4]], nose: 0.32, drop: 0.16, roofW: 0.8, hoodW: 0.82, taper: 0.06 });
+  backGlass(C, S); pillar(C, S, -0.42, M.dark, 0.13); pillar(C, S, -1.45, P, 0.16);
+  for (const z of [0.88, -0.42, -1.4]) seam(C, S, z); handle(C, S, -0.2); handle(C, S, -1.2); mirror(C, S, 0.82);
+  // the big round front fenders + rear fender bulges
+  for (const s of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), P); f.scale.set(0.5, 0.78, 1.25); f.position.set(s * 0.82, 0.56, 1.35); b.add(f); const r = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), P); r.scale.set(0.38, 0.62, 1.05); r.position.set(s * 0.86, 0.58, -1.32); b.add(r); }
+  // the upright grille (chrome frame + bars) and round headlights in the fenders
+  bx(b, 0.62, 0.42, 0.06, 0, 0.78, 2.16, M.chrome); for (let i = 0; i < 4; i++) bx(b, 0.52, 0.035, 0.07, 0, 0.64 + i * 0.09, 2.18, M.dark);
+  for (const s of [-1, 1]) { const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 14), M.light); hl.rotation.x = Math.PI / 2; hl.position.set(s * 0.6, 0.74, 2.14); b.add(hl); const rg = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.022, 6, 16), M.chrome); rg.position.set(s * 0.6, 0.74, 2.16); b.add(rg); bx(b, 0.1, 0.34, 0.05, s * 0.75, 1.05, -2.13, M.tail); }
+  bx(b, 1.7, 0.2, 0.18, 0, 0.42, 2.1, M.dark); bx(b, 1.76, 0.22, 0.18, 0, 0.46, -2.12, M.dark); bx(b, 0.08, 0.04, 0.05, 0, 1.6, -2.1, M.tail); // bumpers + a 3rd brake light
+  bx(b, 1.3, 0.03, 0.08, 0, 1.75, -0.4, M.dark); bx(b, 1.3, 0.03, 0.08, 0, 1.75, -1.5, M.dark); // roof rails
+  C.pipes.push(V3(-0.55, 0.32, -2.15));
+  for (const [x, z, f] of [[0.8, 1.35, 1], [-0.8, 1.35, 1], [0.8, -1.32, 0], [-0.8, -1.32, 0]]) wheel(C, x, z, 0.35, 0.26, f);
 };
 BUILD.lawntractor = (C) => mower(C, false, true);
 BUILD.cruiser = (C) => police(C, false);

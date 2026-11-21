@@ -31,7 +31,9 @@ export const FISH = [
   { id: "monster", name: "Mud Monster Catfish", rarity: "Legendary", w: [15, 40], price: 1500, color: 0x4a3a2a, where: "both", weight: 0.7, minRod: 2 },
   // Big Bass Lake: big bass, walleye and MUSKIE (fish from the shore, the marina dock, or stand up on your bass boat's deck)
   { id: "largemouth", name: "Largemouth Bass", rarity: "Uncommon", w: [2, 9], price: 95, color: 0x4a7a2a, where: "lake", weight: 18 },
-  { id: "walleye", name: "Golden Walleye", rarity: "Uncommon", w: [1.5, 8], price: 90, color: 0xc8a040, where: "lake", weight: 12 },
+  { id: "walleye", name: "Walleye", rarity: "Uncommon", w: [1.5, 9], price: 90, color: 0xc8a040, where: "lake river", weight: 12, spots: true },
+  { id: "northernpike", name: "Northern Pike", rarity: "Rare", w: [4, 22], price: 190, color: 0x5a7a3a, where: "lake river", weight: 7, spots: true, long: true },
+  { id: "brooktrout", name: "Brook Trout", rarity: "Uncommon", w: [0.5, 3.5], price: 80, color: 0x6a7a4a, where: "river", weight: 14, spots: true },
   { id: "muskie", name: "Muskie", rarity: "Rare", w: [8, 32], price: 280, color: 0x8a9a62, where: "lake", weight: 6, spots: true },
   { id: "tigermuskie", name: "Tiger Muskie", rarity: "Epic", w: [10, 38], price: 560, color: 0xb8ae62, where: "lake", weight: 2.4, minRod: 1, stripes: true },
   { id: "ghostmuskie", name: "Ghost Muskie of Big Bass Lake", rarity: "Legendary", w: [42, 65], price: 2400, color: 0xdde6d4, where: "lake", weight: 0.45, minRod: 2, stripes: true },
@@ -144,7 +146,7 @@ export class Fishing {
     S.fish.push(f); S.stats.fish++;
     const log = S.fishLog[F.id] || (S.fishLog[F.id] = { n: 0, best: 0 }); log.n++; const best = f.w > log.best; log.best = Math.max(log.best, f.w);
     // hold it up!
-    const fish = makeFish(F.color, clamp(0.6 + Math.sqrt(f.w) * 0.25, 0.5, 2.2), F.stripes ? "stripes" : F.spots ? "spots" : null, F.id.includes("muskie")); fish.rotation.set(0, Math.PI / 2, Math.PI / 2); this.held = fish; this.api.person().hold(fish);
+    const fish = makeFish(F.color, clamp(0.6 + Math.sqrt(f.w) * 0.25, 0.5, 2.2), F.stripes ? "stripes" : F.spots ? "spots" : null, !!F.long || F.id.includes("muskie")); fish.rotation.set(0, Math.PI / 2, Math.PI / 2); this.held = fish; this.api.person().hold(fish);
     SFX.fish(); this.api.fx.splash(this.api.me().x + Math.sin(this.api.me().yaw) * 2, WATER_Y + 0.2, this.api.me().z + Math.cos(this.api.me().yaw) * 2, 12, 0.7);
     this.api.banner(F.name.toUpperCase() + "!", (F.rarity === "Junk" ? "Ha! " : "") + f.w + " lb · " + F.rarity + " · worth " + money(fishValue(f)) + (best && log.n > 1 ? " · NEW RECORD!" : log.n === 1 ? " · NEW FISH!" : ""));
     this.reel = null; save();
