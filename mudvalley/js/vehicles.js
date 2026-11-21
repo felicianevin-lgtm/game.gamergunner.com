@@ -178,7 +178,7 @@ const CODE = [
   num("engine"), num("lift"), num("neon"), num("camber"), num("offset", 1), num("bedLen", 1), yes("flatbed"),
   [(c) => Math.round(rustOf(c) * 35), (c, n) => { c.rust = n / 35; }],
   num("lbar"), num("boards"), num("antenna"), yes("winch"), num("bars"), num("pad", 0, 1), num("grips"), yes("moto"), num("kit"), num("kitCol"), num("helmet", 1), num("lower"),
-  num("tdia", 1), num("twid", 1), yes("snork"), num("batt"), num("brk"), yes("rad"), num("coal"),
+  num("tdia", 1), num("twid", 1), yes("snork"), num("batt"), num("brk"), yes("rad"), num("coal"), num("rimStyle"),
 ];
 const stockCode = new Map();
 export function modCode(car) {
@@ -366,10 +366,16 @@ function profile(p, pts, w, mat, x = 0, bev = 0.05) {
 function wheel(car, x, z, r, w, front, opts = {}) {
   const pivot = new THREE.Group(); pivot.position.set(x, r, z);
   const spin = new THREE.Group(); pivot.add(spin);
-  const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 16), car.tireMat || M.tire); tire.rotation.z = Math.PI / 2; spin.add(tire);
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.58, r * 0.58, w + 0.04, 10), car.rimMat); rim.rotation.z = Math.PI / 2; spin.add(rim);
-  const hub = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, r * 0.22, r * 0.9), car.rimMat); spin.add(hub);
-  const hub2 = hub.clone(); hub2.rotation.x = Math.PI / 2; spin.add(hub2);
+  const style = opts.bike || !car.car ? 0 : car.car.rimStyle || 0;
+  // (a fancy rim: the tire is a hollow tube + 2 sidewalls, so you can see deep into the rim)
+  const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 16, 1, !!style), car.tireMat || M.tire); tire.rotation.z = Math.PI / 2; spin.add(tire);
+  if (style) for (const sd of [-1, 1]) { const sw = new THREE.Mesh(new THREE.RingGeometry(r * 0.6, r, 20), car.tireMat || M.tire); sw.rotation.y = sd * Math.PI / 2; sw.position.x = sd * w / 2; spin.add(sw); }
+  if (style) rimStyle(spin, r, w, style, Math.sign(x) || 1, car);
+  else {
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.58, r * 0.58, w + 0.04, 10), car.rimMat); rim.rotation.z = Math.PI / 2; spin.add(rim);
+    const hub = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, r * 0.22, r * 0.9), car.rimMat); spin.add(hub);
+    const hub2 = hub.clone(); hub2.rotation.x = Math.PI / 2; spin.add(hub2);
+  }
   // knobby tread (shows with mud / all-terrain tires)
   const knobs = new THREE.Group(); spin.add(knobs);
   for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, k = new THREE.Mesh(new THREE.BoxGeometry(w * 1.04, r * 0.16, r * 0.3), car.tireMat || M.tire); k.position.set(0, Math.cos(a) * r, Math.sin(a) * r); k.rotation.x = -a; knobs.add(k); }
@@ -378,6 +384,51 @@ function wheel(car, x, z, r, w, front, opts = {}) {
   const W = { pivot, spin, knobs, x, z, r0: r, r, front, side: Math.sign(x) || 1, bike: !!opts.bike };
   car.wheels.push(W);
   return W;
+}
+
+// rim styles (Mud & Chrome → 🛞 Wheels → Rim style). The wheel spins around x; side = which way is "out" (+x or -x).
+// The rim color (RIMS) paints the spokes / face; lips + caps are chrome, the barrel behind is dark.
+export const RIM_STYLES = [
+  { name: "Stock wheels", price: 0, desc: "The wheels it came with" },
+  { name: "Deep Dish", price: 900, desc: "A huge polished lip and the spokes sunk way back in. The classic lowrider / show truck look" },
+  { name: "Clean 5-Spoke", price: 600, desc: "Five big smooth spokes and a chrome cap. Clean and classy for nice cars + show trucks" },
+  { name: "Mesh 14-Spoke", price: 700, desc: "Lots of skinny spokes, like a fancy sports car" },
+  { name: "Off-Road Beadlock", price: 650, desc: "A bolted-on beadlock ring for airing down in the mud" },
+  { name: "Steelies", price: 250, desc: "Plain steel wheels with round holes. Old school farm truck" },
+  { name: "Turbine Blades", price: 800, desc: "Curvy blades that look like a jet turbine" },
+];
+function rimStyle(spin, r, w, style, side, car) {
+  const RM = car.rimMat, CH = M.chrome, D = M.dark, o = side * (w / 2 + 0.012);
+  const add = (geo, mat, x, rx = 0, rz = Math.PI / 2) => { const m = new THREE.Mesh(geo, mat); m.rotation.set(rx, 0, rz); m.position.x = x; spin.add(m); return m; };
+  const disc = (rad, len, x, mat, seg = 18) => add(new THREE.CylinderGeometry(rad, rad, len, seg), mat, x);
+  const ring = (r0, r1, x, mat) => { const m = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 28), mat); m.rotation.y = side * Math.PI / 2; m.position.x = x; m.material.side = THREE.DoubleSide; spin.add(m); return m; };
+  const spoke = (a, r0, r1, wide, thick, x, mat, twist = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(thick, r1 - r0, wide), mat); m.position.set(x, Math.cos(a) * (r0 + r1) / 2, Math.sin(a) * (r0 + r1) / 2); m.rotation.set(a, twist, 0); spin.add(m); return m; };
+  add(new THREE.CylinderGeometry(r * 0.6, r * 0.6, w, 18, 1, true), D, 0); // the barrel (a hollow tube)
+  if (D.side !== THREE.DoubleSide) { D.side = THREE.DoubleSide; D.needsUpdate = true; }
+  if (style === 1) { // deep dish: a wide chrome lip, a tube going in, the face + spokes way back
+    const deep = Math.min(w * 0.42, r * 0.38), fx = o - side * deep;
+    ring(r * 0.44, r * 0.66, o, CH); add(new THREE.CylinderGeometry(r * 0.445, r * 0.445, deep, 22, 1, true), CH, o - side * deep / 2);
+    disc(r * 0.45, 0.02, fx, RM); for (let i = 0; i < 6; i++) spoke((i / 6) * Math.PI * 2, r * 0.08, r * 0.44, r * 0.16, 0.07, fx + side * 0.03, RM);
+    disc(r * 0.1, 0.06, fx + side * 0.03, CH, 12); for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; disc(r * 0.018, 0.02, o + side * 0.006, CH, 6).position.set(o + side * 0.006, Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62); } // lip rivets
+  } else if (style === 2 || style === 3) { // clean 5-spoke / mesh 14-spoke
+    const n = style === 2 ? 5 : 14, wide = style === 2 ? r * 0.17 : r * 0.05;
+    disc(r * 0.52, 0.01, o - side * 0.04, D); ring(r * 0.5, r * 0.6, o, style === 3 ? CH : RM);
+    for (let i = 0; i < n; i++) spoke((i / n) * Math.PI * 2, r * 0.1, r * 0.53, wide, 0.045, o - side * 0.012, RM);
+    disc(r * 0.12, 0.05, o, CH, 14);
+  } else if (style === 4) { // beadlock
+    disc(r * 0.55, 0.02, o - side * 0.02, RM); ring(r * 0.52, r * 0.65, o + side * 0.01, D);
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; disc(r * 0.022, 0.03, 0, CH, 6).position.set(o + side * 0.02, Math.cos(a) * r * 0.585, Math.sin(a) * r * 0.585); }
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; disc(r * 0.06, 0.03, 0, D, 10).position.set(o - side * 0.005, Math.cos(a) * r * 0.36, Math.sin(a) * r * 0.36); }
+    disc(r * 0.15, 0.05, o, RM, 12);
+  } else if (style === 5) { // steelies
+    disc(r * 0.58, 0.03, o - side * 0.01, RM, 20);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; disc(r * 0.065, 0.04, 0, D, 10).position.set(o, Math.cos(a) * r * 0.36, Math.sin(a) * r * 0.36); }
+    disc(r * 0.13, 0.05, o + side * 0.01, CH, 12);
+  } else { // turbine blades
+    disc(r * 0.52, 0.01, o - side * 0.04, D); ring(r * 0.5, r * 0.6, o, CH);
+    for (let i = 0; i < 10; i++) spoke((i / 10) * Math.PI * 2, r * 0.12, r * 0.52, r * 0.12, 0.03, o - side * 0.015, RM, side * 0.6);
+    disc(r * 0.14, 0.05, o, CH, 14);
+  }
 }
 
 // glue all the little meshes inside a group into one mesh per material (a car = ~25 draws instead of ~120).
