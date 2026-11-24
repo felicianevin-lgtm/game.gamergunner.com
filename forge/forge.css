@@ -136,3 +136,14 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round
 .exp-list button { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; gap: 2px; background: var(--panel2); border: 1px solid var(--edge); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
 .exp-list button:hover { border-color: var(--accent); }
 .exp-list button b { font-size: 14px; } .exp-list button span { color: var(--dim); font-size: 12px; }
+
+/* smaller windows: the top bar keeps icons only so Export always fits */
+@media (max-width: 1250px) {
+  #projname { width: 90px; }
+  .seg button { font-size: 0; gap: 0; padding: 5px 7px; }
+  .brand { font-size: 0; } .brand .logo { font-size: 18px; }
+}
+@media (max-width: 900px) {
+  #projname, #emodeseg, #modeseg { display: none !important; }
+  #app { grid-template-columns: 76px 1fr 240px; }
+}
