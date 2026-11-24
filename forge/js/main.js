@@ -796,11 +796,15 @@ document.addEventListener("click", (e) => { const b = e.target.closest && e.targ
 function fly(dt) {
   const k = S.keys; if (!k.size) return;
   const fast = k.has("ShiftLeft") || k.has("ShiftRight") ? 3 : 1, v = S.speed * fast * dt;
+  // Arrow keys turn the camera (left/right) and tilt it (up/down), about 100 degrees a second.
+  const turn = 1.75 * dt;
+  if (k.has("ArrowLeft")) S.yaw += turn; if (k.has("ArrowRight")) S.yaw -= turn;
+  if (k.has("ArrowUp")) S.pitch = Math.min(1.55, S.pitch + turn); if (k.has("ArrowDown")) S.pitch = Math.max(-1.55, S.pitch - turn);
   const f = new THREE.Vector3(-Math.sin(S.yaw) * Math.cos(S.pitch), Math.sin(S.pitch), -Math.cos(S.yaw) * Math.cos(S.pitch));
   const r = new THREE.Vector3(Math.cos(S.yaw), 0, -Math.sin(S.yaw));
   const m = new THREE.Vector3();
-  if (k.has("KeyW") || k.has("ArrowUp")) m.add(f); if (k.has("KeyS") || k.has("ArrowDown")) m.sub(f);
-  if (k.has("KeyD") || k.has("ArrowRight")) m.add(r); if (k.has("KeyA") || k.has("ArrowLeft")) m.sub(r);
+  if (k.has("KeyW")) m.add(f); if (k.has("KeyS")) m.sub(f);
+  if (k.has("KeyD")) m.add(r); if (k.has("KeyA")) m.sub(r);
   if (k.has("KeyE") || k.has("Space")) m.y += 1;
   if (k.has("KeyQ") || ((k.has("ControlLeft") || k.has("ControlRight")) && !S.ctrlCombo)) m.y -= 1;
   if (m.lengthSq()) camera.position.addScaledVector(m.normalize(), v);
@@ -972,7 +976,7 @@ async function fullscreen() {
 }
 function updateHint() {
   const H = {
-    select: "Click to pick. Shift+click to pick more. Drag a box on empty space. Fly: WASD + right-drag to look, Q/E down/up.",
+    select: "Click to pick. Shift+click to pick more. Drag a box on empty space. Fly: WASD, look: right-drag or arrow keys, Q/E down/up.",
     move: "Drag an arrow to move along it, or a square to move flat. Hold nothing else: WASD still flies.",
     rotate: "Drag a ring to turn. Snap = 15° steps.", scale: "Drag a handle to resize. The center box scales evenly.",
     wall: S.chain ? "Click where the wall ends. Right-click or Enter to stop." : "Click on the grid where the wall starts.",
@@ -981,7 +985,7 @@ function updateHint() {
   };
   $("st-mode").textContent = S.mode === "edit" ? "EDIT MODE · " + { v: "Vertex", e: "Edge", f: "Face" }[S.emode] : "OBJECT MODE";
   $("st-hint").textContent = S.mode === "edit" && S.tool === "select" ? "Click to pick " + { v: "vertices", e: "edges", f: "faces" }[S.emode] + " (Shift+click for more, drag for a box). G moves them. Tab when done." : H[S.tool] || "";
-  $("hint").textContent = "WASD fly · Right-drag look · Q/E down/up · Shift fast · F focus";
+  $("hint").textContent = "WASD fly · Right-drag or arrows look · Q/E down/up · Shift fast · F focus";
 }
 
 // ---------------------------------------------------------------- menus
@@ -1049,7 +1053,7 @@ function unityHelp() {
   $("m-no").onclick = closeModal;
 }
 function shortcuts() {
-  const rows = [["Fly", "W A S D"], ["Down / up", "Q / E  or  Ctrl / Space"], ["Look around", "Hold right mouse + drag"], ["Fly faster", "Hold Shift"], ["Change fly speed", "Right mouse + wheel"],
+  const rows = [["Fly", "W A S D"], ["Down / up", "Q / E  or  Ctrl / Space"], ["Look around", "Hold right mouse + drag"], ["Turn / tilt", "Arrow keys"], ["Fly faster", "Hold Shift"], ["Change fly speed", "Right mouse + wheel"],
     ["Zoom", "Mouse wheel"], ["Pan", "Middle mouse drag"], ["Focus on selection", "F"], ["Select / Move / Rotate / Scale", "V / G / R / T"], ["Pick more", "Shift+click"], ["Box select", "Drag on empty space"],
     ["Select all", CTRL + "+A"], ["Edit mode on / off", "Tab"], ["Vertex / Edge / Face", "1 / 2 / 3"], ["Extrude", CTRL + "+E"], ["Inset", "I"], ["Loop cut", "L"], ["Subdivide", "U"], ["Bevel", "B"],
     ["Merge", "M"], ["Flip faces", "N"], ["Separate", "P"], ["Duplicate", CTRL + "+D"], ["Delete", "X or Delete"], ["Group / Ungroup", CTRL + "+G / " + CTRL + "+Shift+G"], ["Join", CTRL + "+J"],
@@ -1058,7 +1062,7 @@ function shortcuts() {
   $("m-no").onclick = closeModal;
 }
 const TOUR = [
-  ["fly", "Welcome to Forge 3D!", "Make 3D models and game maps, then use them in Unity. First, <b>fly around</b> like a game: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, hold the <b>right mouse button</b> and drag to look, <kbd>Q</kbd>/<kbd>E</kbd> to go down/up, hold <kbd>Shift</kbd> to go fast."],
+  ["fly", "Welcome to Forge 3D!", "Make 3D models and game maps, then use them in Unity. First, <b>fly around</b> like a game: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move, hold the <b>right mouse button</b> and drag (or use the <b>arrow keys</b>) to look, <kbd>Q</kbd>/<kbd>E</kbd> to go down/up, hold <kbd>Shift</kbd> to go fast."],
   ["cube", "Add shapes", "Click a shape on the left (<b>Add</b>: cube, sphere, cylinder...). It appears on the floor in front of you. A box pops up so you can change its details."],
   ["move", "Pick and move", "<b>Click</b> an object to pick it (<kbd>Shift</kbd>+click for more). Use <b>Move</b> <kbd>G</kbd>, <b>Rotate</b> <kbd>R</kbd> and <b>Scale</b> <kbd>T</kbd> and drag the colored handles. The magnet (<b>Snap</b>) keeps things lined up on the grid. You can keep flying with WASD while you pick."],
   ["vert", "Change the shape", "Press <kbd>Tab</kbd> for <b>Edit mode</b>. Pick <b>vertices</b> <kbd>1</kbd>, <b>edges</b> <kbd>2</kbd> or <b>faces</b> <kbd>3</kbd>. Then try <b>Extrude</b> (pull a face out), <b>Inset</b>, <b>Loop Cut</b> and <b>Bevel</b>. Press <kbd>Tab</kbd> again when done."],
@@ -1146,7 +1150,7 @@ function renderProps() {
   }
   if (!o) {
     $("props-title").textContent = "Properties";
-    el.innerHTML = '<div class="note">Pick something to see its settings here.<br><br><b>Start:</b> add a shape from the left, or build a room with <b>Floor</b> and <b>Wall</b>.<br><br>Fly with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, look with the right mouse button.</div>';
+    el.innerHTML = '<div class="note">Pick something to see its settings here.<br><br><b>Start:</b> add a shape from the left, or build a room with <b>Floor</b> and <b>Wall</b>.<br><br>Fly with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, look with the right mouse button or the arrow keys.</div>';
     return;
   }
   $("props-title").textContent = S.sel.length > 1 ? S.sel.length + " objects picked" : "Properties";
