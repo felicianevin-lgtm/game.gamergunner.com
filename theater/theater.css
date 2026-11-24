@@ -1,0 +1,100 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0e0610; color: #fff; font-family: Inter, Arial, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+#canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+.hidden { display: none !important; }
+button { font: inherit; cursor: pointer; border: 0; border-radius: 10px; padding: 8px 14px; background: #3a2a4a; color: #fff; font-weight: 700; }
+button:hover { filter: brightness(1.15); }
+#fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 5; }
+
+#hud { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; align-items: center; z-index: 10; pointer-events: none; }
+#hud > * { pointer-events: auto; }
+#homeBtn, #muteBtn { width: 42px; height: 42px; display: grid; place-items: center; background: rgba(20, 10, 30, 0.75); border-radius: 12px; color: #fff; text-decoration: none; font-size: 20px; padding: 0; }
+#help { background: rgba(20, 10, 30, 0.7); padding: 8px 12px; border-radius: 12px; font-size: 14px; color: #ddd; }
+#hud.inTheater #help { display: none; }
+.touch #help { display: none; }
+
+#prompt { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 10; background: rgba(20, 10, 30, 0.88); border: 2px solid #ffd23a; border-radius: 16px; padding: 10px 12px 10px 18px; display: flex; gap: 14px; align-items: center; font-weight: 700; max-width: calc(100vw - 24px); }
+#promptBtn { background: #ffd23a; color: #2a1400; font-family: 'Russo One', Impact, sans-serif; font-size: 18px; }
+
+#theaterHud { position: fixed; left: 0; right: 0; bottom: 14px; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+#theaterHud > * { pointer-events: auto; }
+#nowTitle { font-family: 'Russo One', Impact, sans-serif; color: #ffd23a; background: rgba(0, 0, 0, 0.55); padding: 4px 14px; border-radius: 10px; font-size: 15px; }
+.tBtns { display: flex; gap: 10px; }
+.tBtns button { background: rgba(40, 20, 50, 0.85); border: 2px solid #8a5aa8; }
+#againBtn { background: #ffd23a; color: #2a1400; border-color: #ffd23a; }
+
+#joy { position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.3); z-index: 9; display: none; touch-action: none; }
+.touch #joy { display: block; }
+#hud.inTheater ~ #joy { display: none; }
+#joyKnob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); }
+
+#intro, #picker { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(8, 2, 12, 0.72); padding: 16px; }
+.introIn, .pickIn { background: linear-gradient(180deg, #3a1442, #1a0a20); border: 3px solid #d4af37; border-radius: 20px; padding: 24px; max-width: 520px; width: 100%; text-align: center; box-shadow: 0 10px 60px rgba(0, 0, 0, 0.7); }
+.introIn h1 { font-family: 'Russo One', Impact, sans-serif; color: #ffd23a; margin: 0 0 12px; font-size: 38px; }
+.introIn p { color: #e8dcea; line-height: 1.5; }
+#startBtn { margin-top: 10px; font-family: 'Russo One', Impact, sans-serif; font-size: 24px; background: #ff4fa3; padding: 12px 34px; }
+.pickIn h2 { font-family: 'Russo One', Impact, sans-serif; color: #ffd23a; margin: 0 0 6px; }
+.pickList { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; margin: 12px 0; }
+.pickList button { display: flex; justify-content: space-between; align-items: center; text-align: left; background: #2a1a3a; padding: 12px 14px; }
+.pickList small { color: #bba; font-weight: 400; }
+.pickBtns { display: flex; gap: 10px; justify-content: center; }
+#pickStudio { background: #ff4fa3; }
+#loading { position: fixed; inset: 0; display: grid; place-items: center; background: #0e0610; z-index: 50; font-family: 'Russo One', Impact, sans-serif; font-size: 24px; color: #ffd23a; }
+
+/* ---------------- Animation Studio ---------------- */
+#studio { position: fixed; inset: 0; z-index: 40; background: #241430; overflow: auto; }
+.an { min-height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 10px; position: relative; }
+.an button { background: #3e2a52; padding: 7px 11px; font-size: 14px; }
+.an button.on { background: #ffd23a; color: #2a1400; }
+.an .go { background: #2f9a4a; }
+.an .x { background: #a8243a; margin-left: auto; }
+.an .big { font-size: 18px; padding: 10px 20px; }
+.anTop { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.anTop b { font-family: 'Russo One', Impact, sans-serif; color: #ffd23a; font-size: 20px; margin-right: 6px; }
+#anTitle { font: inherit; font-weight: 700; padding: 7px 10px; border-radius: 10px; border: 2px solid #6a4a8a; background: #fff; color: #222; width: 180px; }
+.anMid { display: flex; gap: 10px; align-items: flex-start; }
+.anTools { display: flex; flex-direction: column; gap: 6px; width: 84px; flex: none; }
+.anTools button { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; padding: 6px 4px; }
+.anTools i { font-style: normal; font-size: 24px; }
+.anStage { position: relative; flex: 1; aspect-ratio: 16 / 9; max-height: calc(100vh - 230px); background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 4px #6a4a8a; touch-action: none; }
+.anStage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#anOnion { opacity: 0.25; }
+#anCanvas { cursor: crosshair; touch-action: none; }
+#anHint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #999; font-size: 18px; text-align: center; pointer-events: none; max-width: 80%; }
+.anSide { width: 170px; flex: none; display: flex; flex-direction: column; gap: 10px; }
+.anColors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.anColors button { aspect-ratio: 1; padding: 0; border: 3px solid #241430; border-radius: 50%; }
+.anColors button.on { border-color: #fff; box-shadow: 0 0 0 2px #ffd23a; }
+.anSizes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.anSizes button { height: 40px; display: grid; place-items: center; padding: 0; }
+.anSizes span { display: block; border-radius: 50%; background: #fff; }
+.anSizes button.on span { background: #2a1400; }
+.anStickers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.anStickers button { font-size: 22px; padding: 4px 0; }
+.anBottom { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.anBottom select { font: inherit; padding: 7px; border-radius: 10px; background: #3e2a52; color: #fff; border: 0; font-weight: 700; }
+.chk { display: flex; gap: 4px; align-items: center; font-weight: 700; background: #3e2a52; padding: 6px 10px; border-radius: 10px; }
+.anStrip { display: flex; gap: 6px; overflow-x: auto; width: 100%; padding: 4px 2px 8px; }
+.fr { flex: none; width: 96px; height: 54px; padding: 0 !important; background: #fff !important; position: relative; overflow: hidden; border: 3px solid transparent !important; }
+.fr.on { border-color: #ffd23a !important; }
+.fr img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fr small { position: absolute; left: 3px; bottom: 1px; color: #000; background: rgba(255, 255, 255, 0.8); border-radius: 4px; padding: 0 3px; font-size: 11px; }
+.anFilms { position: absolute; inset: 0; background: rgba(10, 4, 16, 0.8); display: grid; place-items: center; padding: 16px; z-index: 3; }
+.anFilmsIn { background: #2e1a40; border: 3px solid #d4af37; border-radius: 16px; padding: 18px; width: 100%; max-width: 640px; max-height: 80vh; overflow: auto; }
+.anFilmsIn h3 { margin: 0 0 10px; color: #ffd23a; font-family: 'Russo One', Impact, sans-serif; }
+.anFilmsIn .row { display: flex; gap: 8px; align-items: center; padding: 8px; background: #3e2a52; border-radius: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.anFilmsIn .row b { flex: 1; }
+.anFilmsIn .row small { color: #ccb; }
+.anNote { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: #2f9a4a; padding: 10px 18px; border-radius: 12px; font-weight: 800; z-index: 4; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); }
+
+@media (max-width: 760px) {
+  .anMid { flex-direction: column; align-items: stretch; }
+  .anTools { flex-direction: row; width: auto; overflow-x: auto; }
+  .anTools button { min-width: 58px; }
+  .anStage { max-height: none; width: 100%; }
+  .anSide { width: auto; }
+  .anColors { grid-template-columns: repeat(8, 1fr); }
+  .anStickers { grid-template-columns: repeat(8, 1fr); }
+  #help { display: none; }
+  .introIn h1 { font-size: 28px; }
+}
